@@ -1,0 +1,434 @@
+!===================================================================================================
+! FatesVegetationManagementMod.F90
+! Implemented by: Joshua M. Rady
+! Started: 8/26/2020
+!
+! This module contains subroutines to simulate aspects of human management of vegetation.  While
+! written to implement forest management the code contains generic behaviors that could be used to
+! implement other activities, e.g. agriculture.
+!
+! Note: These notes should be revised to conform to FATES coding style, to the extent that exists.
+! The coding style is a bit vague with a mix of 2 and 3 space identing.  I will use 2 since they
+! indent starting at the module scope.
+!
+!===================================================================================================
+
+module FatesVegetationManagementMod
+  
+  use EDTypesMod, only : bc_in_type, ed_site_type, ed_patch_type, ed_cohort_type
+  use FatesAllometryMod , only : h2d_allom, h_allom
+  use PRTGenericMod, only : prt_vartypes
+  
+  ! Enforce explicit type declarations:
+  implicit none
+  
+  public :: plant
+  public :: init_temporary_cohort
+  
+  !=================================================================================================
+  
+contains
+  
+  subroutine plant(site, patch, bc_in, pft_index, density, dbh, height) !plant_sapling()?
+    ! ----------------------------------------------------------------------------------------------
+    ! Plant a new cohort with the PFT, density, and size specified into an existing patch.
+    ! Planting differs from recruitment in that the new plants come from somewhere else, currently
+    ! not specified, rather than the seed bank.  There are currently no constrains of the size of
+    ! the plantings, however the expected use will be primarily to add small plants, i.e. seedlings.
+    ! ----------------------------------------------------------------------------------------------
+    
+    !use EDTypesMod.F90, only : ed_patch_type
+    use EDCohortDynamicsMod , only : create_cohort, zero_cohort, InitPRTObject
+    use EDPftvarcon, only : EDPftvarcon_inst
+    use EDTypesMod, only : num_elements, site_massbal_type
+    
+    ! Arguments:
+    type(ed_site_type), intent(inout), target :: site
+    type(ed_patch_type), intent(inout), target :: patch
+    type(bc_in_type), intent(in) :: bc_in
+    integer(i4), intent(in) :: pft_index ! PFT index number to plant.
+    
+    ! Providing the planting density, DBH, and height for the seedlings to plant is optional.
+    ! Default behavior is provided but is likely that in most cases a density and dbh or height
+    ! will need to be provided to get the desired behavior.
+    
+    ! If the density is not provided fates_recruit_initd will be used.
+    ! If neither DBH nor height is provided then fates_recruit_hgt_min will be used.
+    ! Only DBH nor height or should be provided.  If both are provided then DBH will be ignored?????
+    ! Consider adding a warning?????
+    
+    ! Note: need to find out if the value argument is supported with our compiler.
+    real(r8), intent(in), optional, value :: density ! The planting density in plants / m^2 or hectare??????
+    real(r8), intent(in), optional :: dbh ! Sapling diameter at breast height (cm)
+    real(r8), intent(in), optional :: height ! Sapling height (m)
+    
+    ! Locals:
+    real(r8) :: the_dbh ! The actual DBH?????
+    real(r8) :: the_height ! The actual height (m)
+    real(r8) :: area ! Patch / cohort area (m^2)
+    type(ed_cohort_type), pointer :: planting_cohort   ! Temporary cohort for calculations
+    class(prt_vartypes), pointer :: planting_parteh ! PARTEH object to hold elemental states.
+    type(site_massbal_type), pointer :: site_mass ! Used to access masses for flux accounting.
+    real(r8) :: perplant_mass ! The total elemental mass for the cohort
+    integer :: el ! Element number iteratator
+    integer :: element_id ! Element ID number
+    
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! If not provided use the default initial plant density:
+    if (.not. present(density)) then
+      density = EDPftvarcon_inst%initd(pft)
+    end if
+    
+    ! Size:
+    ! init_temporary_cohort() below will take either DBH or height but for simplicity of logic we
+    ! will convert everything to DBH.
+    if (present(dbh)) then
+      the_dbh = dbh
+    else
+      if (present(height)) then
+        the_height = height
+      else
+        ! Get the default from the parameter file:
+        the_height = EDPftvarcon_inst%hgt_min(pft_index)
+      end if
+      
+      ! Calculate the plant diameter from height:
+      call h2d_allom(height, pft, the_dbh)
+    end if
+    
+    ! Instantiate a cohort object with the desired properties:
+    allocate(planting_cohort)
+    
+    ! Zeroing out the cohort may not be necessary and only EDPhysiologyMod: recruitment() does it
+    ! but it seems like a good idea.
+    call zero_cohort(planting_cohort)
+    
+    ! Create a PARTEH object to hold the rest of the cohorts states:
+    planting_parteh => null()
+    call InitPRTObject(planting_parteh)
+    
+    area = patch%area
+    call init_temporary_cohort(planting_cohort, planting_parteh, pft_index, density, area, dbh = the_dbh)
+    
+    ! Use the cohort's mass quantities to determine the amounts to bring in from the generic fluxes:
+    ! Note: Follows code in EDPhysiologyMod: recruitment().
+    do el = 1,num_elements
+      element_id = element_list(el)
+      
+      ! Get the total mass across all organs:
+      ! perplant_mass = (m_struct + m_leaf + m_fnrt + m_sapw + m_store + m_repro)
+      perplant_mass = planting_cohort%prt%GetState(element_id = element_id)
+      
+      site_mass => site%mass_balance(el)
+      site_mass%flux_generic_in = site_mass%flux_generic_in + (planting_cohort%n * perplant_mass)
+    end do
+    ! In EDPhysiologyMod: recruitment() mass is not moved to make the cohort.  Do I need to?
+    ! I think the pool is 'in' the cohort.
+    
+    ! Add the cohort to the patch...
+    ! clayer:
+    ! Assume we are planting on bareground and are therefore in the top layer. This is fine for now
+    ! but will not be a safe assumption in all cases.  If a canopy is established a value of clayer
+    ! = 2 may be better.
+    ! recruitstatus:
+    ! I'm not sure whether to consider these recruits.
+    ! EDPhysiologyMod: recruitment(): 1.  This is straightforward.
+    ! FatesInventoryInitMod: set_inventory_edcohort_type1() uses a value of 0, which makes sense for
+    ! inventory (note: it has constants rstatus and recruitstatus, the later of which is unused).
+    ! However, the flag is not used much so I will start by treating them as recruits.
+    call create_cohort(site, patch, planting_cohort%pft, planting_cohort%n, planting_cohort%hite, &
+                       planting_cohort%coage, planting_cohort%dbh, planting_parteh, &
+                       planting_cohort%laimemory, planting_cohort%sapwmemory, &
+                       planting_cohort%structmemory, planting_cohort%status_coh, &
+                       recruitstatus = 1, planting_cohort%canopy_trim, &
+                       clayer = 1, site%spread, bc_in)
+    
+    deallocate(planting_cohort) ! Free the temporary cohort.
+    
+  end subroutine plant
+
+  !=================================================================================================
+  
+  ! Revise name????? InitUnattached cohort?
+  subroutine init_temporary_cohort(cohort_obj, cohort_parteh, pft, density, cohort_area, dbh, height) 
+    ! ----------------------------------------------------------------------------------------------
+    ! Populate a cohort based on the the cohort statistics passed in.
+    !
+    ! Code to initialize a cohort occurs in several places including:
+    ! - EDInitMod: init_cohorts()
+    ! - EDPhysiologyMod: recruitment()
+    ! - FatesInventoryInitMod: set_inventory_edcohort_type1()
+    ! I extracted the common code from these subroutines.  The code is modified primarily from 
+    ! FatesInventoryInitMod: set_inventory_edcohort_type1().  I have mainly altered indenting,
+    ! whitespace, some variable names, and added some comments.
+    ! This code is called from a loop over PFTs and in some cases patches in the existing
+    ! subroutines, but for planting it may be only called once.
+    !
+    ! If this subroutine persists it could be modified to replace the duplicated code with a few
+    ! changes. To replace the current code this subroutine should be split into two halves.  I have
+    ! made notes about the differences to facilitate this.
+    ! ----------------------------------------------------------------------------------------------
+    
+    !use EDCohortDynamicsMod, only : zero_cohort, InitPRTObject  [Moved to calling subroutine.]
+    use FatesAllometryMod, only : bagw_allom
+    use FatesAllometryMod, only : bbgw_allom
+    use FatesAllometryMod, only : bleaf
+    use FatesAllometryMod, only : bfineroot
+    use FatesAllometryMod, only : bsap_allom
+    use FatesAllometryMod, only : bdead_allom
+    use FatesAllometryMod, only : bstore_allom
+    use FatesGlobals, only : endrun => fates_endrun
+    ! use PRTGenericMod, only : prt_vartypes !  [Moved to module level.]
+    use PRTGenericMod, only : SetState
+    
+    ! Arguments:
+    !Name: temp_cohort, cohort, the_cohort?????
+    type(ed_cohort_type), intent(inout), target :: cohort_obj ! Pointer to the cohort to initialize.
+    class(prt_vartypes), intent(inout), target :: cohort_parteh ! Pointer to PARTEH object to initialize.
+    integer(i4), intent(in) :: pft ! PFT index number to for cohort
+    real(r8), intent(in) :: density ! The planting density in plants / m^2
+    real(r8), intent(in) :: cohort_area ! The area occupied by the cohort
+    real(r8), intent(in), optional :: dbh ! Plant diameter at breast height in cm
+    real(r8), intent(in), optional :: height ! Plant height in meters
+    
+    ! Locals:
+    !class(prt_vartypes), pointer :: prt_obj ! PARTEH object to hold elemental states.  [-> Agument]
+    ! integer :: cstatus ! Cohort leaf status  [Use object member]
+    integer :: iage ! Leaf age iteratator
+    integer :: el ! Element number iteratator
+    integer :: element_id ! Element ID number
+    real(r8) :: b_agw    ! Biomass above ground non-leaf [kgC]
+    real(r8) :: b_bgw    ! Biomass below ground non-leaf [kgC]
+    real(r8) :: b_leaf   ! Biomass in leaves [kgC]
+    real(r8) :: b_fnrt   ! Biomass in fine roots [kgC]
+    real(r8) :: b_sapw   ! Biomass in sapwood [kgC]
+    real(r8) :: b_struct ! Structural biomass [kgC]
+    real(r8) :: b_store  ! Storage pool carbon [kgC]
+    real(r8) :: a_sapw   ! Area of sapwood at reference height [m2]
+    real(r8) :: m_struct ! Generic (any element) mass for structure [kg]
+    real(r8) :: m_leaf   ! Generic mass for leaf  [kg]
+    real(r8) :: m_fnrt   ! Generic mass for fine-root  [kg]
+    real(r8) :: m_sapw   ! Generic mass for sapwood [kg]
+    real(r8) :: m_store  ! Generic mass for storage [kg]
+    real(r8) :: m_repro  ! Generic mass for reproductive tissues [kg]
+    real(r8) :: stem_drop_fraction
+    
+    ! ----------------------------------------------------------------------------------------------
+    ! Part 1:
+    ! Set the central properties.
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Plant functional type:
+    cohort_obj%pft = pft
+    
+    ! Age: (as cohort age bin, not years)
+    ! EDInitMod: init_cohorts(): 0 (but set later)
+    ! EDPhysiologyMod: recruitment(): 0
+    ! FatesInventoryInitMod: set_inventory_edcohort_type1(): Not set
+    ! There may be cases where a non-zero age is appropriate.  We could for example use the actual
+    ! age of saplings used (~1yr).  If so it likely needs to be passed in because there is
+    ! probably no great way to calculate it.
+    cohort_obj%coage = 0.0_r8
+    
+    ! Number of trees / density:
+    ! This should be straight forward but it is a bit confusing.
+    ! EDTypesMod defines n as the "number of individuals in cohort per 'area' (10000m2 default)"
+    ! If the area is invariant (as onw hectare), this is really a density.  However, both
+    ! EDInitMod: init_cohorts() & FatesInventoryInitMod: set_inventory_edcohort_type1() initialize
+    ! it using the patch area.  Based on previous work I think it is the number of trees per the
+    ! the whole nominal hectare, even though the cohort may not occupy the whole hectare, which is
+    ! not very intuitive.
+    cohort_obj%n = density * cohort_area
+    
+    ! DBH & Height:
+    ! The different functions start with either DBH or height and we allow either:
+    ! EDInitMod: init_cohorts(): height
+    ! EDPhysiologyMod: recruitment(): height
+    ! FatesInventoryInitMod: set_inventory_edcohort_type1(): DBH
+
+    ! If both are present allow height to override DBH:
+    ! Note: It may be better to throw and error here?????
+    if (present(height)) then
+      cohort_obj%hite = height
+      
+      ! Calculate the plant diameter from height:
+      call h2d_allom(height, pft, cohort_obj%dbh)
+    else
+      if (.not. present(dbh)) then
+        ! One should be provided.
+        write(fates_log(),*) 'DBH or height must be provided.'
+        call endrun(msg=errMsg(sourcefile, __LINE__))
+      end if
+      
+      cohort_obj%dbh = dbh
+      
+      ! Calculate the plant height from diameter:
+      call h_allom(dbh, pft, cohort_obj%hite)
+    end if
+    
+    ! The different subroutines make different assumptions for the canopy status.
+    ! EDInitMod: init_cohorts() & FatesInventoryInitMod: set_inventory_edcohort_type1() = 1.0
+    ! EDPhysiologyMod: recruitment() = 0.8.
+    ! For planting an open canopy would be expected so I will use the lower value for now.
+    ! Why not use 0?  I need to confirm that trim is the same oposite of spread
+    cohort_obj%canopy_trim = 1.0_r8 ! ?????
+    
+    ! ----------------------------------------------------------------------------------------------
+    ! Part 2:
+    ! Initialize the live pools.
+    !
+    ! The following code is functionally identical in:
+    ! EDInitMod: init_cohorts() & FatesInventoryInitMod: set_inventory_edcohort_type1().
+    ! Only the some variable names are different.
+    ! EDPhysiologyMod: recruitment() also does the same thing in a different order and calls
+    ! zero_cohort() first and only initializes sapwood and structural biomass if the PFT is woody.
+    ! 
+    ! I have only altered indenting & some comments.
+    ! ----------------------------------------------------------------------------------------------
+
+    ! Calculate total above-ground biomass from allometry
+    call bagw_allom(cohort_obj%dbh, cohort_obj%pft, b_agw)
+
+    ! Calculate coarse root biomass from allometry
+    call bbgw_allom(cohort_obj%dbh, cohort_obj%pft, b_bgw)
+
+    ! Calculate the leaf biomass (calculates a maximum first, then applies canopy trim
+    ! and sla scaling factors)
+    call bleaf(cohort_obj%dbh, cohort_obj%pft, cohort_obj%canopy_trim,b_leaf)
+
+    ! Calculate fine root biomass
+    call bfineroot(cohort_obj%dbh, cohort_obj%pft, cohort_obj%canopy_trim,b_fnrt)!...
+
+    ! Calculate sapwood biomass
+    call bsap_allom(cohort_obj%dbh, cohort_obj%pft, cohort_obj%canopy_trim, a_sapw, b_sapw)
+
+    call bdead_allom( b_agw, b_bgw, b_sapw, cohort_obj%pft, b_struct )
+
+    call bstore_allom(cohort_obj%dbh, cohort_obj%pft, cohort_obj%canopy_trim, b_store)
+
+    ! The default assumption is that leaves are on:
+    cohort_obj%laimemory = 0._r8
+    cohort_obj%sapwmemory = 0._r8
+    cohort_obj%structmemory = 0._r8	 
+    !cstatus = leaves_on
+    cohort_obj%status_coh = leaves_on
+
+    stem_drop_fraction = EDPftvarcon_inst%phen_stem_drop_fraction(cohort_obj%pft)
+
+     if( EDPftvarcon_inst%season_decid(cohort_obj%pft) == itrue .and. &
+         any(csite%cstatus == [phen_cstat_nevercold,phen_cstat_iscold])) then
+      cohort_obj%laimemory = b_leaf
+      cohort_obj%sapwmemory = b_sapw * stem_drop_fraction
+      cohort_obj%structmemory = b_struct * stem_drop_fraction	    
+      b_leaf  = 0._r8
+      b_sapw = (1._r8 - stem_drop_fraction) * b_sapw
+      b_struct  = (1._r8 - stem_drop_fraction) * b_struct
+      !cstatus = leaves_off
+      cohort_obj%status_coh = leaves_off
+    endif
+
+    if ( EDPftvarcon_inst%stress_decid(cohort_obj%pft) == itrue .and. &
+        any(csite%dstatus == [phen_dstat_timeoff,phen_dstat_moistoff])) then
+      cohort_obj%laimemory = b_leaf
+      cohort_obj%sapwmemory = b_sapw * stem_drop_fraction
+      cohort_obj%structmemory = b_struct * stem_drop_fraction	    
+      b_leaf  = 0._r8
+      b_sapw = (1._r8 - stem_drop_fraction) * b_sapw
+      b_struct  = (1._r8 - stem_drop_fraction) * b_struct	    
+      !cstatus = leaves_off
+      cohort_obj%status_coh = leaves_off
+    endif
+
+    ! End Part 2.
+    
+    ! ----------------------------------------------------------------------------------------------
+    ! Part 3:
+    ! Some of the subroutines do something here:
+    ! EDInitMod: init_cohorts() sets the age and a debug message here.
+    ! EDPhysiologyMod: recruitment(): The limiting element is determined.
+    ! FatesInventoryInitMod: set_inventory_edcohort_type1(): Nothing.
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! ----------------------------------------------------------------------------------------------
+    ! Part 4:
+    ! Initialize the mass of every element in every organ of the plant / cohort and store_organ
+    ! in a PARTEH object.
+    !
+    ! The following code is functionally identical in:
+    ! EDInitMod: init_cohorts(), EDPhysiologyMod: recruitment(),  & FatesInventoryInitMod:
+    ! set_inventory_edcohort_type1(), except init_cohorts() & recruitment() put all the leaf mass
+    ! into the first leaf age bin while set_inventory_edcohort_type1() spread it across all age
+    ! bins.
+    ! Since we are only really trying to do planting currently we will use former approach.
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Initialize the PARTEH object:
+    ! prt_obj => null()
+    ! call InitPRTObject(prt_obj)
+    ! The PARTEH object is now passed in.
+
+    do el = 1,num_elements
+
+      element_id = element_list(el)
+
+      ! If this is carbon12, then the initialization is straight forward
+      ! otherwise, we use stoichiometric ratios
+      select case(element_id)
+      case(carbon12_element)
+
+        m_struct = b_struct
+        m_leaf   = b_leaf
+        m_fnrt   = b_fnrt
+        m_sapw   = b_sapw
+        m_store  = b_store
+        m_repro  = 0._r8
+
+      case(nitrogen_element)
+
+        m_struct = b_struct * EDPftvarcon_inst%prt_nitr_stoich_p1(cohort_obj%pft, struct_organ)
+        m_leaf   = b_leaf * EDPftvarcon_inst%prt_nitr_stoich_p1(cohort_obj%pft, leaf_organ)
+        m_fnrt   = b_fnrt * EDPftvarcon_inst%prt_nitr_stoich_p1(cohort_obj%pft, fnrt_organ)
+        m_sapw   = b_sapw * EDPftvarcon_inst%prt_nitr_stoich_p1(cohort_obj%pft, sapw_organ)
+        m_store  = b_store * EDPftvarcon_inst%prt_nitr_stoich_p1(cohort_obj%pft, store_organ)
+        m_repro  = 0._r8
+
+      case(phosphorus_element)
+
+        m_struct = b_struct * EDPftvarcon_inst%prt_phos_stoich_p1(cohort_obj%pft, struct_organ)
+        m_leaf   = b_leaf * EDPftvarcon_inst%prt_phos_stoich_p1(cohort_obj%pft, leaf_organ)
+        m_fnrt   = b_fnrt * EDPftvarcon_inst%prt_phos_stoich_p1(cohort_obj%pft, fnrt_organ)
+        m_sapw   = b_sapw * EDPftvarcon_inst%prt_phos_stoich_p1(cohort_obj%pft, sapw_organ)
+        m_store  = b_store * EDPftvarcon_inst%prt_phos_stoich_p1(cohort_obj%pft, store_organ)
+        m_repro  = 0._r8
+      end select
+
+      select case(hlm_parteh_mode)
+      case (prt_carbon_allom_hyp,prt_cnp_flex_allom_hyp )
+
+        ! Put all of the leaf mass into the first bin
+        call SetState(cohort_parteh, leaf_organ, element_id, m_leaf,1)
+        do iage = 2,nleafage
+          call SetState(cohort_parteh, leaf_organ, element_id, 0._r8, iage)
+        end do
+
+        call SetState(cohort_parteh, fnrt_organ, element_id, m_fnrt)
+        call SetState(cohort_parteh, sapw_organ, element_id, m_sapw)
+        call SetState(cohort_parteh, store_organ, element_id, m_store)
+        call SetState(cohort_parteh, struct_organ, element_id, m_struct)
+        call SetState(cohort_parteh, repro_organ, element_id, m_repro)
+
+      case default
+        write(fates_log(),*) 'Unspecified PARTEH module during inventory intitialization'
+        call endrun(msg=errMsg(sourcefile, __LINE__))
+      end select
+
+      end do
+
+    call cohort_parteh%CheckInitialConditions()
+    
+    ! End Part 4.
+
+  end subroutine init_temporary_cohort()
+
+end module FatesVegetationManagementMod
