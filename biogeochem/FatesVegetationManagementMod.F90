@@ -50,6 +50,7 @@ contains
     use EDCohortDynamicsMod, only : create_cohort, zero_cohort, InitPRTObject
     use EDPftvarcon, only : EDPftvarcon_inst
     use EDTypesMod, only : num_elements, site_massbal_type, element_list
+    use PRTGenericMod, only : num_organ_types
     
     ! Arguments:
     type(ed_site_type), intent(inout), target :: site
@@ -83,8 +84,9 @@ contains
     class(prt_vartypes), pointer :: planting_parteh ! PARTEH object to hold elemental states.
     type(site_massbal_type), pointer :: site_mass ! Used to access masses for flux accounting.
     real(r8) :: perplant_mass ! The total elemental mass for the cohort
-    integer :: el ! Element number iteratator
+    integer :: el ! Element number iterator
     integer :: element_id ! Element ID number
+    integer :: organ_id ! Organ ID iterator
     
     ! ----------------------------------------------------------------------------------------------
     
@@ -215,7 +217,6 @@ contains
     use PRTGenericMod, only : carbon12_element, nitrogen_element,  phosphorus_element
     use PRTGenericMod, only : struct_organ, leaf_organ, fnrt_organ, sapw_organ, store_organ
     use PRTGenericMod, only : repro_organ
-    use PRTGenericMod, only : num_organ_types
     use PRTGenericMod, only : prt_carbon_allom_hyp, prt_cnp_flex_allom_hyp
     
     ! Arguments:
@@ -234,8 +235,8 @@ contains
     ! Locals:
     !class(prt_vartypes), pointer :: prt_obj ! PARTEH object to hold elemental states.  [-> Agument]
     ! integer :: cstatus ! Cohort leaf status  [Use object member]
-    integer :: iage ! Leaf age iteratator
-    integer :: el ! Element number iteratator
+    integer :: iage ! Leaf age iterator
+    integer :: el ! Element number iterator
     integer :: element_id ! Element ID number
     real(r8) :: b_agw    ! Biomass above ground non-leaf [kgC]
     real(r8) :: b_bgw    ! Biomass below ground non-leaf [kgC]
