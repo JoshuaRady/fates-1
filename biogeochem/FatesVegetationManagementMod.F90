@@ -431,6 +431,6 @@ contains
     
     ! End Part 4.
 
-  end subroutine init_temporary_cohort()
+  end subroutine init_temporary_cohort
 
 end module FatesVegetationManagementMod
