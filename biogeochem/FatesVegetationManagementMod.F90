@@ -21,6 +21,7 @@ module FatesVegetationManagementMod
   ! Using generic integers for PFT numbers should be fine but we follow FatesAllometryMod in
   ! explicitly sizing them.
   use FatesConstantsMod, only : i4 => fates_int
+  use FatesConstantsMod, only : itrue, ifalse
   use FatesInterfaceTypesMod, only : bc_in_type
   use PRTGenericMod, only : prt_vartypes
   use shr_log_mod, only : errMsg => shr_log_errMsg
@@ -30,6 +31,8 @@ module FatesVegetationManagementMod
   
   public :: plant
   public :: init_temporary_cohort
+  
+  ! character(len=*), parameter, private :: sourcefile = __FILE__
   
   !=================================================================================================
   
@@ -46,7 +49,7 @@ contains
     !use EDTypesMod.F90, only : ed_patch_type
     use EDCohortDynamicsMod, only : create_cohort, zero_cohort, InitPRTObject
     use EDPftvarcon, only : EDPftvarcon_inst
-    use EDTypesMod, only : num_elements, site_massbal_type
+    use EDTypesMod, only : num_elements, site_massbal_type, element_list
     
     ! Arguments:
     type(ed_site_type), intent(inout), target :: site
@@ -63,13 +66,15 @@ contains
     ! Only DBH nor height or should be provided.  If both are provided then DBH will be ignored?????
     ! Consider adding a warning?????
     
-    ! Note: need to find out if the value argument is supported with our compiler.
-    real(r8), intent(in), optional, value :: density ! The planting density in plants / m^2 or hectare??????
+    ! Note: It appears that the compliler on Cheyenne does not support the value keyword.
+    ! real(r8), intent(in), optional, value :: density ! The planting density in plants / m^2 or hectare??????
+    real(r8), intent(in), optional :: density ! The planting density (plants / m^2)
     real(r8), intent(in), optional :: dbh ! Sapling diameter at breast height (cm)
     real(r8), intent(in), optional :: height ! Sapling height (m)
     
     ! Locals:
-    real(r8) :: the_dbh ! The actual DBH?????
+    real(r8) :: the_density ! The actual planting density (plants / m^2)
+    real(r8) :: the_dbh ! The actual DBH (cm)
     real(r8) :: the_height ! The actual height (m)
     real(r8) :: area ! Patch / cohort area (m^2)
     type(ed_cohort_type), pointer :: planting_cohort   ! Temporary cohort for calculations
@@ -82,8 +87,10 @@ contains
     ! ----------------------------------------------------------------------------------------------
     
     ! If not provided use the default initial plant density:
-    if (.not. present(density)) then
-      density = EDPftvarcon_inst%initd(pft)
+    if (present(density)) then
+      the_density = density
+    else
+      density = EDPftvarcon_inst%initd(pft_index)
     end if
     
     ! Size:
@@ -100,7 +107,7 @@ contains
       end if
       
       ! Calculate the plant diameter from height:
-      call h2d_allom(height, pft, the_dbh)
+      call h2d_allom(height, pft_index, the_dbh)
     end if
     
     ! Instantiate a cohort object with the desired properties:
@@ -115,7 +122,7 @@ contains
     call InitPRTObject(planting_parteh)
     
     area = patch%area
-    call init_temporary_cohort(planting_cohort, planting_parteh, pft_index, density, area, dbh = the_dbh)
+    call init_temporary_cohort(site, planting_cohort, planting_parteh, pft_index, the_density, area, dbh = the_dbh)
     
     ! Use the cohort's mass quantities to determine the amounts to bring in from the generic fluxes:
     ! Note: Follows code in EDPhysiologyMod: recruitment().
@@ -124,7 +131,7 @@ contains
       
       ! Get the total mass across all organs:
       ! perplant_mass = (m_struct + m_leaf + m_fnrt + m_sapw + m_store + m_repro)
-      perplant_mass = planting_cohort%prt%GetState(element_id = element_id)
+      perplant_mass = planting_cohort%prt%GetState(element_id = element_id) !!!!!!!!!!
       
       site_mass => site%mass_balance(el)
       site_mass%flux_generic_in = site_mass%flux_generic_in + (planting_cohort%n * perplant_mass)
@@ -147,8 +154,10 @@ contains
                        planting_cohort%coage, planting_cohort%dbh, planting_parteh, &
                        planting_cohort%laimemory, planting_cohort%sapwmemory, &
                        planting_cohort%structmemory, planting_cohort%status_coh, &
-                       recruitstatus = 1, planting_cohort%canopy_trim, &
-                       clayer = 1, site%spread, bc_in)
+                       1, planting_cohort%canopy_trim, 1, site%spread, bc_in)
+                       ! Can't mix labeled and unlabeled arguments.
+                       ! recruitstatus = 1, planting_cohort%canopy_trim, &
+                       ! clayer = 1, site%spread, bc_in)
     
     deallocate(planting_cohort) ! Free the temporary cohort.
     
@@ -157,7 +166,7 @@ contains
   !=================================================================================================
   
   ! Revise name????? InitUnattached cohort?
-  subroutine init_temporary_cohort(cohort_obj, cohort_parteh, pft, density, cohort_area, dbh, height) 
+  subroutine init_temporary_cohort(site, cohort_obj, cohort_parteh, pft, density, cohort_area, dbh, height) 
     ! ----------------------------------------------------------------------------------------------
     ! Populate a cohort based on the the cohort statistics passed in.
     !
@@ -177,6 +186,11 @@ contains
     ! ----------------------------------------------------------------------------------------------
     
     !use EDCohortDynamicsMod, only : zero_cohort, InitPRTObject  [Moved to calling subroutine.]
+    use EDPftvarcon, only : EDPftvarcon_inst
+    use EDTypesMod, only : num_elements, element_list ! site_massbal_type
+    use EDTypesMod, only : leaves_on, leaves_off
+    use EDTypesMod, only : phen_cstat_nevercold, phen_cstat_iscold
+    use EDTypesMod, only : phen_dstat_timeoff, phen_dstat_moistoff
     use FatesAllometryMod, only : bagw_allom
     use FatesAllometryMod, only : bbgw_allom
     use FatesAllometryMod, only : bleaf
@@ -185,10 +199,15 @@ contains
     use FatesAllometryMod, only : bdead_allom
     use FatesAllometryMod, only : bstore_allom
     use FatesGlobals, only : endrun => fates_endrun
+    use FatesGlobals, only : fates_log
     ! use PRTGenericMod, only : prt_vartypes !  [Moved to module level.]
     use PRTGenericMod, only : SetState
+    use PRTGenericMod, only : carbon12_element, nitrogen_element,  phosphorus_element
     
     ! Arguments:
+    ! The site is only used to check the leaf status tags cstatus and dstatus.  It might be better
+    ! to pass these in or find some other way to avoid dependance on the site information.
+    type(ed_site_type), intent(inout), target :: site
     !Name: temp_cohort, cohort, the_cohort?????
     type(ed_cohort_type), intent(inout), target :: cohort_obj ! Pointer to the cohort to initialize.
     class(prt_vartypes), intent(inout), target :: cohort_parteh ! Pointer to PARTEH object to initialize.
@@ -264,7 +283,8 @@ contains
       if (.not. present(dbh)) then
         ! One should be provided.
         write(fates_log(),*) 'DBH or height must be provided.'
-        call endrun(msg=errMsg(sourcefile, __LINE__))
+        ! call endrun(msg=errMsg(sourcefile, __LINE__))
+        call endrun(msg=errMsg(__FILE__, __LINE__))
       end if
       
       cohort_obj%dbh = dbh
@@ -322,8 +342,8 @@ contains
 
     stem_drop_fraction = EDPftvarcon_inst%phen_stem_drop_fraction(cohort_obj%pft)
 
-     if( EDPftvarcon_inst%season_decid(cohort_obj%pft) == itrue .and. &
-         any(csite%cstatus == [phen_cstat_nevercold,phen_cstat_iscold])) then
+     if (EDPftvarcon_inst%season_decid(cohort_obj%pft) == itrue .and. &
+         any(site%cstatus == [phen_cstat_nevercold,phen_cstat_iscold])) then
       cohort_obj%laimemory = b_leaf
       cohort_obj%sapwmemory = b_sapw * stem_drop_fraction
       cohort_obj%structmemory = b_struct * stem_drop_fraction	    
@@ -334,8 +354,8 @@ contains
       cohort_obj%status_coh = leaves_off
     endif
 
-    if ( EDPftvarcon_inst%stress_decid(cohort_obj%pft) == itrue .and. &
-        any(csite%dstatus == [phen_dstat_timeoff,phen_dstat_moistoff])) then
+    if (EDPftvarcon_inst%stress_decid(cohort_obj%pft) == itrue .and. &
+        any(site%dstatus == [phen_dstat_timeoff,phen_dstat_moistoff])) then
       cohort_obj%laimemory = b_leaf
       cohort_obj%sapwmemory = b_sapw * stem_drop_fraction
       cohort_obj%structmemory = b_struct * stem_drop_fraction	    
@@ -426,7 +446,8 @@ contains
 
       case default
         write(fates_log(),*) 'Unspecified PARTEH module during inventory intitialization'
-        call endrun(msg=errMsg(sourcefile, __LINE__))
+        ! call endrun(msg=errMsg(sourcefile, __LINE__))
+        call endrun(msg=errMsg(__FILE__, __LINE__))
       end select
 
       end do
