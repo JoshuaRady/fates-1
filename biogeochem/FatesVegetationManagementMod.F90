@@ -53,7 +53,9 @@ contains
     
     ! Arguments:
     type(ed_site_type), intent(inout), target :: site
-    type(ed_patch_type), intent(inout), target :: patch
+    ! type(ed_patch_type), intent(inout), target :: patch
+    ! I'm not sure why this must be pointer rather than target?
+    type(ed_patch_type), intent(inout), pointer :: patch
     type(bc_in_type), intent(in) :: bc_in
     integer(i4), intent(in) :: pft_index ! PFT index number to plant.
     
@@ -90,7 +92,7 @@ contains
     if (present(density)) then
       the_density = density
     else
-      density = EDPftvarcon_inst%initd(pft_index)
+      the_density = EDPftvarcon_inst%initd(pft_index)
     end if
     
     ! Size:
@@ -200,9 +202,13 @@ contains
     use FatesAllometryMod, only : bstore_allom
     use FatesGlobals, only : endrun => fates_endrun
     use FatesGlobals, only : fates_log
+    use FatesInterfaceTypesMod, only : hlm_parteh_mode, nleafage
     ! use PRTGenericMod, only : prt_vartypes !  [Moved to module level.]
     use PRTGenericMod, only : SetState
     use PRTGenericMod, only : carbon12_element, nitrogen_element,  phosphorus_element
+    use PRTGenericMod, only : struct_organ, leaf_organ, fnrt_organ, sapw_organ, store_organ
+    use PRTGenericMod, only : repro_organ
+    use PRTGenericMod, only : prt_carbon_allom_hyp, prt_cnp_flex_allom_hyp
     
     ! Arguments:
     ! The site is only used to check the leaf status tags cstatus and dstatus.  It might be better
