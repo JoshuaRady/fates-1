@@ -17,6 +17,10 @@ module FatesVegetationManagementMod
   
   use EDTypesMod, only : ed_site_type, ed_patch_type, ed_cohort_type
   use FatesAllometryMod, only : h2d_allom, h_allom
+  use FatesConstantsMod, only : r8 => fates_r8
+  ! Using generic integers for PFT numbers should be fine but we follow FatesAllometryMod in
+  ! explicitly sizing them.
+  use FatesConstantsMod, only : i4 => fates_int
   use FatesInterfaceTypesMod, only : bc_in_type
   use PRTGenericMod, only : prt_vartypes
   use shr_log_mod, only : errMsg => shr_log_errMsg
