@@ -133,7 +133,14 @@ contains
       
       ! Get the total mass across all organs:
       ! perplant_mass = (m_struct + m_leaf + m_fnrt + m_sapw + m_store + m_repro)
-      perplant_mass = planting_cohort%prt%GetState(element_id = element_id) !!!!!!!!!!
+      ! perplant_mass = planting_cohort%prt%GetState(element_id = element_id)
+      
+      ! For each element we get the total mass across all organs (and subpool / position) within it:
+      perplant_mass = 0
+      do organ_id = 1,num_organ_types
+        ! GetState(this, organ_id, element_id, position_id)
+        perplant_mass = perplant_mass + planting_cohort%prt%GetState(organ_id, element_id)
+      end do
       
       site_mass => site%mass_balance(el)
       site_mass%flux_generic_in = site_mass%flux_generic_in + (planting_cohort%n * perplant_mass)
@@ -208,6 +215,7 @@ contains
     use PRTGenericMod, only : carbon12_element, nitrogen_element,  phosphorus_element
     use PRTGenericMod, only : struct_organ, leaf_organ, fnrt_organ, sapw_organ, store_organ
     use PRTGenericMod, only : repro_organ
+    use PRTGenericMod, only : num_organ_types
     use PRTGenericMod, only : prt_carbon_allom_hyp, prt_cnp_flex_allom_hyp
     
     ! Arguments:
