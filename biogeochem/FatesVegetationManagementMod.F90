@@ -15,9 +15,11 @@
 
 module FatesVegetationManagementMod
   
-  use EDTypesMod, only : bc_in_type, ed_site_type, ed_patch_type, ed_cohort_type
-  use FatesAllometryMod , only : h2d_allom, h_allom
+  use EDTypesMod, only : ed_site_type, ed_patch_type, ed_cohort_type
+  use FatesAllometryMod, only : h2d_allom, h_allom
+  use FatesInterfaceTypesMod, only : bc_in_type
   use PRTGenericMod, only : prt_vartypes
+  use shr_log_mod, only : errMsg => shr_log_errMsg
   
   ! Enforce explicit type declarations:
   implicit none
@@ -38,7 +40,7 @@ contains
     ! ----------------------------------------------------------------------------------------------
     
     !use EDTypesMod.F90, only : ed_patch_type
-    use EDCohortDynamicsMod , only : create_cohort, zero_cohort, InitPRTObject
+    use EDCohortDynamicsMod, only : create_cohort, zero_cohort, InitPRTObject
     use EDPftvarcon, only : EDPftvarcon_inst
     use EDTypesMod, only : num_elements, site_massbal_type
     
