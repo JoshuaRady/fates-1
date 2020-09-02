@@ -222,8 +222,8 @@ contains
     if (debug) then
     write(fates_log(),*) 'FatesVegetationManagementMod: plant() running with:'
       write(fates_log(), '(A,F5.3)') 'Density =', the_density
-      write(fates_log(), '(A,F5.3)') 'Density =', the_dbh
-      write(fates_log(), '(A,F5.3)') 'Density =', the_height
+      write(fates_log(), '(A,F5.3)') 'DBH =', the_dbh
+      write(fates_log(), '(A,F5.3)') 'Height =', the_height
     end if
     
     ! Instantiate a cohort object with the desired properties:
@@ -258,7 +258,11 @@ contains
       perplant_mass = 0
       do organ_id = 1,num_organ_types
         ! GetState(this, organ_id, element_id, position_id)
-        perplant_mass = perplant_mass + planting_cohort%prt%GetState(organ_id, element_id)
+        
+        ! This doesn't work because the PARTEH object is not linking into the cohort!
+        ! perplant_mass = perplant_mass + planting_cohort%prt%GetState(organ_id, element_id)
+        
+        perplant_mass = perplant_mass + planting_parteh%GetState(organ_id, element_id)
       end do
       
       if (debug) then
