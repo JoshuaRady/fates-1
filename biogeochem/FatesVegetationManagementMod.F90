@@ -211,7 +211,7 @@ contains
       end if
       
       if (debug) then
-        write(fates_log(), 'A,F5.3') &
+        write(fates_log(), '((A,F5.3))') &
               'FatesVegetationManagementMod: plant() calculating DBH from height =', the_height
       end if
       
@@ -221,9 +221,9 @@ contains
     
     if (debug) then
     write(fates_log(),*) 'FatesVegetationManagementMod: plant() running with:'
-      write(fates_log(), 'A,F5.3') 'Density =', the_density
-      write(fates_log(), 'A,F5.3') 'Density =', the_dbh
-      write(fates_log(), 'A,F5.3') 'Density =', the_height
+      write(fates_log(), '(A,F5.3)') 'Density =', the_density
+      write(fates_log(), '(A,F5.3)') 'Density =', the_dbh
+      write(fates_log(), '(A,F5.3)') 'Density =', the_height
     end if
     
     ! Instantiate a cohort object with the desired properties:
@@ -246,8 +246,8 @@ contains
       element_id = element_list(el)
       
       if (debug) then
-        write(fates_log(), 'A,I') 'Element number = ', el
-        write(fates_log(), 'A,I') 'Element ID = ', element_id
+        write(fates_log(), '(A,I)') 'Element number = ', el
+        write(fates_log(), '(A,I)') 'Element ID = ', element_id
       end if
       
       ! Get the total mass across all organs:
@@ -262,7 +262,7 @@ contains
       end do
       
       if (debug) then
-        write(fates_log(), 'A,F8.3') 'Per-plant mass = ', perplant_mass
+        write(fates_log(), '(A,F8.3)') 'Per-plant mass = ', perplant_mass
       end if
       
       site_mass => site%mass_balance(el)
@@ -331,7 +331,7 @@ contains
     use FatesAllometryMod, only : bdead_allom
     use FatesAllometryMod, only : bstore_allom
     use FatesGlobals, only : endrun => fates_endrun
-    use FatesGlobals, only : fates_log
+    ! use FatesGlobals, only : fates_log
     use FatesInterfaceTypesMod, only : hlm_parteh_mode, nleafage
     ! use PRTGenericMod, only : prt_vartypes !  [Moved to module level.]
     use PRTGenericMod, only : SetState
