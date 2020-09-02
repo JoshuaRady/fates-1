@@ -24,10 +24,14 @@ module FatesVegetationManagementMod
   use FatesConstantsMod, only : itrue, ifalse
   use FatesInterfaceTypesMod, only : bc_in_type
   use PRTGenericMod, only : prt_vartypes
+  
+  ! Logging and error reporting:
   use shr_log_mod, only : errMsg => shr_log_errMsg
+  use FatesGlobals, only : fates_log
   
   ! Enforce explicit type declarations:
   implicit none
+  private
   
   ! public :: managed_mortality
   public :: managed_fecundity
@@ -36,6 +40,9 @@ module FatesVegetationManagementMod
   public :: init_temporary_cohort ! Currently doen't need to be public.
   
   ! character(len=*), parameter, private :: sourcefile = __FILE__
+  
+  ! Debugging:
+  logical, parameter :: debug = .true.
   
   !=================================================================================================
   
@@ -69,6 +76,10 @@ contains
     type(ed_patch_type), pointer :: thisPatch
     
     ! ----------------------------------------------------------------------------------------------
+    
+    if (debug) then
+      write(fates_log(), *) 'managed_fecundity() entering.'
+    end if
     
     ! ToDo: 
     ! Determine which patch or patches to plant into:
@@ -173,9 +184,9 @@ contains
     class(prt_vartypes), pointer :: planting_parteh ! PARTEH object to hold elemental states.
     type(site_massbal_type), pointer :: site_mass ! Used to access masses for flux accounting.
     real(r8) :: perplant_mass ! The total elemental mass for the cohort
-    integer :: el ! Element number iterator
+    integer :: el ! Element number counter
     integer :: element_id ! Element ID number
-    integer :: organ_id ! Organ ID iterator
+    integer :: organ_id ! Organ ID counter
     
     ! ----------------------------------------------------------------------------------------------
     
@@ -199,8 +210,20 @@ contains
         the_height = EDPftvarcon_inst%hgt_min(pft_index)
       end if
       
+      if (debug) then
+        write(fates_log(), 'A,F5.3') &
+              'FatesVegetationManagementMod: plant() calculating DBH from height =', the_height
+      end if
+      
       ! Calculate the plant diameter from height:
       call h2d_allom(height, pft_index, the_dbh)
+    end if
+    
+    if (debug) then
+    write(fates_log(),*) 'FatesVegetationManagementMod: plant() running with:'
+      write(fates_log(), 'A,F5.3') 'Density =', the_density
+      write(fates_log(), 'A,F5.3') 'Density =', the_dbh
+      write(fates_log(), 'A,F5.3') 'Density =', the_height
     end if
     
     ! Instantiate a cohort object with the desired properties:
@@ -222,6 +245,11 @@ contains
     do el = 1,num_elements
       element_id = element_list(el)
       
+      if (debug) then
+        write(fates_log(), 'A,I') 'Element number = ', el
+        write(fates_log(), 'A,I') 'Element ID = ', element_id
+      end if
+      
       ! Get the total mass across all organs:
       ! perplant_mass = (m_struct + m_leaf + m_fnrt + m_sapw + m_store + m_repro)
       ! perplant_mass = planting_cohort%prt%GetState(element_id = element_id)
@@ -232,6 +260,10 @@ contains
         ! GetState(this, organ_id, element_id, position_id)
         perplant_mass = perplant_mass + planting_cohort%prt%GetState(organ_id, element_id)
       end do
+      
+      if (debug) then
+        write(fates_log(), 'A,F8.3') 'Per-plant mass = ', perplant_mass
+      end if
       
       site_mass => site%mass_balance(el)
       site_mass%flux_generic_in = site_mass%flux_generic_in + (planting_cohort%n * perplant_mass)
@@ -324,8 +356,8 @@ contains
     ! Locals:
     !class(prt_vartypes), pointer :: prt_obj ! PARTEH object to hold elemental states.  [-> Agument]
     ! integer :: cstatus ! Cohort leaf status  [Use object member]
-    integer :: iage ! Leaf age iterator
-    integer :: el ! Element number iterator
+    integer :: iage ! Leaf age counter
+    integer :: el ! Element number counter
     integer :: element_id ! Element ID number
     real(r8) :: b_agw    ! Biomass above ground non-leaf [kgC]
     real(r8) :: b_bgw    ! Biomass below ground non-leaf [kgC]
