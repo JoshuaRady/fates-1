@@ -86,6 +86,8 @@ module EDMainMod
   use PRTLossFluxesMod,       only : PRTReproRelease
 
   use EDPftvarcon,            only : EDPftvarcon_inst
+  
+  use FatesVegetationManagementMod, only : managed_fecundity
 
   ! CIME Globals
   use shr_log_mod         , only : errMsg => shr_log_errMsg
