@@ -58,6 +58,7 @@ contains
     ! ----------------------------------------------------------------------------------------------
     
     use EDLoggingMortalityMod, only : logging_time ! Temporary trigger for planting
+    use FatesGlobals, only : endrun => fates_endrun
     use FatesInterfaceTypesMod , only : hlm_current_year ! For testing.
     
     ! Arguments:
@@ -85,15 +86,16 @@ contains
       do while (associated(thisPatch))
         
         ! Assuming we are using a nominal hectare of 10,000 m^2, the 1/10th should be big enough.
-        if (thisPatch%area > 1000)
+        if (thisPatch%area > 1000) then
           exit
         end if
         
         thisPatch => thisPatch%younger
       enddo
+      
       ! Check that the loop was not a bad idea:
       if (.not. associated(thisPatch)) then
-        call endrun(msg=errMsg(__FILE__, __LINE__))
+        call endrun(msg = errMsg(__FILE__, __LINE__))
       end if
       
       ! For testing the PFT and planting conditions are arbitrary and just to demonstrate things
@@ -111,11 +113,11 @@ contains
       ! For the first test we will start in 2001 in brazil and run for at least 15 years.
       if (hlm_current_year < 2007) then
         ! Plant broadleaf_evergreen_tropical_tree with default settings passed in explicitly:
-        call plant(site = site, patch = thisPatch, bc_in = bc_in, pft_index = 1, density = 0.2, &
-                   height = 1.3)
+        call plant(site = site, patch = thisPatch, bc_in = bc_in, pft_index = 1, density = 0.2_r8, &
+                   height = 1.3_r8)
       else
         ! Plant broadleaf_hydrodecid_tropical_tree without a size specified:
-        call plant(site = site, patch = thisPatch, bc_in = bc_in, pft_index = 5, density = 0.2)
+        call plant(site = site, patch = thisPatch, bc_in = bc_in, pft_index = 5, density = 0.2_r8)
         
       end if
       
