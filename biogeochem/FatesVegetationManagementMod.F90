@@ -29,14 +29,101 @@ module FatesVegetationManagementMod
   ! Enforce explicit type declarations:
   implicit none
   
+  ! public :: managed_mortality
+  public :: managed_fecundity
+  
   public :: plant
-  public :: init_temporary_cohort
+  public :: init_temporary_cohort ! Currently doen't need to be public.
   
   ! character(len=*), parameter, private :: sourcefile = __FILE__
   
   !=================================================================================================
   
 contains
+  
+  ! Placeholder:
+  !subroutine managed_mortality
+    ! ----------------------------------------------------------------------------------------------
+  !end subroutine
+  
+  subroutine managed_fecundity(site, bc_in) ! managed_planting?
+    ! ----------------------------------------------------------------------------------------------
+    ! This is called during the recruitment phase of the main event loop and executes any human
+    ! driven changes in plant fecundity in the form of planting, additions of seeds, and possibly
+    ! species changes.
+    !
+    ! Currently this is largely a hack for testing planting but over time logic will be added to
+    ! determine what actions are due based on event codes, input files, or heuristics.
+    !
+    ! ----------------------------------------------------------------------------------------------
+    
+    use EDLoggingMortalityMod, only : logging_time ! Temporary trigger for planting
+    use FatesInterfaceTypesMod , only : hlm_current_year ! For testing.
+    
+    ! Arguments:
+    type(ed_site_type), intent(inout), target :: site
+    type(bc_in_type), intent(in) :: bc_in
+    
+    ! Locals:
+    type(ed_patch_type), pointer :: thisPatch
+    
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! ToDo: 
+    ! Determine which patch or patches to plant into:
+    ! Considerations include the area that needs to be planted, the composition of the patches: i.e.
+    ! what species are there, is it a bare patch, and history: is it secondary or managed land.
+    !
+    ! For initial testing the patch doesn't matter much but we want to make sure it is big enough
+    ! that any new cohorts are not eliminated.
+    
+    ! For testing we use the logging event code to trigger a planting event:
+    if (logging_time) then
+      
+      ! Temporary patch determination:
+      thisPatch => site%oldest_patch
+      do while (associated(thisPatch))
+        
+        ! Assuming we are using a nominal hectare of 10,000 m^2, the 1/10th should be big enough.
+        if (thisPatch%area > 1000)
+          exit
+        end if
+        
+        thisPatch => thisPatch%younger
+      enddo
+      ! Check that the loop was not a bad idea:
+      if (.not. associated(thisPatch)) then
+        call endrun(msg=errMsg(__FILE__, __LINE__))
+      end if
+      
+      ! For testing the PFT and planting conditions are arbitrary and just to demonstrate things
+      ! work. For simplicity of interpretation we should set up the PFTs so that those that we will
+      ! plant are not present prior to planting.  We can do this several ways:
+      ! If we do not include the PFTs in the parameer file we can't add them later.
+      ! If we set the initial density to 0 we have to supply a density but we can't  check the
+      ! behavior when the density is omitted.  This is fine for our initial tests.
+      ! Using inventory initialization is probably the best initialization to test all features.
+      
+      ! For the first test I plant to initialize with a grass only and then plant two different tree
+      ! PFTs at two different later dates.
+      
+      ! To test more than one use of plant in the same run we use the date:
+      ! For the first test we will start in 2001 in brazil and run for at least 15 years.
+      if (hlm_current_year < 2007) then
+        ! Plant broadleaf_evergreen_tropical_tree with default settings passed in explicitly:
+        call plant(site = site, patch = thisPatch, bc_in = bc_in, pft_index = 1, density = 0.2, &
+                   height = 1.3)
+      else
+        ! Plant broadleaf_hydrodecid_tropical_tree without a size specified:
+        call plant(site = site, patch = thisPatch, bc_in = bc_in, pft_index = 5, density = 0.2)
+        
+      end if
+      
+    end if
+    
+  end subroutine
+  
+  !=================================================================================================
   
   subroutine plant(site, patch, bc_in, pft_index, density, dbh, height) !plant_sapling()?
     ! ----------------------------------------------------------------------------------------------
@@ -299,7 +386,7 @@ contains
         ! One should be provided.
         write(fates_log(),*) 'DBH or height must be provided.'
         ! call endrun(msg=errMsg(sourcefile, __LINE__))
-        call endrun(msg=errMsg(__FILE__, __LINE__))
+        call endrun(msg = errMsg(__FILE__, __LINE__))
       end if
       
       cohort_obj%dbh = dbh
@@ -462,7 +549,7 @@ contains
       case default
         write(fates_log(),*) 'Unspecified PARTEH module during inventory intitialization'
         ! call endrun(msg=errMsg(sourcefile, __LINE__))
-        call endrun(msg=errMsg(__FILE__, __LINE__))
+        call endrun(msg = errMsg(__FILE__, __LINE__))
       end select
 
       end do

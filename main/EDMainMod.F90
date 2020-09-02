@@ -209,6 +209,9 @@ contains
           
           currentPatch => currentPatch%younger
        enddo
+       
+       call managed_fecundity(currentSite, bc_in) ! JMR_MOD: 9/1/2020
+       
     end if
     
        
