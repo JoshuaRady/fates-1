@@ -92,6 +92,10 @@ contains
     ! For testing we use the logging event code to trigger a planting event:
     if (logging_time) then
       
+      if (debug) then
+        write(fates_log(), *) 'Planting triggered by logging event (for testing).'
+      end if
+      
       ! Temporary patch determination:
       thisPatch => site%oldest_patch
       do while (associated(thisPatch))
@@ -122,7 +126,7 @@ contains
       
       ! To test more than one use of plant in the same run we use the date:
       ! For the first test we will start in 2001 in brazil and run for at least 15 years.
-      if (hlm_current_year < 2007) then
+      if (hlm_current_year > 2007) then
         ! Plant broadleaf_evergreen_tropical_tree with default settings passed in explicitly:
         call plant(site = site, patch = thisPatch, bc_in = bc_in, pft_index = 1, density = 0.2_r8, &
                    height = 1.3_r8)
@@ -131,7 +135,10 @@ contains
         call plant(site = site, patch = thisPatch, bc_in = bc_in, pft_index = 5, density = 0.2_r8)
         
       end if
-      
+    end if ! if (logging_time)
+    
+    if (debug) then
+      write(fates_log(), *) 'managed_fecundity() exiting.'
     end if
     
   end subroutine
@@ -190,6 +197,11 @@ contains
     
     ! ----------------------------------------------------------------------------------------------
     
+    ! Initialize variables:
+    the_density = 0
+    the_dbh = 0
+    the_height = 0
+    
     ! If not provided use the default initial plant density:
     if (present(density)) then
       the_density = density
@@ -199,7 +211,8 @@ contains
     
     ! Size:
     ! init_temporary_cohort() below will take either DBH or height but for simplicity of logic we
-    ! will convert everything to DBH.
+    ! will convert everything to DBH.  This is suboptimal in that if height is passed in it will
+    ! subsequently be converted back.
     if (present(dbh)) then
       the_dbh = dbh
     else
@@ -210,13 +223,13 @@ contains
         the_height = EDPftvarcon_inst%hgt_min(pft_index)
       end if
       
-      if (debug) then
-        write(fates_log(), '((A,F5.3))') &
-              'FatesVegetationManagementMod: plant() calculating DBH from height =', the_height
-      end if
+!       if (debug) then
+!         write(fates_log(), '((A,F5.3))') &
+!               'FatesVegetationManagementMod: plant() calculating DBH from height =', the_height
+!       end if
       
       ! Calculate the plant diameter from height:
-      call h2d_allom(height, pft_index, the_dbh)
+      call h2d_allom(the_height, pft_index, the_dbh)
     end if
     
     if (debug) then
