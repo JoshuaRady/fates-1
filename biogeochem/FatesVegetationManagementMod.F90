@@ -41,7 +41,7 @@ module FatesVegetationManagementMod
   
   ! character(len=*), parameter, private :: sourcefile = __FILE__
   
-  ! Debugging:
+  ! Debugging flag for module:
   logical, parameter :: debug = .true.
   
   !=================================================================================================
@@ -126,12 +126,14 @@ contains
       
       ! To test more than one use of plant in the same run we use the date:
       ! For the first test we will start in 2001 in brazil and run for at least 15 years.
-      if (hlm_current_year > 2007) then
+      if (hlm_current_year < 2007) then
         ! Plant broadleaf_evergreen_tropical_tree with default settings passed in explicitly:
         call plant(site = site, patch = thisPatch, bc_in = bc_in, pft_index = 1, density = 0.2_r8, &
                    height = 1.3_r8)
       else
         ! Plant broadleaf_hydrodecid_tropical_tree without a size specified:
+        ! We have to provide the density because we have changed the initial density to 0 to
+        ! suppress trees growth initially.
         call plant(site = site, patch = thisPatch, bc_in = bc_in, pft_index = 5, density = 0.2_r8)
         
       end if
@@ -172,9 +174,9 @@ contains
     ! will need to be provided to get the desired behavior.
     
     ! If the density is not provided fates_recruit_initd will be used.
-    ! If neither DBH nor height is provided then fates_recruit_hgt_min will be used.
-    ! Only DBH nor height or should be provided.  If both are provided then DBH will be ignored?????
+    ! Only DBH or height or should be provided.  If both are provided then height will be ignored.
     ! Consider adding a warning?????
+    ! If neither DBH nor height is provided then fates_recruit_hgt_min will be used.
     
     ! Note: It appears that the compliler on Cheyenne does not support the value keyword.
     ! real(r8), intent(in), optional, value :: density ! The planting density in plants / m^2 or hectare??????
@@ -187,9 +189,10 @@ contains
     real(r8) :: the_dbh ! The actual DBH (cm)
     real(r8) :: the_height ! The actual height (m)
     real(r8) :: area ! Patch / cohort area (m^2)
+    logical :: use_dbh ! Specify cohort size by DBH, otherwise use height
     type(ed_cohort_type), pointer :: planting_cohort   ! Temporary cohort for calculations
-    class(prt_vartypes), pointer :: planting_parteh ! PARTEH object to hold elemental states.
-    type(site_massbal_type), pointer :: site_mass ! Used to access masses for flux accounting.
+    class(prt_vartypes), pointer :: planting_parteh ! PARTEH object to hold elemental states
+    type(site_massbal_type), pointer :: site_mass ! Used to access masses for flux accounting
     real(r8) :: perplant_mass ! The total elemental mass for the cohort
     integer :: el ! Element number counter
     integer :: element_id ! Element ID number
@@ -201,6 +204,7 @@ contains
     the_density = 0
     the_dbh = 0
     the_height = 0
+    area = patch%area
     
     ! If not provided use the default initial plant density:
     if (present(density)) then
@@ -210,11 +214,10 @@ contains
     end if
     
     ! Size:
-    ! init_temporary_cohort() below will take either DBH or height but for simplicity of logic we
-    ! will convert everything to DBH.  This is suboptimal in that if height is passed in it will
-    ! subsequently be converted back.
+    ! If DBH or height if provided (in that order), otherwise use the default height.
     if (present(dbh)) then
       the_dbh = dbh
+      use_dbh = .true.
     else
       if (present(height)) then
         the_height = height
@@ -223,10 +226,7 @@ contains
         the_height = EDPftvarcon_inst%hgt_min(pft_index)
       end if
       
-!       if (debug) then
-!         write(fates_log(), '((A,F5.3))') &
-!               'FatesVegetationManagementMod: plant() calculating DBH from height =', the_height
-!       end if
+      use_dbh = .false.
       
       ! Calculate the plant diameter from height:
       call h2d_allom(the_height, pft_index, the_dbh)
@@ -237,6 +237,8 @@ contains
       write(fates_log(), '(A,F5.3)') 'Density =', the_density
       write(fates_log(), '(A,F5.3)') 'DBH =', the_dbh
       write(fates_log(), '(A,F5.3)') 'Height =', the_height
+      write(fates_log(), '(A,F5.3)') 'Patch area =', area
+      write(fates_log(), '(A,L)') 'Use DBH =', use_dbh
     end if
     
     ! Instantiate a cohort object with the desired properties:
@@ -250,8 +252,13 @@ contains
     planting_parteh => null()
     call InitPRTObject(planting_parteh)
     
-    area = patch%area
-    call init_temporary_cohort(site, planting_cohort, planting_parteh, pft_index, the_density, area, dbh = the_dbh)
+    if (use_dbh) then
+      call init_temporary_cohort(site, planting_cohort, planting_parteh, &
+                                 pft_index, the_density, area, dbh = the_dbh)
+    else
+      call init_temporary_cohort(site, planting_cohort, planting_parteh, &
+                                 pft_index, the_density, area, height = the_height)
+    end if
     
     ! Use the cohort's mass quantities to determine the amounts to bring in from the generic fluxes:
     ! Note: Follows code in EDPhysiologyMod: recruitment().
@@ -263,18 +270,11 @@ contains
         write(fates_log(), '(A,I)') 'Element ID = ', element_id
       end if
       
-      ! Get the total mass across all organs:
+      ! For each element we get the total mass across all organs (& subpools / positions) within it:
+      ! Note: In EDPhysiologyMod: recruitment() this is done manually:
       ! perplant_mass = (m_struct + m_leaf + m_fnrt + m_sapw + m_store + m_repro)
-      ! perplant_mass = planting_cohort%prt%GetState(element_id = element_id)
-      
-      ! For each element we get the total mass across all organs (and subpool / position) within it:
       perplant_mass = 0
       do organ_id = 1,num_organ_types
-        ! GetState(this, organ_id, element_id, position_id)
-        
-        ! This doesn't work because the PARTEH object is not linking into the cohort!
-        ! perplant_mass = perplant_mass + planting_cohort%prt%GetState(organ_id, element_id)
-        
         perplant_mass = perplant_mass + planting_parteh%GetState(organ_id, element_id)
       end do
       
@@ -285,8 +285,6 @@ contains
       site_mass => site%mass_balance(el)
       site_mass%flux_generic_in = site_mass%flux_generic_in + (planting_cohort%n * perplant_mass)
     end do
-    ! In EDPhysiologyMod: recruitment() mass is not moved to make the cohort.  Do I need to?
-    ! I think the pool is 'in' the cohort.
     
     ! Add the cohort to the patch...
     ! clayer:
@@ -348,7 +346,6 @@ contains
     use FatesAllometryMod, only : bdead_allom
     use FatesAllometryMod, only : bstore_allom
     use FatesGlobals, only : endrun => fates_endrun
-    ! use FatesGlobals, only : fates_log
     use FatesInterfaceTypesMod, only : hlm_parteh_mode, nleafage
     ! use PRTGenericMod, only : prt_vartypes !  [Moved to module level.]
     use PRTGenericMod, only : SetState
