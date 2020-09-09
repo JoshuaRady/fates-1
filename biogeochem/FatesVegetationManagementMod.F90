@@ -126,17 +126,20 @@ contains
       
       ! To test more than one use of plant in the same run we use the date:
       ! For the first test we will start in 2001 in brazil and run for at least 15 years.
-      if (hlm_current_year < 2007) then
-        ! Plant broadleaf_evergreen_tropical_tree with default settings passed in explicitly:
-        call plant(site = site, patch = thisPatch, bc_in = bc_in, pft_index = 1, density = 0.2_r8, &
-                   height = 1.3_r8)
-      else
-        ! Plant broadleaf_hydrodecid_tropical_tree without a size specified:
-        ! We have to provide the density because we have changed the initial density to 0 to
-        ! suppress trees growth initially.
-        call plant(site = site, patch = thisPatch, bc_in = bc_in, pft_index = 5, density = 0.2_r8)
+!       if (hlm_current_year < 2007) then
+!         ! Plant broadleaf_evergreen_tropical_tree with default settings passed in explicitly:
+!         call plant(site = site, patch = thisPatch, bc_in = bc_in, pft_index = 1, density = 0.2_r8, &
+!                    height = 1.3_r8)
+!       else
+!         ! Plant broadleaf_hydrodecid_tropical_tree without a size specified:
+!         ! We have to provide the density because we have changed the initial density to 0 to
+!         ! suppress trees growth initially.
+!         call plant(site = site, patch = thisPatch, bc_in = bc_in, pft_index = 5, density = 0.2_r8)
+!         
+!       end if
+      ! Test plant() with all optional arguments omitted. Plant needleleaf_evergreen_extratrop_tree:
+        call plant(site = site, patch = thisPatch, bc_in = bc_in, pft_index = 1)
         
-      end if
     end if ! if (logging_time)
     
     if (debug) then
