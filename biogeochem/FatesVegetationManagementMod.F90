@@ -138,7 +138,7 @@ contains
 !         
 !       end if
       ! Test plant() with all optional arguments omitted. Plant needleleaf_evergreen_extratrop_tree:
-        call plant(site = site, patch = thisPatch, bc_in = bc_in, pft_index = 1)
+        call plant(site = site, patch = thisPatch, bc_in = bc_in, pft_index = 2)
         
     end if ! if (logging_time)
     
