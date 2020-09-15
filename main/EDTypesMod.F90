@@ -948,6 +948,10 @@ module EDTypesMod
      write(fates_log(),*) 'pa%c_stomata          = ',cpatch%c_stomata
      write(fates_log(),*) 'pa%c_lblayer          = ',cpatch%c_lblayer
      write(fates_log(),*) 'pa%disturbance_rate   = ',cpatch%disturbance_rate
+     
+     ! JMR_MOD 9/15/2020: Testing:
+     write(fates_log(),*) 'pa%disturbance_rate - 1.0_r8 = ',cpatch%disturbance_rate - 1.0_r8
+     
      write(fates_log(),*) 'pa%disturbance_rates  = ',cpatch%disturbance_rates(:)
      write(fates_log(),*) 'pa%anthro_disturbance_label = ',cpatch%anthro_disturbance_label
      write(fates_log(),*) '----------------------------------------'
