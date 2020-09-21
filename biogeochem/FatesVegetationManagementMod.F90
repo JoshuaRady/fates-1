@@ -149,6 +149,8 @@ contains
   end subroutine
   
   !=================================================================================================
+  ! Planting Subroutines:
+  !=================================================================================================
   
   subroutine plant(site, patch, bc_in, pft_index, density, dbh, height) !plant_sapling()?
     ! ----------------------------------------------------------------------------------------------
@@ -610,5 +612,346 @@ contains
     ! End Part 4.
 
   end subroutine init_temporary_cohort
+
+  !=================================================================================================
+  ! Managed Mortality Subroutines:
+  !=================================================================================================
+  
+!   subroutine kill()
+!     ! ----------------------------------------------------------------------------------------------
+!     ! 
+!     ! ----------------------------------------------------------------------------------------------
+!     
+!     ! Uses:
+!     
+!     ! Arguments:
+!     
+!     ! Locals:
+!     
+!     ! ----------------------------------------------------------------------------------------------
+!     
+!   end subroutine kill
+  
+  subroutine anthro_disturbance_rate(site_in, bc_in)
+    ! ----------------------------------------------------------------------------------------------
+    ! Calculate the extent of any disturbance resulting from potential human vegetation management
+    ! at the current time step.  The disturbance, at a patch level, may or may not subsequently
+    ! occur depending on whether it is the dominant disturbance.
+    !
+    ! This will result in update of an update of:
+    ! - The site level harvest_carbon_flux value member.  [Not sure why is this calculated here!]
+    ! - The patch level disturbance_rates(dtype_ilog) member.
+    ! - The cohort level lmort_direct, lmort_collateral, lmort_infra, and l_degrad members.
+    !
+    ! This routine is called from EDPatchDynamicsMod.F90: disturbance_rates() in the FATES event
+    ! loop. This initial version is based on logging code extracted from there but will be expanded
+    ! to include other vegetation management.
+    !
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Uses:
+    use EDPatchDynamicsMod, only : get_frac_site_primary
+    use EDMortalityFunctionsMod, only : mortality_rates
+    ! use FatesAllometryMod, only : carea_allom
+    use EDLoggingMortalityMod, only : LoggingMortality_frac
+    use EDLoggingMortalityMod, only : get_harvest_rate_area
+    
+    ! Arguments:
+    type(ed_site_type), intent(inout), target :: site_in
+    type(bc_in_type), intent(in) :: bc_in
+    
+    ! Locals:
+    type (ed_patch_type) , pointer :: currentPatch
+    type (ed_cohort_type), pointer :: currentCohort
+
+!     real(r8) :: cmort
+!     real(r8) :: bmort
+!     real(r8) :: hmort
+!     real(r8) :: frmort
+!     real(r8) :: smort
+!     real(r8) :: asmort
+
+    real(r8) :: lmort_direct
+    real(r8) :: lmort_collateral
+    real(r8) :: lmort_infra
+    real(r8) :: l_degrad         ! fraction of trees that are not killed but suffer from forest 
+                                 ! degradation (i.e. they are moved to newly-anthro-disturbed 
+                                 ! secondary forest patch)
+    real(r8) :: dist_rate_ldist_notharvested
+!    integer  :: threshold_sizeclass
+!    integer  :: i_dist
+    real(r8) :: frac_site_primary
+    real(r8) :: harvest_rate
+    
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! The following is the based on logging code extracted from EDPatchDynamicsMod.F90:
+    ! disturbance_rates().
+    
+    ! First calculate the fraction of the site that is primary land:
+    call get_frac_site_primary(site_in, frac_site_primary)
+ 
+    ! An estimate of the harvest flux will be made and stored:
+    site_in%harvest_carbon_flux = 0._r8
+    
+    ! ----------------------------------------------------------------------------------------------
+    ! Calculate Mortality Rates:
+    ! ----------------------------------------------------------------------------------------------
+    
+    currentPatch => site_in%oldest_patch
+    do while (associated(currentPatch))
+      currentCohort => currentPatch%shortest
+      
+      do while(associated(currentCohort))
+        currentCohort%patchptr => currentPatch ! Why is this necessary?????
+        
+        ! Mortality for trees in the understorey.   [What is this about????]
+        !call mortality_rates(currentCohort,bc_in,cmort,hmort,bmort,frmort,smort,asmort)
+        !currentCohort%dmort  = cmort+hmort+bmort+frmort+smort+asmort
+
+      ! The crown area is used to calculate other disturbance types as well so we assume it has
+      ! has been updated already, since growth was applied.
+      !call carea_allom(currentCohort%dbh,currentCohort%n,site_in%spread,currentCohort%pft, &
+      !currentCohort%c_area)
+
+! Initialize diagnostic mortality rates
+! currentCohort%cmort = cmort
+! currentCohort%bmort = bmort
+! currentCohort%hmort = hmort
+! currentCohort%frmort = frmort
+! currentCohort%smort = smort
+! currentCohort%asmort = asmort
+
+        call LoggingMortality_frac(currentCohort%pft, currentCohort%dbh, &
+                                   currentCohort%canopy_layer, lmort_direct, lmort_collateral, &
+                                   lmort_infra, l_degrad, bc_in%hlm_harvest_rates, &
+                                   bc_in%hlm_harvest_catnames, bc_in%hlm_harvest_units, &
+                                   currentPatch%anthro_disturbance_label, &
+                                   currentPatch%age_since_anthro_disturbance, frac_site_primary)
+
+        currentCohort%lmort_direct     = lmort_direct
+        currentCohort%lmort_collateral = lmort_collateral
+        currentCohort%lmort_infra      = lmort_infra
+        currentCohort%l_degrad         = l_degrad
+
+        ! Estimate the wood product (trunk_product_site)
+        if (currentCohort%canopy_layer>=1) then
+          site_in%harvest_carbon_flux = site_in%harvest_carbon_flux + currentCohort%lmort_direct * &
+          currentCohort%n * (currentCohort%prt%GetState(sapw_organ, all_carbon_elements) + &
+          currentCohort%prt%GetState(struct_organ, all_carbon_elements)) * &
+          EDPftvarcon_inst%allom_agb_frac(currentCohort%pft) * SF_val_CWD_frac(ncwd) * &
+          logging_export_frac
+        endif
+
+        currentCohort => currentCohort%taller
+      end do ! Cohort loop.
+      
+      !currentPatch%disturbance_mode = fates_unset_int
+      currentPatch => currentPatch%younger
+    end do ! Patch loop.
+    
+    ! ----------------------------------------------------------------------------------------------
+    ! Recalculate total canopy area prior to resolving the disturbance:
+    !
+    ! JMR Note:
+    ! I think this is the first time that the canopy area has been updated since growth was applied.
+    ! It is needed for logging disturbance calculation but not for other disturbance types so I
+    ! removed it from EDPatchDynamicsMod.F90: disturbance_rates().  It needs to happen prior
+    ! to disturbance calculation and it happens following mortality calculation in the original code
+    ! because cohort level crown area is calculated in the same loop.  We may be changing that?????
+    ! ----------------------------------------------------------------------------------------------
+    
+    currentPatch => site_in%oldest_patch
+    do while (associated(currentPatch))
+      currentPatch%total_canopy_area = 0._r8
+      currentCohort => currentPatch%shortest
+      do while(associated(currentCohort))   
+        if(currentCohort%canopy_layer==1)then
+             currentPatch%total_canopy_area = currentPatch%total_canopy_area + currentCohort%c_area
+        end if
+        currentCohort => currentCohort%taller
+      end do
+      currentPatch => currentPatch%younger
+    end do
+    
+    ! ----------------------------------------------------------------------------------------------
+    ! Calculate Disturbance Rates based on the mortality rates just calculated:
+    ! ----------------------------------------------------------------------------------------------
+    
+    currentPatch => site_in%oldest_patch
+    do while (associated(currentPatch))   
+
+      !currentPatch%disturbance_rates(dtype_ifall) = 0.0_r8
+      currentPatch%disturbance_rates(dtype_ilog)  = 0.0_r8
+      !currentPatch%disturbance_rates(dtype_ifire) = 0.0_r8
+
+      dist_rate_ldist_notharvested = 0.0_r8
+
+      currentCohort => currentPatch%shortest
+      do while(associated(currentCohort))   
+
+        if(currentCohort%canopy_layer == 1)then
+
+! Treefall Disturbance Rate
+! currentPatch%disturbance_rates(dtype_ifall) = currentPatch%disturbance_rates(dtype_ifall) + &
+! fates_mortality_disturbance_fraction * &
+! min(1.0_r8,currentCohort%dmort)*hlm_freq_day*currentCohort%c_area/currentPatch%area
+
+          ! Logging Disturbance Rate:
+          currentPatch%disturbance_rates(dtype_ilog) = &
+                              currentPatch%disturbance_rates(dtype_ilog) + &
+                              min(1.0_r8, currentCohort%lmort_direct + &
+                              currentCohort%lmort_collateral + &
+                              currentCohort%lmort_infra + &
+                              currentCohort%l_degrad ) * &
+                              currentCohort%c_area/currentPatch%area
+
+          ! Non-harvested part of the logging disturbance rate:
+          dist_rate_ldist_notharvested = dist_rate_ldist_notharvested + currentCohort%l_degrad * &
+                                         currentCohort%c_area/currentPatch%area
+        endif
+        
+        currentCohort => currentCohort%taller
+      enddo ! Cohort loop
+
+      ! for non-closed-canopy areas subject to logging, add an additional increment of area disturbed
+      ! equivalent to the fradction loged to account for transfer of interstitial ground area to new secondary lands
+      if (logging_time .and. &
+         (currentPatch%area - currentPatch%total_canopy_area) .gt. fates_tiny ) then
+        ! The canopy is NOT closed. 
+
+        call get_harvest_rate_area(currentPatch%anthro_disturbance_label, &
+                                   bc_in%hlm_harvest_catnames, bc_in%hlm_harvest_rates, &
+                                   frac_site_primary, currentPatch%age_since_anthro_disturbance, &
+                                   harvest_rate)
+
+        currentPatch%disturbance_rates(dtype_ilog) = currentPatch%disturbance_rates(dtype_ilog) + &
+            (currentPatch%area - currentPatch%total_canopy_area) * harvest_rate / currentPatch%area
+
+        ! Non-harvested part of the logging disturbance rate
+        dist_rate_ldist_notharvested = dist_rate_ldist_notharvested + &
+                                       (currentPatch%area - currentPatch%total_canopy_area) * &
+                                       harvest_rate / currentPatch%area
+      endif
+
+      ! fraction of the logging disturbance rate that is non-harvested
+      if (currentPatch%disturbance_rates(dtype_ilog) .gt. nearzero) then
+        currentPatch%fract_ldist_not_harvested = dist_rate_ldist_notharvested / &
+                                                 currentPatch%disturbance_rates(dtype_ilog)
+      endif
+
+      currentPatch => currentPatch%younger
+    enddo ! Patch loop 
+    
+  end subroutine anthro_disturbance_rate
+  
+  !=================================================================================================
+  
+  function anthro_mortality_rate(cohort, bc_in) result(dndt_logging) ! anthro_mortality non-disturbing?????
+    ! ----------------------------------------------------------------------------------------------
+    ! Calculate mortality resulting from human vegetation management at the cohort level.
+    ! Mortality is returned as a change in number (density?) per unit time (year).
+    ! This routine is called from EDMortalityFunctionsMod: Mortality_Derivative().
+    !
+    ! Human induced mortality includes logging but other actives as well such as thinning,
+    ! understory clearing, agricultural harvest, etc.
+    ! The existing code excludes disturbance inducing mortality resulting from logging.  We need to
+    ! decide if and when we want to follow suit.
+    !
+    ! This subroutine is designed to encapsulate the management specific logic so the calling code
+    ! does not have to be aware of it.
+    ! This code currently extracts the logging specific code from EDMortalityFunctionsMod.F90:
+    ! Mortality_Derivative() with only formating and name changes.
+    ! However, there is potential problem with that code that I'm working to resolve.
+    ! Logic for more activities will follow.
+    !
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Uses:
+    use EDLoggingMortalityMod, only : LoggingMortality_frac
+    use FatesInterfaceTypesMod, only : hlm_freq_day
+    
+    ! Arguments:
+    ! Similar functions take the site as well but we can get that from the cohort.
+    type(ed_cohort_type), intent(inout), target :: cohort
+    type(bc_in_type), intent(in) :: bc_in
+    
+    ! Locals:
+    real(r8) :: dndt_logging      ! Mortality rate (per day) associated with the a logging event
+    ! Name will change to dndt_managment!
+    integer  :: ipft              ! local copy of the pft index
+    
+    ! ----------------------------------------------------------------------------------------------
+    
+    ipft = cohort%pft
+    
+    call LoggingMortality_frac(ipft, cohort%dbh, cohort%canopy_layer, &
+                               cohort%lmort_direct, &
+                               cohort%lmort_collateral, &
+                               cohort%lmort_infra, &
+                               cohort%l_degrad, &
+                               bc_in%hlm_harvest_rates, &
+                               bc_in%hlm_harvest_catnames, &
+                               bc_in%hlm_harvest_units, &
+                               cohort%patchptr%anthro_disturbance_label, &
+                               cohort%patchptr%age_since_anthro_disturbance, &
+                               frac_site_primary)
+    
+    ! The logging mortality rate are expressed as a fractional rate of the cohort / event.  They
+    ! need to be converted to a rate of fraction per year similar to the natural disturbance rates
+    ! using hlm_freq_day.
+    
+    if (cohort%canopy_layer > 1)then 
+       ! Include understory logging mortality rates not associated with disturbance:
+       dndt_logging = (cohort%lmort_direct + cohort%lmort_collateral +  cohort%lmort_infra) / &
+                       hlm_freq_day
+    else
+       ! Mortality from logging in the canopy is ONLY disturbance generating, don't
+       ! update number densities via non-disturbance inducing death
+       dndt_logging = 0.0_r8
+    endif
+    
+  end function anthro_mortality
+
+  !=================================================================================================
+
+  subroutine management_fluxes(current_site, current_patch, new_patch, patch_site_areadis)
+    ! ----------------------------------------------------------------------------------------------
+    ! Perform the the fluxes resulting from all the management activities performed during this
+    ! timestep.
+    ! Called from EDPatchDynamicsMod.F90: spawn_patches().
+    !
+    ! Currently this is just a wrapper for the existing logging code and will be expanded later.
+    ! 
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Uses:
+    use EDLoggingMortalityMod, only : logging_litter_fluxes
+    
+    ! Arguments:
+    type(ed_site_type), intent(inout), target :: current_site ! Possibly unnecessary, see below.
+    type (ed_patch_type), intent(inout), target :: current_patch ! patch_in?
+    type (ed_patch_type), intent(inout), target :: new_patch ! The...
+    ! This can be calculated from data in the cohort so doesn't really need to be passed in:
+    real(r8) :: patch_site_areadis, intent(in) ! total area disturbed in m2 per patch per day
+    
+    ! Locals:
+    ! Do we have to pass in the site to modify it or can we just get it from patch_in?
+    !type (ed_site_type), pointer :: current_site
+    
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Checking the disturbance mode here rather than in the calling code allows for more flexibility
+    ! but is not really necessary now:
+    if (currentPatch%disturbance_mode .eq. dtype_ilog) then
+      call logging_litter_fluxes(current_site, currentPatch, new_patch, patch_site_areadis)
+    endif
+    
+  end subroutine management_fluxes
+
+  !=================================================================================================
+  ! Patch and Cohort Search Subroutines:
+  !=================================================================================================
+
 
 end module FatesVegetationManagementMod

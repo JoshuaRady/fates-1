@@ -17,7 +17,7 @@ module EDMortalityFunctionsMod
    use FatesInterfaceTypesMod     , only : hlm_use_ed_prescribed_phys
    use FatesInterfaceTypesMod     , only : hlm_freq_day
    use FatesInterfaceTypesMod     , only : hlm_use_planthydro
-   use EDLoggingMortalityMod , only : LoggingMortality_frac
+!   use EDLoggingMortalityMod , only : LoggingMortality_frac
    use EDParamsMod           , only : fates_mortality_disturbance_fraction
    use FatesInterfaceTypesMod     , only : bc_in_type
 
@@ -218,7 +218,8 @@ if (hlm_use_ed_prescribed_phys .eq. ifalse) then
     !
     ! !USES:
 
-    use FatesInterfaceTypesMod, only : hlm_freq_day
+!    use FatesInterfaceTypesMod, only : hlm_freq_day
+    use FatesVegetationManagementMod, only : anthro_mortality_rate
     !
     ! !ARGUMENTS    
     type(ed_site_type), intent(inout), target  :: currentSite
@@ -233,51 +234,59 @@ if (hlm_use_ed_prescribed_phys .eq. ifalse) then
     real(r8) :: frmort   ! freezing mortality rate (fraction per year)
     real(r8) :: smort    ! size dependent senescence mortality rate (fraction per year)
     real(r8) :: asmort   ! age dependent senescence mortality rate (fraction per year)
-    real(r8) :: dndt_logging      ! Mortality rate (per day) associated with the a logging event
-    integer  :: ipft              ! local copy of the pft index
+    real(r8) :: dndt_natural  ! Sum of natural mortality rates (fraction per year)
+!    real(r8) :: dndt_logging      ! Mortality rate (per day) associated with the a logging event
+    real(r8) :: dndt_vegmgmt  ! Mortality rate (fraction per year) from vegetation management
+!     integer  :: ipft              ! local copy of the pft index
     !----------------------------------------------------------------------
 
-    ipft = currentCohort%pft
+!    ipft = currentCohort%pft
     
     ! Mortality for trees in the understorey. 
     !if trees are in the canopy, then their death is 'disturbance'. This probably needs a different terminology
-    call mortality_rates(currentCohort,bc_in,cmort,hmort,bmort,frmort,smort, asmort)
-    call LoggingMortality_frac(ipft, currentCohort%dbh, currentCohort%canopy_layer, &
-                               currentCohort%lmort_direct,                       &
-                               currentCohort%lmort_collateral,                    &
-                               currentCohort%lmort_infra,                        &
-                               currentCohort%l_degrad, &
-                               bc_in%hlm_harvest_rates, &
-                               bc_in%hlm_harvest_catnames, &
-                               bc_in%hlm_harvest_units, &
-                               currentCohort%patchptr%anthro_disturbance_label, &
-                               currentCohort%patchptr%age_since_anthro_disturbance, &
-                               frac_site_primary)
+    call mortality_rates(currentCohort, bc_in, cmort, hmort, bmort, frmort, smort, asmort)
+    dndt_natural = cmort + hmort + bmort + frmort + smort + asmort
+    
+!     call LoggingMortality_frac(ipft, currentCohort%dbh, currentCohort%canopy_layer, &
+!                                currentCohort%lmort_direct,                       &
+!                                currentCohort%lmort_collateral,                    &
+!                                currentCohort%lmort_infra,                        &
+!                                currentCohort%l_degrad, &
+!                                bc_in%hlm_harvest_rates, &
+!                                bc_in%hlm_harvest_catnames, &
+!                                bc_in%hlm_harvest_units, &
+!                                currentCohort%patchptr%anthro_disturbance_label, &
+!                                currentCohort%patchptr%age_since_anthro_disturbance, &
+!                                frac_site_primary)
 
     
-    
+    dndt_vegmgmt = anthro_mortality_rate(currentCohort, bc_in)
 
     if (currentCohort%canopy_layer > 1)then 
        ! Include understory logging mortality rates not associated with disturbance
-       dndt_logging = (currentCohort%lmort_direct     + &
-            currentCohort%lmort_collateral + &
-            currentCohort%lmort_infra)/hlm_freq_day
-
-       
-       currentCohort%dndt = -1.0_r8 * &
-            (cmort+hmort+bmort+frmort+smort+asmort + dndt_logging) &
-            * currentCohort%n
+!        dndt_logging = (currentCohort%lmort_direct     + &
+!             currentCohort%lmort_collateral + &
+!             currentCohort%lmort_infra)/hlm_freq_day
+! 
+!        
+!        currentCohort%dndt = -1.0_r8 * &
+!             (cmort+hmort+bmort+frmort+smort+asmort + dndt_logging) &
+!             * currentCohort%n
+      currentCohort%dndt = -1.0_r8 * (dndt_natural + dndt_vegmgmt) * currentCohort%n
     else
 
       
     
        ! Mortality from logging in the canopy is ONLY disturbance generating, don't
        ! update number densities via non-disturbance inducing death
-       currentCohort%dndt= -(1.0_r8-fates_mortality_disturbance_fraction) &
-            * (cmort+hmort+bmort+frmort+smort+asmort) * &
-            currentCohort%n
-
+!        currentCohort%dndt= -(1.0_r8-fates_mortality_disturbance_fraction) &
+!             * (cmort+hmort+bmort+frmort+smort+asmort) * &
+!             currentCohort%n
+       currentCohort%dndt= -(1.0_r8-fates_mortality_disturbance_fraction) * &
+                            (dndt_natural + dndt_vegmgmt) * currentCohort%n
     endif
+    
+    
 
     return
 

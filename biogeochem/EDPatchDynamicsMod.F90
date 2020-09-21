@@ -150,8 +150,8 @@ contains
     ! !USES:
     use EDMortalityFunctionsMod , only : mortality_rates
     ! loging flux
-    use EDLoggingMortalityMod , only : LoggingMortality_frac
-
+    !use EDLoggingMortalityMod , only : LoggingMortality_frac
+    use FatesVegetationManagementMod, only : anthro_disturbance_rate
   
     ! !ARGUMENTS:
     type(ed_site_type) , intent(inout), target :: site_in
@@ -168,17 +168,17 @@ contains
     real(r8) :: smort
     real(r8) :: asmort
 
-    real(r8) :: lmort_direct
-    real(r8) :: lmort_collateral
-    real(r8) :: lmort_infra
-    real(r8) :: l_degrad         ! fraction of trees that are not killed but suffer from forest 
+!     real(r8) :: lmort_direct
+!     real(r8) :: lmort_collateral
+!     real(r8) :: lmort_infra
+!     real(r8) :: l_degrad         ! fraction of trees that are not killed but suffer from forest 
                                  ! degradation (i.e. they are moved to newly-anthro-disturbed 
                                  ! secondary forest patch)
-    real(r8) :: dist_rate_ldist_notharvested
-    integer  :: threshold_sizeclass
+!    real(r8) :: dist_rate_ldist_notharvested
+!    integer  :: threshold_sizeclass ! Not actually used!
     integer  :: i_dist
-    real(r8) :: frac_site_primary
-    real(r8) :: harvest_rate
+!    real(r8) :: frac_site_primary
+!    real(r8) :: harvest_rate
 
     !----------------------------------------------------------------------------------------------
     ! Calculate Mortality Rates (these were previously calculated during growth derivatives)
@@ -186,9 +186,9 @@ contains
     !----------------------------------------------------------------------------------------------
     
     ! first calculate the fractino of the site that is primary land
-    call get_frac_site_primary(site_in, frac_site_primary)
+!    call get_frac_site_primary(site_in, frac_site_primary)
  
-    site_in%harvest_carbon_flux = 0._r8
+!    site_in%harvest_carbon_flux = 0._r8
 
     currentPatch => site_in%oldest_patch
     do while (associated(currentPatch))   
@@ -211,29 +211,29 @@ contains
           currentCohort%smort = smort
           currentCohort%asmort = asmort
 
-          call LoggingMortality_frac(currentCohort%pft, currentCohort%dbh, currentCohort%canopy_layer, &
-                lmort_direct,lmort_collateral,lmort_infra,l_degrad,&
-                bc_in%hlm_harvest_rates, &
-                bc_in%hlm_harvest_catnames, &
-                bc_in%hlm_harvest_units, &
-                currentPatch%anthro_disturbance_label, &
-                currentPatch%age_since_anthro_disturbance, &
-                frac_site_primary)
-         
-          currentCohort%lmort_direct     = lmort_direct
-          currentCohort%lmort_collateral = lmort_collateral
-          currentCohort%lmort_infra      = lmort_infra
-          currentCohort%l_degrad         = l_degrad
-
-          ! estimate the wood product (trunk_product_site)
-          if (currentCohort%canopy_layer>=1) then
-             site_in%harvest_carbon_flux = site_in%harvest_carbon_flux + &
-                  currentCohort%lmort_direct * currentCohort%n * &
-                  ( currentCohort%prt%GetState(sapw_organ, all_carbon_elements) + &
-                  currentCohort%prt%GetState(struct_organ, all_carbon_elements)) * &
-                  EDPftvarcon_inst%allom_agb_frac(currentCohort%pft) * &
-                  SF_val_CWD_frac(ncwd) * logging_export_frac
-          endif
+!           call LoggingMortality_frac(currentCohort%pft, currentCohort%dbh, currentCohort%canopy_layer, &
+!                 lmort_direct,lmort_collateral,lmort_infra,l_degrad,&
+!                 bc_in%hlm_harvest_rates, &
+!                 bc_in%hlm_harvest_catnames, &
+!                 bc_in%hlm_harvest_units, &
+!                 currentPatch%anthro_disturbance_label, &
+!                 currentPatch%age_since_anthro_disturbance, &
+!                 frac_site_primary)
+!          
+!           currentCohort%lmort_direct     = lmort_direct
+!           currentCohort%lmort_collateral = lmort_collateral
+!           currentCohort%lmort_infra      = lmort_infra
+!           currentCohort%l_degrad         = l_degrad
+! 
+!           ! estimate the wood product (trunk_product_site)
+!           if (currentCohort%canopy_layer>=1) then
+!              site_in%harvest_carbon_flux = site_in%harvest_carbon_flux + &
+!                   currentCohort%lmort_direct * currentCohort%n * &
+!                   ( currentCohort%prt%GetState(sapw_organ, all_carbon_elements) + &
+!                   currentCohort%prt%GetState(struct_organ, all_carbon_elements)) * &
+!                   EDPftvarcon_inst%allom_agb_frac(currentCohort%pft) * &
+!                   SF_val_CWD_frac(ncwd) * logging_export_frac
+!           endif
 
           currentCohort => currentCohort%taller
        end do
@@ -247,29 +247,33 @@ contains
 
     ! zero the diagnostic disturbance rate fields
     site_in%potential_disturbance_rates(1:N_DIST_TYPES) = 0._r8
+    
+    ! Calculate disturbance resulting from potential human vegetation management, including but not
+    ! limited to logging.
+    call anthro_disturbance_rate(site_in, bc_in)
 
     ! Recalculate total canopy area prior to resolving the disturbance
-    currentPatch => site_in%oldest_patch
-    do while (associated(currentPatch))
-       currentPatch%total_canopy_area = 0._r8
-       currentCohort => currentPatch%shortest
-       do while(associated(currentCohort))   
-          if(currentCohort%canopy_layer==1)then
-             currentPatch%total_canopy_area = currentPatch%total_canopy_area + currentCohort%c_area
-          end if
-          currentCohort => currentCohort%taller
-       end do
-       currentPatch => currentPatch%younger
-    end do
+!     currentPatch => site_in%oldest_patch
+!     do while (associated(currentPatch))
+!        currentPatch%total_canopy_area = 0._r8
+!        currentCohort => currentPatch%shortest
+!        do while(associated(currentCohort))   
+!           if(currentCohort%canopy_layer==1)then
+!              currentPatch%total_canopy_area = currentPatch%total_canopy_area + currentCohort%c_area
+!           end if
+!           currentCohort => currentCohort%taller
+!        end do
+!        currentPatch => currentPatch%younger
+!     end do
 
     currentPatch => site_in%oldest_patch
     do while (associated(currentPatch))   
        
        currentPatch%disturbance_rates(dtype_ifall) = 0.0_r8
-       currentPatch%disturbance_rates(dtype_ilog)  = 0.0_r8
+!       currentPatch%disturbance_rates(dtype_ilog)  = 0.0_r8
        currentPatch%disturbance_rates(dtype_ifire) = 0.0_r8
 
-       dist_rate_ldist_notharvested = 0.0_r8
+!       dist_rate_ldist_notharvested = 0.0_r8
        
        currentCohort => currentPatch%shortest
        do while(associated(currentCohort))   
@@ -282,16 +286,16 @@ contains
                   min(1.0_r8,currentCohort%dmort)*hlm_freq_day*currentCohort%c_area/currentPatch%area
 
              ! Logging Disturbance Rate
-             currentPatch%disturbance_rates(dtype_ilog) = currentPatch%disturbance_rates(dtype_ilog) + &
-                   min(1.0_r8, currentCohort%lmort_direct +                          & 
-                               currentCohort%lmort_collateral +                      &
-                               currentCohort%lmort_infra +                           &
-                               currentCohort%l_degrad ) *                            &
-                               currentCohort%c_area/currentPatch%area
-             
-             ! Non-harvested part of the logging disturbance rate
-             dist_rate_ldist_notharvested = dist_rate_ldist_notharvested + currentCohort%l_degrad * &
-                  currentCohort%c_area/currentPatch%area
+!              currentPatch%disturbance_rates(dtype_ilog) = currentPatch%disturbance_rates(dtype_ilog) + &
+!                    min(1.0_r8, currentCohort%lmort_direct +                          & 
+!                                currentCohort%lmort_collateral +                      &
+!                                currentCohort%lmort_infra +                           &
+!                                currentCohort%l_degrad ) *                            &
+!                                currentCohort%c_area/currentPatch%area
+!              
+!              ! Non-harvested part of the logging disturbance rate
+!              dist_rate_ldist_notharvested = dist_rate_ldist_notharvested + currentCohort%l_degrad * &
+!                   currentCohort%c_area/currentPatch%area
              
           endif
           currentCohort => currentCohort%taller
@@ -299,31 +303,31 @@ contains
 
        ! for non-closed-canopy areas subject to logging, add an additional increment of area disturbed
        ! equivalent to the fradction loged to account for transfer of interstitial ground area to new secondary lands
-       if ( logging_time .and. &
-            (currentPatch%area - currentPatch%total_canopy_area) .gt. fates_tiny ) then
-          ! The canopy is NOT closed. 
-
-          call get_harvest_rate_area (currentPatch%anthro_disturbance_label, bc_in%hlm_harvest_catnames, &
-               bc_in%hlm_harvest_rates, frac_site_primary, currentPatch%age_since_anthro_disturbance, harvest_rate)
-
-          currentPatch%disturbance_rates(dtype_ilog) = currentPatch%disturbance_rates(dtype_ilog) + &
-               (currentPatch%area - currentPatch%total_canopy_area) * harvest_rate / currentPatch%area
-
-          ! Non-harvested part of the logging disturbance rate
-          dist_rate_ldist_notharvested = dist_rate_ldist_notharvested + &
-               (currentPatch%area - currentPatch%total_canopy_area) * harvest_rate / currentPatch%area
-       endif
+!        if ( logging_time .and. &
+!             (currentPatch%area - currentPatch%total_canopy_area) .gt. fates_tiny ) then
+!           ! The canopy is NOT closed. 
+! 
+!           call get_harvest_rate_area (currentPatch%anthro_disturbance_label, bc_in%hlm_harvest_catnames, &
+!                bc_in%hlm_harvest_rates, frac_site_primary, currentPatch%age_since_anthro_disturbance, harvest_rate)
+! 
+!           currentPatch%disturbance_rates(dtype_ilog) = currentPatch%disturbance_rates(dtype_ilog) + &
+!                (currentPatch%area - currentPatch%total_canopy_area) * harvest_rate / currentPatch%area
+! 
+!           ! Non-harvested part of the logging disturbance rate
+!           dist_rate_ldist_notharvested = dist_rate_ldist_notharvested + &
+!                (currentPatch%area - currentPatch%total_canopy_area) * harvest_rate / currentPatch%area
+!        endif
 
        ! fraction of the logging disturbance rate that is non-harvested
-       if (currentPatch%disturbance_rates(dtype_ilog) .gt. nearzero) then
-          currentPatch%fract_ldist_not_harvested = dist_rate_ldist_notharvested / &
-               currentPatch%disturbance_rates(dtype_ilog)
-       endif
+!        if (currentPatch%disturbance_rates(dtype_ilog) .gt. nearzero) then
+!           currentPatch%fract_ldist_not_harvested = dist_rate_ldist_notharvested / &
+!                currentPatch%disturbance_rates(dtype_ilog)
+!        endif
 
        ! Fire Disturbance Rate
        currentPatch%disturbance_rates(dtype_ifire) = currentPatch%frac_burnt
 
-       ! calculate a disgnostic sum of disturbance rates for different classes of disturbance across all patches in this site. 
+       ! calculate a diagnostic sum of disturbance rates for different classes of disturbance across all patches in this site. 
        do i_dist = 1,N_DIST_TYPES
           site_in%potential_disturbance_rates(i_dist) = site_in%potential_disturbance_rates(i_dist) + &
                currentPatch%disturbance_rates(i_dist) * currentPatch%area * AREA_INV
@@ -447,7 +451,8 @@ contains
     ! !USES:
     
     use EDParamsMod         , only : ED_val_understorey_death, logging_coll_under_frac
-    use EDCohortDynamicsMod , only : zero_cohort, copy_cohort, terminate_cohorts 
+    use EDCohortDynamicsMod , only : zero_cohort, copy_cohort, terminate_cohorts
+    use FatesVegetationManagementMod, only : management_fluxes
 
     !
     ! !ARGUMENTS:
@@ -659,7 +664,8 @@ contains
              ! Transfer in litter fluxes from plants in various contexts of death and destruction
 
              if(currentPatch%disturbance_mode .eq. dtype_ilog) then
-                call logging_litter_fluxes(currentSite, currentPatch, new_patch, patch_site_areadis)
+!                call logging_litter_fluxes(currentSite, currentPatch, new_patch, patch_site_areadis)
+                call management_fluxes(currentSite, currentPatch, new_patch, patch_site_areadis)
              elseif(currentPatch%disturbance_mode .eq. dtype_ifire) then
                 call fire_litter_fluxes(currentSite, currentPatch, new_patch, patch_site_areadis)  
              else
