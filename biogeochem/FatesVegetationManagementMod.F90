@@ -39,6 +39,10 @@ module FatesVegetationManagementMod
   public :: plant
   public :: init_temporary_cohort ! Currently doen't need to be public.
   
+  public :: anthro_disturbance_rate
+  public :: anthro_mortality_rate
+  public :: management_fluxes
+  
   ! character(len=*), parameter, private :: sourcefile = __FILE__
   
   ! Debugging flag for module:
@@ -653,8 +657,19 @@ contains
     use EDPatchDynamicsMod, only : get_frac_site_primary
     use EDMortalityFunctionsMod, only : mortality_rates
     ! use FatesAllometryMod, only : carea_allom
-    use EDLoggingMortalityMod, only : LoggingMortality_frac
     use EDLoggingMortalityMod, only : get_harvest_rate_area
+    use EDLoggingMortalityMod, only : logging_time
+    use EDLoggingMortalityMod, only : LoggingMortality_frac
+    use EDParamsMod, only : logging_export_frac
+    use EDPftvarcon, only : EDPftvarcon_inst
+    use EDTypesMod, only : dtype_ilog
+    use FatesConstantsMod, only : fates_tiny
+    use FatesConstantsMod, only : nearzero
+    use FatesLitterMod, only : ncwd
+    use PRTGenericMod, only : all_carbon_elements
+    use PRTGenericMod, only : sapw_organ
+    use PRTGenericMod, only : struct_organ
+    use SFParamsMod, only : SF_VAL_CWD_FRAC
     
     ! Arguments:
     type(ed_site_type), intent(inout), target :: site_in
@@ -868,6 +883,7 @@ contains
     ! ----------------------------------------------------------------------------------------------
     
     ! Uses:
+    use EDPatchDynamicsMod, only : get_frac_site_primary
     use EDLoggingMortalityMod, only : LoggingMortality_frac
     use FatesInterfaceTypesMod, only : hlm_freq_day
     
@@ -911,7 +927,7 @@ contains
        dndt_logging = 0.0_r8
     endif
     
-  end function anthro_mortality
+  end function anthro_mortality_rate
 
   !=================================================================================================
 
@@ -933,7 +949,7 @@ contains
     type (ed_patch_type), intent(inout), target :: current_patch ! patch_in?
     type (ed_patch_type), intent(inout), target :: new_patch ! The...
     ! This can be calculated from data in the cohort so doesn't really need to be passed in:
-    real(r8) :: patch_site_areadis, intent(in) ! total area disturbed in m2 per patch per day
+    real(r8), intent(in) :: patch_site_areadis ! total area disturbed in m2 per patch per day
     
     ! Locals:
     ! Do we have to pass in the site to modify it or can we just get it from patch_in?
@@ -943,8 +959,8 @@ contains
     
     ! Checking the disturbance mode here rather than in the calling code allows for more flexibility
     ! but is not really necessary now:
-    if (currentPatch%disturbance_mode .eq. dtype_ilog) then
-      call logging_litter_fluxes(current_site, currentPatch, new_patch, patch_site_areadis)
+    if (current_patch%disturbance_mode .eq. dtype_ilog) then
+      call logging_litter_fluxes(current_site, current_patch, new_patch, patch_site_areadis)
     endif
     
   end subroutine management_fluxes
