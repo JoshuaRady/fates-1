@@ -697,7 +697,7 @@ contains
     real(r8) :: dist_rate_ldist_notharvested
 !    integer  :: threshold_sizeclass
 !    integer  :: i_dist
-    real(r8) :: frac_site_primary
+!    real(r8) :: frac_site_primary
     real(r8) :: harvest_rate
     
     ! ----------------------------------------------------------------------------------------------
