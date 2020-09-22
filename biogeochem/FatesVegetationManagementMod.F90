@@ -636,7 +636,7 @@ contains
 !     
 !   end subroutine kill
   
-  subroutine anthro_disturbance_rate(site_in, bc_in)
+  subroutine anthro_disturbance_rate(site_in, bc_in, frac_site_primary)
     ! ----------------------------------------------------------------------------------------------
     ! Calculate the extent of any disturbance resulting from potential human vegetation management
     ! at the current time step.  The disturbance, at a patch level, may or may not subsequently
@@ -654,8 +654,8 @@ contains
     ! ----------------------------------------------------------------------------------------------
     
     ! Uses:
-    use EDPatchDynamicsMod, only : get_frac_site_primary
-    use EDMortalityFunctionsMod, only : mortality_rates
+    ! use EDPatchDynamicsMod, only : get_frac_site_primary
+    ! use EDMortalityFunctionsMod, only : mortality_rates
     ! use FatesAllometryMod, only : carea_allom
     use EDLoggingMortalityMod, only : get_harvest_rate_area
     use EDLoggingMortalityMod, only : logging_time
@@ -674,6 +674,8 @@ contains
     ! Arguments:
     type(ed_site_type), intent(inout), target :: site_in
     type(bc_in_type), intent(in) :: bc_in
+    ! Would like to get this with get_frac_site_primary() but that creates a circular dependency:
+    real(r8), intent(in) :: frac_site_primary
     
     ! Locals:
     type (ed_patch_type) , pointer :: currentPatch
@@ -704,7 +706,7 @@ contains
     ! disturbance_rates().
     
     ! First calculate the fraction of the site that is primary land:
-    call get_frac_site_primary(site_in, frac_site_primary)
+    ! call get_frac_site_primary(site_in, frac_site_primary)
  
     ! An estimate of the harvest flux will be made and stored:
     site_in%harvest_carbon_flux = 0._r8
@@ -862,7 +864,7 @@ contains
   
   !=================================================================================================
   
-  function anthro_mortality_rate(cohort, bc_in) result(dndt_logging) ! anthro_mortality non-disturbing?????
+  function anthro_mortality_rate(cohort, bc_in, frac_site_primary) result(dndt_logging) ! anthro_mortality non-disturbing?????
     ! ----------------------------------------------------------------------------------------------
     ! Calculate mortality resulting from human vegetation management at the cohort level.
     ! Mortality is returned as a change in number (density?) per unit time (year).
@@ -883,7 +885,7 @@ contains
     ! ----------------------------------------------------------------------------------------------
     
     ! Uses:
-    use EDPatchDynamicsMod, only : get_frac_site_primary
+    !use EDPatchDynamicsMod, only : get_frac_site_primary
     use EDLoggingMortalityMod, only : LoggingMortality_frac
     use FatesInterfaceTypesMod, only : hlm_freq_day
     
@@ -891,6 +893,8 @@ contains
     ! Similar functions take the site as well but we can get that from the cohort.
     type(ed_cohort_type), intent(inout), target :: cohort
     type(bc_in_type), intent(in) :: bc_in
+    ! Would like to get this with get_frac_site_primary() but that creates a circular dependency:
+    real(r8), intent(in) :: frac_site_primary
     
     ! Locals:
     real(r8) :: dndt_logging      ! Mortality rate (per day) associated with the a logging event
@@ -943,6 +947,7 @@ contains
     
     ! Uses:
     use EDLoggingMortalityMod, only : logging_litter_fluxes
+    use EDTypesMod, only : dtype_ilog
     
     ! Arguments:
     type(ed_site_type), intent(inout), target :: current_site ! Possibly unnecessary, see below.

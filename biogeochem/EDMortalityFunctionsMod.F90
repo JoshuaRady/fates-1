@@ -260,7 +260,7 @@ if (hlm_use_ed_prescribed_phys .eq. ifalse) then
 !                                frac_site_primary)
 
     
-    dndt_vegmgmt = anthro_mortality_rate(currentCohort, bc_in)
+    dndt_vegmgmt = anthro_mortality_rate(currentCohort, bc_in, frac_site_primary)
 
     if (currentCohort%canopy_layer > 1)then 
        ! Include understory logging mortality rates not associated with disturbance

@@ -186,7 +186,7 @@ contains
     !----------------------------------------------------------------------------------------------
     
     ! first calculate the fractino of the site that is primary land
-!    call get_frac_site_primary(site_in, frac_site_primary)
+    call get_frac_site_primary(site_in, frac_site_primary)
  
 !    site_in%harvest_carbon_flux = 0._r8
 
@@ -250,7 +250,7 @@ contains
     
     ! Calculate disturbance resulting from potential human vegetation management, including but not
     ! limited to logging.
-    call anthro_disturbance_rate(site_in, bc_in)
+    call anthro_disturbance_rate(site_in, bc_in, frac_site_primary)
 
     ! Recalculate total canopy area prior to resolving the disturbance
 !     currentPatch => site_in%oldest_patch
