@@ -43,6 +43,12 @@ module FatesVegetationManagementMod
   public :: anthro_mortality_rate
   public :: management_fluxes
   
+  ! Overload here?????
+  private :: effective_basal_area
+  private :: 
+  private :: effective_n
+  private :: 
+  
   ! character(len=*), parameter, private :: sourcefile = __FILE__
   
   ! Debugging flag for module:
@@ -623,6 +629,7 @@ contains
   ! Managed Mortality Subroutines:
   !=================================================================================================
   
+! Template:
 !   subroutine kill()
 !     ! ----------------------------------------------------------------------------------------------
 !     ! 
@@ -652,6 +659,16 @@ contains
     ! This routine is called from EDPatchDynamicsMod.F90: disturbance_rates() in the FATES event
     ! loop. This initial version is based on logging code extracted from there but will be expanded
     ! to include other vegetation management.
+    !
+    ! It is possible for on management activity to be occurring at the same time.  In some cases
+    ! these may affect different subsets of patche and cohorts.  In other cases they may affect the
+    ! same ones.  If so there should be some rules as to which is applied first, whether any are
+    ! incompatible, etc.  For example thinning should be applied before harvest as thinning can
+    ! generate timber, which can decrease the wood demand driving the harvest.  For the most part
+    ! however I still need to figure this out.
+    !
+    ! The first management activities to add are species specific harvest, thinning, and understory
+    ! removal, all of which are build on a kill() functionality.
     !
     ! ----------------------------------------------------------------------------------------------
     
@@ -860,7 +877,10 @@ contains
       endif
 
       currentPatch => currentPatch%younger
-    enddo ! Patch loop 
+    enddo ! Patch loop
+    
+    ! If understory
+    
     
   end subroutine anthro_disturbance_rate
   
@@ -971,6 +991,482 @@ contains
     endif
     
   end subroutine management_fluxes
+
+  !=================================================================================================
+  ! Managed Mortality Primitives:
+  !=================================================================================================
+  
+  ! A reminder of the logging event parameters:
+  ! (fates_mort_disturb_frac = 0,
+!                               fates_logging_coll_under_frac = 0,#0.55983
+!                               fates_logging_collateral_frac = 0,#0.05
+!                               #fates_logging_dbhmax = _ ;
+!                               #fates_logging_dbhmax_infra = 35
+!                               fates_logging_dbhmin = 0,#50
+!                               fates_logging_direct_frac = 0.5,#0.15
+!                               fates_logging_event_code = 19450101.0,#-30
+!                               #fates_logging_export_frac = 0.8 ;
+!                               fates_logging_mechanical_frac = 0))#0.05
+  
+  !patch_kill() cohort_kill
+  subroutine kill(cohort, dbh_min, dbh_max, ht_min, ht_max, fraction, flux_profile)
+    ! ----------------------------------------------------------------------------------------------
+    ! 
+    ! Collateral damage should be handled at a higer level?
+    !
+    ! kill() may be called more than once in a single timestep...
+    !
+    ! Need to make aware of the effective state of the cohort, or pass in a value of n to cull
+    ! rather than a fraction, or change the way cohorts are updated.
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Uses:
+    
+    ! Arguments:
+    type(ed_cohort_type), intent(inout), target :: cohort
+    ! Since we are at the cohort level the PFT is implied.
+    
+    ! Size specification:
+    ! Size range of to plants to kill.  Defaults to everything, otherwise some range of sizes, e.g. > 10cm DBH, < 15 m in height, etc.
+!     real(r8), intent(in), optional :: dbh_min
+!     real(r8), intent(in), optional :: dbh_max
+!     real(r8), intent(in), optional :: ht_min
+!     real(r8), intent(in), optional :: ht_max
+    
+    ! Kill at the cohort level is pretty trivial!
+    
+    real(r8), intent(in) :: fraction ! How much to to remove, default to everything = 1.
+    
+    ! Alternatively a biomass to remove?
+    
+    ! Where does the dead material go?
+    ! Death flux profile:
+    ! - Logging module classic:
+    ! - Harvest (new)
+    !     ...
+    ! - In place:
+    !     Aboveground -> litter (maybe in time there is also a standing dead pool)
+    !     Below-ground -> soil
+    ! - Burn
+    !     Some part of the aboveground (a fraction TBD) to atmosphere, the rest to litter and soil.
+    
+    ! Locals:
+    
+    ! ----------------------------------------------------------------------------------------------
+    lmort_direct = 0.0_r8
+    lmort_collateral = 0.0_r8
+    lmort_infra = 0.0_r8
+    l_degrad = 0.0_r8
+    ! Non-disturbing mortalities...
+    
+    
+    select case ()
+    case ()
+      
+    default case
+      
+    end select
+    
+  end subroutine kill
+
+  !=================================================================================================
+  ! Thinning Subroutines:
+  !   Thinning is an intermediate operation in forest management designed to reduce uncontrolled
+  ! mortality from natural self-thinning and allow for removal of less vigorous and poorly formed
+  ! individuals.
+  !
+  !  In reality some trees removed in a thinning may too small or of insufficient quality to yeild
+  ! lumber.  Therefore some or all harvest from a thinning be used for pulp, or other uses (biomass
+  ! is an emerging possible use).  It is also possible that some small trees may be left on site.
+  !
+  ! There is more than one way to perform a thinning.  The simplest example would be to remove a
+  ! fixed percentage.  In practice the methods for thinning are a function of management goals, the
+  ! the stand structure and available machinery.
+  ! I'm starting with a thinning methodology that is common for southern pines both because I need
+  ! it and because it is complex enough that it will force me to figure out most of the components
+  ! I will need to build other thinning types.
+  !  
+  !=================================================================================================
+
+  subroutine thin_row_low(patch, pfts, row_fraction, final_basal_area, final_stem_density)
+    ! ----------------------------------------------------------------------------------------------
+    ! Perform a row thinning followed by a low thinning to achieve a desired final basal area or
+    ! stem density.
+    !
+    ! This could be performed at a site level as well.  Would that just be a loop?
+    ! We currently add no infrastructure mortality (the row thinning is in part to allow equipment
+    ! access) or collateral damage from thinning.
+    !
+    ! Note: In general a low thinning can not be performed perfectly due to mechanical limitations, clustering of small and large trees, and the desire to remove ill formed or damaged trees.  This could be approximated using an approach like using an inverse proportional probably of taking larger trees.
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Uses:
+    
+    use FatesConstantsMod, only : pi_const
+    use FatesConstantsMod, only : itrue, ifalse
+    use FatesInterfaceTypesMod, only : numpft
+    use EDPftvarcon, only : EDPftvarcon_inst ! Will change to prt_params soon when merged to master.
+    
+    ! Arguments:
+    type(ed_patch_type), intent(inout), target :: patch ! Or pointer?????
+    ! Which tree PFTs are harvestable trees.  If omitted all woody trees will be used.  Otherwise
+    ! any omitted will be ignored for the purpose of calculating BAI and stem density.
+    ! Be careful when excluding PFTs that may compete in the canopy.
+    integer(i4), intent(in), optional :: pfts(:) ! An array of PFT IDs to thin.
+    
+    real(r8), intent(in), optional :: row_fraction ! The fraction of rows to initially thin, e.g. every 5th row = 0.2, often every 4th or 5th row...
+    real(r8), intent(in), optional :: final_basal_area ! Goal final basal area index (m^2 / ha ?????)
+    real(r8), intent(in), optional :: final_stem_density ! Goal final stem density (trees / ha)
+    
+    ! Consider adding a patch fraction argument if the patch area is larger that the area that needs
+    ! to be thinned.  That would have to result in the patch being split into thinned and unthinned
+    ! components.
+    
+    ! Locals:
+    !integer(i4) :: thin_pfts(:) ! Holds the PFTs to thin, computed from arguments.
+    integer(i4), dimesion(:), allocatable :: thin_pfts ! Holds the PFTs to thin, computed from arguments.
+    real(r8) :: the_row_fraction ! Or change row_fraction -> row_fraction_in or row_fraction_opt
+    !real(r8) :: row_reduction ! 
+    logical :: use_bai ! If true use basal area index as the criteria, otherwise use stem density.
+    ! use_sd?????
+    real(r8) :: patch_bai ! Basal area of the patch (including only PFTs in pfts)
+    real(r8) :: patch_sd ! Stem density of the patch (including only PFTs in pfts)
+    real(r8) :: cohort_ba ! Basal area of a cohort
+    !real(r8) :: cohort_sd ! Cohort level stem density (plants / ha)
+    real(r8) :: cohort_stems
+    
+    type (ed_cohort_type), pointer :: current_cohort
+    
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Determine which arguments were passed in, check, and process them:
+    
+    ! If present check that the PFTs are valid:
+    if (present(pft))
+      ! Check if PFTs are valid:
+      if (any(EDPftvarcon_inst%woody(pfts) == ifalse)) then
+      !if (any(int(prt_params%woody(pfts)) == ifalse)) then
+        write(fates_log(),*) 'thin_row_low(): Cannot thin non-woody PFTs.'
+        call endrun(msg = errMsg(__FILE__, __LINE__))
+      end if
+      
+      allocate(thin_pfts(size(pfts)))
+      thin_pfts = pfts
+    else ! Otherwise thin all tree (woody) PFTs:
+      
+      !allocate(thin_pfts(size(EDPftvarcon_inst%woody)))
+      allocate(thin_pfts(numpft))
+      ! Is it safe to assume that PFT IDs are sequential and start with 1?
+      ! Do woody plants include shrubs?  If so this needs to be updated.
+      thin_pfts = (/(I, I = 1, numpft)/)
+      thin_pfts = pack(thin_pfts, (EDPftvarcon_inst%woody(pfts) == itrue))
+    endif
+    
+    ! Determine the thinning amount:
+    if (present(row_fraction))
+      if (row_fraction > 1.0_r8 .or. row_fraction <= 0.0_r8) ! May be better high and low values.
+        write(fates_log(),*) 'thin_row_low(): Invalid row fraction provided.'
+        call endrun(msg = errMsg(__FILE__, __LINE__))
+      end if
+    
+      the_row_fraction = row_fraction
+    else
+      the_row_fraction = 1.0_r8
+    end if
+    
+    !row_reduction = 1.0_r8 - row_fraction
+    
+    ! Need only BAI or stem density:
+    if (present(final_basal_area) .and. present(final_stem_density))
+      write(fates_log(),*) 'thin_row_low(): Provide basal area index or stem density, not both.'
+      call endrun(msg = errMsg(__FILE__, __LINE__))
+    else if (present(final_basal_area)
+      use_bai = .true.
+    else if (present(final_stem_density)
+      use_bai = .false.
+    else
+      write(fates_log(),*) 'thin_row_low(): Must provide basal area index or stem density.'
+      call endrun(msg = errMsg(__FILE__, __LINE__))
+    endif
+    
+    ! Determine the basal area and stem densities for the relavant PFTs:
+    patch_bai = get_patch_basal_area_index(patch, thin_pfts)
+    patch_sd = get_patch_stem_density(patch, thin_pfts)
+    
+    ! If the stand is above the goal value (BAI or stem density) start thinning:
+    if ((use_bai .and. (patch_bai > final_basal_area)) .or. &
+        ((.not. use_bai) .and. (patch_sd > final_stem_density)))
+      
+      ! Thin every X rows = remove 1/X of each cohort:
+      current_cohort => currentPatch%shortest
+      do while(associated(currentCohort))
+        
+        if (any(pfts == current_cohort%pft))
+          call kill(cohort = currentCohort, faction = row_fraction) ! Flux profile!
+          
+          ! Accumulate harvest estimate?
+        endif
+        
+        currentCohort => currentCohort%taller
+      end do ! Cohort loop.
+      
+      ! The kill() call above does not result in a change to the cohort numbers yet, this will
+      ! happen later.  Therefore we need to keep track of the changes to BAI, density, and plant
+      ! number's manually from here on.
+      ! Could add effective argument to get_patch_basal_area_index()!!!!!
+      !patch_bai =  patch_bai * row_reduction
+      !patch_sd = patch_sd * row_reduction
+      patch_bai = get_patch_basal_area_index(patch, thin_pfts)
+      patch_sd = get_patch_stem_density(patch, thin_pfts)
+      
+      ! If still above our goal BAI / density thin out the smallest trees (low thinning) recursively
+      ! until the goal has been reached:
+      
+      !if (use_bai .and. (patch_bai > final_basal_area))
+      if (use_bai)  ! Thin to a goal basal area:
+        
+        ! Given the fixed allometry this will also give us cohorts from the lowest DBH:
+        current_cohort => currentPatch%shortest
+        do while(patch_bai > final_basal_area)
+          
+          if (any(pfts == current_cohort%pft))
+            ! Get the effective (after row thinning) basal area of the cohort and determine if it
+            ! can be removed in part or in whole:
+            cohort_ba = pi_const * (current_cohort%dbh / 2.0_r8)^2 * current_cohort%n * &
+                        row_reduction
+            
+            ! Remaining basal area...
+            thin_ba_remaining = patch_bai - final_basal_area
+            
+            ! If the cohort basal area is less that what still needs to be removed kill all of it:
+            if (cohort_ba <= thin_ba_remaining)
+              
+              call kill(cohort = currentCohort)
+              !patch_bai = patch_bai - cohort_ba
+              !patch_bai = get_patch_basal_area_index(patch, thin_pfts)
+              
+            else ! Otherwise only take part of the cohort:
+              
+              cohort_fraction = thin_ba_remaining / cohort_ba
+              call kill(cohort = currentCohort,  faction = cohort_fraction)
+              
+              !patch_bai = patch_bai - (cohort_ba * cohort_fraction)
+              !patch_bai = get_patch_basal_area_index(patch, thin_pfts)
+              
+            end if
+          end if ! (any(pfts == current_cohort%pft))
+          
+          !patch_bai = get_patch_basal_area_index(patch, thin_pfts) ! Effective!!!!!
+          patch_bai = get_patch_basal_area_index(patch, thin_pfts)
+        end do ! Cohort loop.
+        
+      !else if ((.not. use_bai) .and. (patch_sd > final_stem_density))
+      else ! Thin to a goal stem density:
+        
+        ! This loop is identically structured to the above so the two could be combined by
+        ! generalizing the comparator variables.
+        
+        current_cohort => currentPatch%shortest
+        do while(patch_sd > final_stem_density)
+          
+          if (any(pfts == current_cohort%pft))
+            ! Get the effective number of stems in cohort and determine if they can be removed in
+            ! part or in whole:
+            
+            ! Because of n is per nominal hectare n = stem density (n/ha)
+            !cohort_sd = effective_n(current_cohort)
+            cohort_stems = effective_n(current_cohort)
+            
+            ! Remaining stems to remove:
+            thin_sd_remaining = patch_sd - final_stem_density
+            
+            ! If the cohort stem count is less that what still needs to be removed kill all of it:
+            if (cohort_stems <= thin_sd_remaining)
+              
+              call kill(cohort = currentCohort)
+              
+            else ! Otherwise only take part of the cohort:
+              
+              cohort_fraction = thin_sd_remaining / cohort_stems
+              call kill(cohort = currentCohort,  faction = cohort_fraction)
+              
+            end if
+          end if ! (any(pfts == current_cohort%pft))
+          
+          patch_sd = get_patch_stem_density(patch, thin_pfts)
+        end do ! Cohort loop.
+      endif ! (use_bai)
+    endif ! Stand is above goal loop.
+    
+    ! Should anything be done if no thinning needed to be done?
+   deallocate(thin_pfts)
+  end subroutine thin_row_low
+
+  !=================================================================================================
+  ! Utilities:
+  !
+  ! Effective values:
+  ! At the time management activities are calculated the patch and cohort data structures are in a
+  ! state of flux.  Some mortality rates may have been calculated but have not been applied, which
+  ! means the number of plants, and other dependent metrics, do not yet reflect these mortalities.
+  ! This is due to the way event loop is structured and because only one disturbance type can
+  ! currently occur in a patch per time step.  Rates are calculated and stored at one point in the
+  ! event loop and numbers are updated later. Some rates that are calculated and 'staged' many be
+  ! overridden during disturbance comparison and ultimately not occur.
+  !
+  ! This complicates the calculation of management activities that depend on stand properties.  We
+  ! would like to be able to apply multiple management activities as the same time step in order
+  ! to be able to simulate dynamic and heterogeneous sites / grid cells.  Also, there is no reason
+  ! that management should be incompatible with simultaneous natural mortality.  Natural mortality
+  ! should be happening along management.  Even if we only allow for one dominant disturbance type
+  ! it should be possible to apply non-disturbing management mortality on top of natural mortality.
+  !
+  ! Not all management activities may be compatible with each other but many are.  We really need to
+  ! identify where conflicts may occur and come up with logic and rules to prevent them.  We also
+  ! need to be careful about the order that activities occur in.
+  !
+  ! In order to be able to combine these different sources of mortality we need numbers that reflect
+  ! the any mortality, natural or managed, that has already 'occurred' and been staged.
+  !
+  ! To help with this we provide several functions that return stand properties for patches assuming
+  ! all staged mortalities will be actually applied.
+  ! This also allows changes to cohorts to be made iteratively during the management application.
+  ! [Need a clarifying example here.]
+  ! Examples:
+  !
+  ! Note: Need to make kill() aware of the effective state as well!
+  !
+  ! These functions are a work in progress.  I haven't figured out quite what I need to do yet in
+  ! its entirety, but by using function calls I code the higher level behavior without dependance
+  ! on the final solution details.
+  !
+  !=================================================================================================
+
+  ! get_patch_basal_area_index, get_effective_patch_basal_area_index, or add effective parameter?
+  ! effective_basal_area_p?????
+  function effective_basal_area(patch, pfts) result(effective_basal_area)
+    ! ----------------------------------------------------------------------------------------------
+    ! Return the effective basal area for a patch after applying any existing staged potential
+    ! mortalities, for only the PFTs passed in.
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Uses: NA
+    
+    ! Arguments:
+    type(ed_patch_type), intent(in), target :: patch ! The patch to be calculated.
+    !integer(i4), intent(in), optional :: pfts(:) ! An array of PFT IDs to include in calculation.
+    integer(i4), intent(in) :: pfts(:)
+    
+    ! Locals:
+    real(r8) :: effective_basal_area ! Return value
+    type (ed_cohort_type), pointer :: current_cohort
+    
+    ! ----------------------------------------------------------------------------------------------
+    
+    effective_basal_area = 0.0_r8 ! Initialize.
+    
+    current_cohort => currentPatch%shortest
+      do while(associated(currentCohort))
+        
+        if (any(pfts == current_cohort%pft))
+          effective_basal_area = effective_basal_area + effective_basal_area(cohort)
+        endif
+        
+        currentCohort => currentCohort%taller
+      end do ! Cohort loop.
+    
+  end function effective_basal_area
+
+  !=================================================================================================
+
+  function effective_basal_area(cohort) result(effective_basal_area)
+    ! ----------------------------------------------------------------------------------------------
+    ! Return the effective basal area for a cohort after applying any existing staged potential
+    ! mortalities.
+    !
+    ! Should this just be inlined?
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Uses: NA
+    
+    ! Arguments:
+    type(ed_cohort_type), intent(in), target :: cohort
+    
+    ! Locals:
+    real(r8) :: effective_basal_area ! Return value
+    
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Only the adjusted stem count is need, the rest of the equation is unchanged: 
+    effective_basal_area = pi_const * (current_cohort%dbh / 2.0_r8)**2 * effective_n(cohort)
+    
+  end function effective_basal_area
+
+  !=================================================================================================
+
+  subroutine effective_n(patch, pfts) result(effective_n)
+    ! ----------------------------------------------------------------------------------------------
+    ! Return the effective stem count for a patch after applying any existing staged potential
+    ! mortalities, for only the PFTs passed in.
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Uses: NA
+    
+    ! Arguments:
+    type(ed_patch_type), intent(in), target :: patch ! The patch to be calculated.
+    integer(i4), intent(in) :: pfts(:) ! An array of PFT IDs to include in calculation.
+    
+    ! Locals:
+    real(r8) :: effective_n ! Return value
+    type (ed_cohort_type), pointer :: current_cohort
+    
+    ! ----------------------------------------------------------------------------------------------
+    
+    effective_n = 0.0_r8 ! Initialize.
+    
+    current_cohort => currentPatch%shortest
+      do while(associated(currentCohort))
+        
+        if (any(pfts == current_cohort%pft))
+          effective_n = effective_n + effective_n(cohort)
+        endif
+        
+        currentCohort => currentCohort%taller
+      end do ! Cohort loop.
+    
+  end subroutine effective_n
+
+  !=================================================================================================
+
+  ! Need to create an interface to overload this name or change it:
+  function effective_n(cohort) result(effective_n)
+    ! ----------------------------------------------------------------------------------------------
+    ! Return the effective stem count for a cohort after applying any existing staged potential
+    ! mortalities.
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Uses: NA
+    
+    ! Arguments:
+    type(ed_cohort_type), intent(in), target :: cohort
+    
+    ! Locals:
+    real(r8) :: effective_n ! Return value
+    
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Placeholder code that does nothing.  Update this to compensate for staged mortalities:
+    effective_n = cohort%n ! / some mortality rate?????
+    
+    ! Places in the code that apply %dmort only seem to be in the context of disturbance, see:
+    ! EDPatchDynamicsMod: mortality_litter_fluxes():
+    !currentCohort%n * min(1.0_r8,currentCohort%dmort * &
+    !               hlm_freq_day * fates_mortality_disturbance_fraction)
+    ! EDPatchDynamicsMod: spawn_patches():
+    !currentCohort%n = currentCohort%n * (1.0_r8 - fates_mortality_disturbance_fraction * &
+    !                       min(1.0_r8,currentCohort%dmort * hlm_freq_day))
+    
+  end function effective_n
 
   !=================================================================================================
   ! Patch and Cohort Search Subroutines:
