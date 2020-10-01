@@ -87,10 +87,142 @@ module FatesVegetationManagementMod
   
 contains
   
+  !=================================================================================================
+  ! Main module event loop entry points:
+  !=================================================================================================
+
   ! Placeholder:
   !subroutine managed_mortality
     ! ----------------------------------------------------------------------------------------------
   !end subroutine
+
+  subroutine anthro_disturbance_rate_2(site_in, ...) ! Need a real name!  -->> move up to managed_mortality placeholder!!!!!
+    ! ----------------------------------------------------------------------------------------------
+    ! Here I'm starting to work out a new version of anthro_disturbance_rate() that works more like
+    ! I want it to.  It is an early work in progress
+    !
+    ! This function:
+    ! Determines which management activities are due for the site from several possible sources.
+    !   (Existing: IsItLoggingTime() & LoggingMortality_frac()
+    ! Enacts the management activities that are due, storing the resulting mortalities in the cohorts.
+    !
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Uses:
+    use FatesInterfaceTypesMod, only : hlm_current_year, hlm_current_month, hlm_current_day ! Temp
+    
+    ! Arguments:
+    type(ed_cohort_type), intent(inout), target :: cohort
+    
+    ! Locals:
+    logical :: thinning_needed, harvest_needed, control_needed
+    
+    !type (ed_patch_type) , pointer :: thin_patch...
+    type (ed_patch_type), pointer :: current_patch
+    ! integer(i4) :: tree_pfts(6) ! Need to find a good way to get the number of trees dynamically!
+    
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! This assumes the default 16 pft parameter set.  We need a better way to get the trees. The
+    ! woody flag included shrubs.
+    ! tree_pfts = [1,2,3,4,5,6]
+    
+    ! Determine what vegetation management is due at the current time step.  This includes:
+    ! - Logging module event codes. [IsItLoggingTime()]
+    ! - Harvest demand from HLM land use input streams. [hlm_use_lu_harvest == itrue]
+    !   Currently only area based harvest is implemented:
+    !     hlm_harvest_units == hlm_harvest_area_fraction
+    !   I plan to add carbon demand based code.
+    !
+    ! - Prescribed actives from input file. [Not yet implemented.]
+    ! - Actives that are due, based on patch flag or regime heuristic. [Not yet implemented.]
+    ! This logic could all be moved to a subroutine.
+    
+    thinning_needed = .false.
+    harvest_needed = .false.
+    control_needed = .false.
+    
+    ! Manually trigger events for initial testing:
+    if (hlm_current_year == 19?? & hlm_current_month = 1 & hlm_current_day == 1)
+      thinning_needed = .true.
+    else if (hlm_current_year == 19?? & hlm_current_month = 1 & hlm_current_day == 1)
+      harvest_needed = .true.
+    else if (hlm_current_year == 19?? & hlm_current_month = 1 & hlm_current_day == 1)
+      control_needed = .true.
+    endif
+    
+    ! Calculate the impact of mortality inducing vegetation management on mortality rates and store
+    ! the results in the cohort data structures...
+    ! Note: A class with methods for the following would be a great way to implement the regimes.
+    
+    ! Activities occur in a specific order:
+    ! Some management activities happen elsewhere like planting (fertilization)
+    
+    ! Perform thinning before harvest since wood for thinning can be used to reduce harvest demand.
+    ! As an initial test criteria search for an appropriate aged patch and thin it:
+    if (thinning_needed)
+      
+      ! Making the following work would be a bit of a pain since it returns an variable length array
+      ! of pointers, which is not simple in Fortran:
+      ! thin_patches = find_thinnable_patches(site_in, criteria)
+      ! For now either just return the first or use a comparator function:
+      
+      current_patch => site_in%oldest_patch
+      do while (associated(current_patch))
+        if (thinnable_patch(patch = current_patch, pfts = tree_pfts, goal_basal_area = 20.0_r8))
+          call thin_row_low(patch = current_patch, pfts = tree_pfts, &
+                            row_fraction = 0.2_r8, final_basal_area = 20.0_r8)
+        endif
+        current_patch => current_patch%younger
+      end do
+      
+    endif
+    
+    ! Harvest.  An estimate of the harvest amount is also calculated...
+    ! For testing do prioritized harvest across both primary and secondary patches:
+    if (harvest_needed)
+      
+      call harvest_by_mass(site_in, ...) !...
+      
+    endif
+    
+    ! Understory control can probably go anywhere but we put it after harvest so we have the option
+    ! to do site prep in the same time step.
+    if (control_needed)
+      
+      !postharvest_control()
+      ! Find the patch that was most recently cleared and perform understory control on it:
+      
+      current_patch => site_in%youngest_patch ! Start with the youngest patch:
+      do while (associated(current_patch) & path_is_bare(current_patch) /= .true.)
+        current_patch => current_patch%older
+      end do
+      
+      if (associated(current_patch))
+        call understory_control(current_patch, method_mow)
+      else
+        ! A bare patch was not found.  Note it in the log and proceed:
+        write(fates_log(),*) 'anthro_disturbance_rate_2()?????: No bare patch found.'
+      endif
+    endif
+    
+    ! Planting will occur later in the event loop.
+    
+    
+    
+    ! Update canopy area:
+    
+    
+    
+    ! Calculate the patch level disturbance rates based on the cumulative effect of management:
+    ! Note: Not all mortality caused by management is disturbance generating.  A challenge is to
+    ! have as much of this happen as possible even when anthro disturbance is not dominant.
+    
+    
+    
+  end subroutine anthro_disturbance_rate_2
+  
+  !=================================================================================================
   
   subroutine managed_fecundity(site, bc_in)
     ! ----------------------------------------------------------------------------------------------
@@ -1505,134 +1637,6 @@ contains
     enddo
     
   end subroutine management_fluxes
-  
-  !=================================================================================================
-
-  subroutine anthro_disturbance_rate_2(site_in, ...) ! Need a real name!  -->> move up to managed_mortality placeholder!!!!!
-    ! ----------------------------------------------------------------------------------------------
-    ! Here I'm starting to work out a new version of anthro_disturbance_rate() that works more like
-    ! I want it to.  It is an early work in progress
-    !
-    ! This function:
-    ! Determines which management activities are due for the site from several possible sources.
-    !   (Existing: IsItLoggingTime() & LoggingMortality_frac()
-    ! Enacts the management activities that are due, storing the resulting mortalities in the cohorts.
-    !
-    ! ----------------------------------------------------------------------------------------------
-    
-    ! Uses:
-    use FatesInterfaceTypesMod, only : hlm_current_year, hlm_current_month, hlm_current_day ! Temp
-    
-    ! Arguments:
-    type(ed_cohort_type), intent(inout), target :: cohort
-    
-    ! Locals:
-    logical :: thinning_needed, harvest_needed, control_needed
-    
-    !type (ed_patch_type) , pointer :: thin_patch...
-    type (ed_patch_type), pointer :: current_patch
-    ! integer(i4) :: tree_pfts(6) ! Need to find a good way to get the number of trees dynamically!
-    
-    ! ----------------------------------------------------------------------------------------------
-    
-    ! This assumes the default 16 pft parameter set.  We need a better way to get the trees. The
-    ! woody flag included shrubs.
-    ! tree_pfts = [1,2,3,4,5,6]
-    
-    ! Determine what vegetation management is due at the current time step.  This includes:
-    ! - Logging module event codes. [IsItLoggingTime()]
-    ! - Harvest demand from HLM land use input streams. [hlm_use_lu_harvest == itrue]
-    !   Currently only area based harvest is implemented:
-    !     hlm_harvest_units == hlm_harvest_area_fraction
-    !   I plan to add carbon demand based code.
-    !
-    ! - Prescribed actives from input file. [Not yet implemented.]
-    ! - Actives that are due, based on patch flag or regime heuristic. [Not yet implemented.]
-    ! This logic could all be moved to a subroutine.
-    
-    thinning_needed = .false.
-    harvest_needed = .false.
-    control_needed = .false.
-    
-    ! Manually trigger events for initial testing:
-    if (hlm_current_year == 19?? & hlm_current_month = 1 & hlm_current_day == 1)
-      thinning_needed = .true.
-    else if (hlm_current_year == 19?? & hlm_current_month = 1 & hlm_current_day == 1)
-      harvest_needed = .true.
-    else if (hlm_current_year == 19?? & hlm_current_month = 1 & hlm_current_day == 1)
-      control_needed = .true.
-    endif
-    
-    ! Calculate the impact of mortality inducing vegetation management on mortality rates and store
-    ! the results in the cohort data structures...
-    ! Note: A class with methods for the following would be a great way to implement the regimes.
-    
-    ! Activities occur in a specific order:
-    ! Some management activities happen elsewhere like planting (fertilization)
-    
-    ! Perform thinning before harvest since wood for thinning can be used to reduce harvest demand.
-    ! As an initial test criteria search for an appropriate aged patch and thin it:
-    if (thinning_needed)
-      
-      ! Making the following work would be a bit of a pain since it returns an variable length array
-      ! of pointers, which is not simple in Fortran:
-      ! thin_patches = find_thinnable_patches(site_in, criteria)
-      ! For now either just return the first or use a comparator function:
-      
-      current_patch => site_in%oldest_patch
-      do while (associated(current_patch))
-        if (thinnable_patch(patch = current_patch, pfts = tree_pfts, goal_basal_area = 20.0_r8))
-          call thin_row_low(patch = current_patch, pfts = tree_pfts, &
-                            row_fraction = 0.2_r8, final_basal_area = 20.0_r8)
-        endif
-        current_patch => current_patch%younger
-      end do
-      
-    endif
-    
-    ! Harvest.  An estimate of the harvest amount is also calculated...
-    ! For testing do prioritized harvest across both primary and secondary patches:
-    if (harvest_needed)
-      
-      call harvest_by_mass(site_in, ...) !...
-      
-    endif
-    
-    ! Understory control can probably go anywhere but we put it after harvest so we have the option
-    ! to do site prep in the same time step.
-    if (control_needed)
-      
-      !postharvest_control()
-      ! Find the patch that was most recently cleared and perform understory control on it:
-      
-      current_patch => site_in%youngest_patch ! Start with the youngest patch:
-      do while (associated(current_patch) & path_is_bare(current_patch) /= .true.)
-        current_patch => current_patch%older
-      end do
-      
-      if (associated(current_patch))
-        call understory_control(current_patch, method_mow)
-      else
-        ! A bare patch was not found.  Note it in the log and proceed:
-        write(fates_log(),*) 'anthro_disturbance_rate_2()?????: No bare patch found.'
-      endif
-    endif
-    
-    ! Planting will occur later in the event loop.
-    
-    
-    
-    ! Update canopy area:
-    
-    
-    
-    ! Calculate the patch level disturbance rates based on the cumulative effect of management:
-    ! Note: Not all mortality caused by management is disturbance generating.  A challenge is to
-    ! have as much of this happen as possible even when anthro disturbance is not dominant.
-    
-    
-    
-  end subroutine anthro_disturbance_rate_2
   
   !=================================================================================================
   ! Managed Mortality Primitives:
