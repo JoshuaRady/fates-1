@@ -91,25 +91,32 @@ contains
   ! Main module event loop entry points:
   !=================================================================================================
 
-  ! Placeholder:
-  !subroutine managed_mortality
+  subroutine managed_mortality(site_in, ...)
     ! ----------------------------------------------------------------------------------------------
-  !end subroutine
-
-  subroutine anthro_disturbance_rate_2(site_in, ...) ! Need a real name!  -->> move up to managed_mortality placeholder!!!!!
-    ! ----------------------------------------------------------------------------------------------
-    ! Here I'm starting to work out a new version of anthro_disturbance_rate() that works more like
-    ! I want it to.  It is an early work in progress
+      ! Here I'm starting to work out a replacement for anthro_disturbance_rate() that works more like
+      ! I want it to.  It is an early work in progress
+      !
+    ! Perform any mortality generating vegetation management that is scheduled or required at the
+    ! current time step.  Mortalities will not be executed until disturbance calculations are
+    ! completed subsequently.  Mortalities staged here may or may not subsequently occur depending
+    ! on whether it is the dominant disturbance at a patch level.
     !
     ! This function:
     ! Determines which management activities are due for the site from several possible sources.
     !   (Existing: IsItLoggingTime() & LoggingMortality_frac()
     ! Enacts the management activities that are due, storing the resulting mortalities in the cohorts.
     !
+    ! Mortality and disturbance...
+    !
+    ! [Integrate notes from anthro_disturbance_rate().]
+    !
+    ! Why do we need to estimate the harvest amount here?
     ! ----------------------------------------------------------------------------------------------
     
     ! Uses:
-    use FatesInterfaceTypesMod, only : hlm_current_year, hlm_current_month, hlm_current_day ! Temp
+    use EDLoggingMortalityMod, only : logging_time
+    use FatesInterfacezTypesMod, only : hlm_current_year, hlm_current_month, hlm_current_day ! Temp
+    
     
     ! Arguments:
     type(ed_cohort_type), intent(inout), target :: cohort
@@ -118,14 +125,21 @@ contains
     logical :: thinning_needed, harvest_needed, control_needed
     
     !type (ed_patch_type) , pointer :: thin_patch...
-    type (ed_patch_type), pointer :: current_patch
-    ! integer(i4) :: tree_pfts(6) ! Need to find a good way to get the number of trees dynamically!
+    type (ed_patch_type), pointer :: current_patch ! <- currentPatch!!!!!
+    type (ed_cohort_type), pointer :: currentCohort ! -> current_cohort
+    
+    real(r8) :: lmort_direct
+    real(r8) :: lmort_collateral
+    real(r8) :: lmort_infra
+    real(r8) :: l_degrad         ! fraction of trees that are not killed but suffer from forest 
+                                 ! degradation (i.e. they are moved to newly-anthro-disturbed 
+                                 ! secondary forest patch)
+    !real(r8) :: dist_rate_ldist_notharvested
+    !real(r8) :: harvest_rate
     
     ! ----------------------------------------------------------------------------------------------
-    
-    ! This assumes the default 16 pft parameter set.  We need a better way to get the trees. The
-    ! woody flag included shrubs.
-    ! tree_pfts = [1,2,3,4,5,6]
+    ! An estimate of the harvest flux will be made and stored:
+    site_in%harvest_carbon_flux = 0._r8
     
     ! Determine what vegetation management is due at the current time step.  This includes:
     ! - Logging module event codes. [IsItLoggingTime()]
@@ -156,7 +170,56 @@ contains
     ! Note: A class with methods for the following would be a great way to implement the regimes.
     
     ! Activities occur in a specific order:
-    ! Some management activities happen elsewhere like planting (fertilization)
+    ! Some management activities happen elsewhere like planting (fertilization).
+    
+    ! ----------------------------------------------------------------------------------------------
+    ! If a traditional logging module event code has occurred we honor it: 
+    ! While this is important for backward compatibility several assumptions in the traditional
+    ! logging module are not maintained in the other management activities, so care should be taken
+    ! when using them.  It seems like isolated events or events that less frequently may play well
+    ! with other vegetation management behaviors.  Testing needs to be done.
+    !
+    ! The best postion for this step once multiple events are allowed is unclear.  However, it
+    ! seems like placing this first increases the chance of the event occurring as expected.  The
+    ! downside is adds another difference between logging module harvests and other harvests.
+    ! 
+    ! This segment is based on code extracted from EDPatchDynamicsMod.F90: disturbance_rates().
+    ! ----------------------------------------------------------------------------------------------
+    if (logging_time) then
+      currentPatch => site_in%oldest_patch
+      do while (associated(currentPatch))
+        currentCohort => currentPatch%shortest
+        
+        do while(associated(currentCohort))
+          currentCohort%patchptr => currentPatch ! Why is this necessary?????
+          
+          call LoggingMortality_frac(currentCohort%pft, currentCohort%dbh, &
+                                     currentCohort%canopy_layer, lmort_direct, lmort_collateral, &
+                                     lmort_infra, l_degrad, bc_in%hlm_harvest_rates, &
+                                     bc_in%hlm_harvest_catnames, bc_in%hlm_harvest_units, &
+                                     currentPatch%anthro_disturbance_label, &
+                                     currentPatch%age_since_anthro_disturbance, frac_site_primary)
+
+          currentCohort%lmort_direct     = lmort_direct
+          currentCohort%lmort_collateral = lmort_collateral
+          currentCohort%lmort_infra      = lmort_infra
+          currentCohort%l_degrad         = l_degrad
+
+        ! Estimate the wood product (trunk_product_site):
+        if (currentCohort%canopy_layer>=1) then
+          site_in%harvest_carbon_flux = site_in%harvest_carbon_flux + currentCohort%lmort_direct * &
+          currentCohort%n * (currentCohort%prt%GetState(sapw_organ, all_carbon_elements) + &
+          currentCohort%prt%GetState(struct_organ, all_carbon_elements)) * &
+          EDPftvarcon_inst%allom_agb_frac(currentCohort%pft) * SF_val_CWD_frac(ncwd) * &
+          logging_export_frac
+        endif
+
+          currentCohort => currentCohort%taller
+        end do ! Cohort loop.
+      
+        currentPatch => currentPatch%younger
+      end do ! Patch loop.
+    endif ! (logging_time)
     
     ! Perform thinning before harvest since wood for thinning can be used to reduce harvest demand.
     ! As an initial test criteria search for an appropriate aged patch and thin it:
@@ -176,6 +239,8 @@ contains
         current_patch => current_patch%younger
       end do
       
+      ! Estimate the woodproduct  (trunk_product_site) if not done already. !!!!!
+      
     endif
     
     ! Harvest.  An estimate of the harvest amount is also calculated...
@@ -184,10 +249,12 @@ contains
       
       call harvest_by_mass(site_in, ...) !...
       
+      ! Estimate the woodproduct  (trunk_product_site) if not done already. !!!!!
+      
     endif
     
     ! Understory control can probably go anywhere but we put it after harvest so we have the option
-    ! to do site prep in the same time step.
+    ! to do site prep in the same time step. (One multiple events are enabled.)
     if (control_needed)
       
       !postharvest_control()
@@ -210,17 +277,109 @@ contains
     
     
     
-    ! Update canopy area:
     
+    ! ----------------------------------------------------------------------------------------------
+    ! Recalculate total canopy area prior to resolving the disturbance:
+    !
+    ! JMR Note:
+    ! I think this is the first time that the canopy area has been updated since growth was applied.
+    ! It is needed for logging disturbance calculation but not for other disturbance types so I
+    ! removed it from EDPatchDynamicsMod.F90: disturbance_rates().  It needs to happen prior
+    ! to disturbance calculation and it happens following mortality calculation in the original code
+    ! because cohort level crown area is calculated in the same loop.  We may be changing that?????
+    ! ----------------------------------------------------------------------------------------------
     
+    currentPatch => site_in%oldest_patch
+    do while (associated(currentPatch))
+      currentPatch%total_canopy_area = 0._r8
+      currentCohort => currentPatch%shortest
+      do while(associated(currentCohort))   
+        if(currentCohort%canopy_layer == 1) then
+          currentPatch%total_canopy_area = currentPatch%total_canopy_area + currentCohort%c_area
+        end if
+        currentCohort => currentCohort%taller
+      end do ! Cohort loop.
+      currentPatch => currentPatch%younger
+    end do ! Patch loop.
     
-    ! Calculate the patch level disturbance rates based on the cumulative effect of management:
-    ! Note: Not all mortality caused by management is disturbance generating.  A challenge is to
+    ! ----------------------------------------------------------------------------------------------
+    ! Calculate the patch level disturbance rates based on the cumulative effect of management
+    ! mortality rates:
+    ! Note: Not all mortality caused by management is disturbance generating?????  A challenge is to
     ! have as much of this happen as possible even when anthro disturbance is not dominant.
+    ! ----------------------------------------------------------------------------------------------
     
+    if (logging_time)
+      !
+      ! This segment is based on code extracted from EDPatchDynamicsMod.F90: disturbance_rates().
+      ! Summary:
+      ! _________
+      ! |XXXXXXXX
+      ! XXXXXXXX
+      ! XXXXXXXX
+      ! XXXXXXXX
+      
+      
+      currentPatch => site_in%oldest_patch
+      do while (associated(currentPatch))   
+      
+        currentPatch%disturbance_rates(dtype_ilog)  = 0.0_r8
+        dist_rate_ldist_notharvested = 0.0_r8
+        
+        currentCohort => currentPatch%shortest
+        do while(associated(currentCohort))
+          if (currentCohort%canopy_layer == 1) then
+            ! Logging Disturbance Rate:
+            currentPatch%disturbance_rates(dtype_ilog) = &
+                                currentPatch%disturbance_rates(dtype_ilog) + &
+                                min(1.0_r8, currentCohort%lmort_direct + &
+                                currentCohort%lmort_collateral + &
+                                currentCohort%lmort_infra + &
+                                currentCohort%l_degrad) * &
+                                currentCohort%c_area/currentPatch%area
+            
+            ! Non-harvested part of the logging disturbance rate:
+            dist_rate_ldist_notharvested = dist_rate_ldist_notharvested + currentCohort%l_degrad * &
+                                           currentCohort%c_area / currentPatch%area
+          endif ! (currentCohort%canopy_layer == 1)
+        
+          currentCohort => currentCohort%taller
+        enddo ! Cohort loop.
+        
+        ! For non-closed-canopy areas subject to logging, add an additional increment of area disturbed
+        ! equivalent to the fraction logged to account for transfer of interstitial ground area to new secondary lands
+        if ((currentPatch%area - currentPatch%total_canopy_area) .gt. fates_tiny) then
+          ! The canopy is NOT closed. 
+
+          call get_harvest_rate_area(currentPatch%anthro_disturbance_label, &
+                                     bc_in%hlm_harvest_catnames, bc_in%hlm_harvest_rates, &
+                                     frac_site_primary, currentPatch%age_since_anthro_disturbance, &
+                                     harvest_rate)
+
+          currentPatch%disturbance_rates(dtype_ilog) = currentPatch%disturbance_rates(dtype_ilog) + &
+              (currentPatch%area - currentPatch%total_canopy_area) * harvest_rate / currentPatch%area
+
+          ! Non-harvested part of the logging disturbance rate, i.e. the area to treeless area to
+          ! transfer to the newly disturbed patch along with the timbered portion.
+          dist_rate_ldist_notharvested = dist_rate_ldist_notharvested + &
+                                         (currentPatch%area - currentPatch%total_canopy_area) * &
+                                         harvest_rate / currentPatch%area
+        endif ! (currentPatch%area ...
+
+        ! Fraction of the logging disturbance rate that is non-harvested:
+        if (currentPatch%disturbance_rates(dtype_ilog) .gt. nearzero) then
+            currentPatch%fract_ldist_not_harvested = dist_rate_ldist_notharvested / &
+                                                     currentPatch%disturbance_rates(dtype_ilog)
+        endif
+
+        currentPatch => currentPatch%younger
+      enddo ! Patch loop
+      
+    else
+      
+    endif ! (logging_time)
     
-    
-  end subroutine anthro_disturbance_rate_2
+  end subroutine managed_mortality
   
   !=================================================================================================
   
@@ -802,7 +961,7 @@ contains
     ! - The cohort level lmort_direct, lmort_collateral, lmort_infra, and l_degrad members.
     !
     ! This routine is called from EDPatchDynamicsMod.F90: disturbance_rates() in the FATES event
-    ! loop. This initial version is based on logging code extracted from that fucntion but will be
+    ! loop. This initial version is based on logging code extracted from that function but will be
     ! expanded to include other vegetation management.
     !
     ! It is possible for more that one management activity to be occurring at the same time.
