@@ -362,7 +362,7 @@ contains
           write(fates_log(),*) 'p%total_tree_area    = ', currentPatch%total_tree_area
           write(fates_log(),*) 'p%disturbance_rate   = ', currentPatch%disturbance_rate
           write(fates_log(),*) 'p%disturbance_rates  = ', currentPatch%disturbance_rates(:)
-          write(fates_log(),*) 'p%disturbance_rate - 1.0_r8 = ', cpatch%disturbance_rate - 1.0_r8
+          write(fates_log(),*) 'p%disturbance_rate - 1.0_r8 = ', currentPatch%disturbance_rate - 1.0_r8
           write(fates_log(),*) 'p%fract_ldist_not_harvested = ', currentPatch%fract_ldist_not_harvested
           ! JMR_MOD_END
           
