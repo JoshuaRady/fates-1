@@ -293,22 +293,6 @@ contains
              dist_rate_ldist_notharvested = dist_rate_ldist_notharvested + currentCohort%l_degrad * &
                   currentCohort%c_area/currentPatch%area
              
-             ! JMR_MOD_START: Dump disturbance numbers
-             ! Modeled after EDTypesMod: dump_cohort():
-             write(fates_log(),*) 'Logged Cohort attributes:----------'
-             write(fates_log(),*) '%pft              = ', currentCohort%pft
-             write(fates_log(),*) '%n                = ', currentCohort%n                         
-             write(fates_log(),*) '%dbh              = ', currentCohort%dbh
-             write(fates_log(),*) '%c_area           = ', currentCohort%c_area
-             write(fates_log(),*) '%dmort            = ', currentCohort%dmort
-             write(fates_log(),*) '%lmort_direct     = ', currentCohort%lmort_direct
-             write(fates_log(),*) '%lmort_collateral = ', currentCohort%lmort_collateral
-             write(fates_log(),*) '%lmort_infra      = ', currentCohort%lmort_infra
-             write(fates_log(),*) '%l_degrad         = ', currentCohort%l_degrad
-             write(fates_log(),*) '%c_area           = ', currentCohort%c_area
-             write(fates_log(),*) 'dist_rate_ldist_notharvested', dist_rate_ldist_notharvested
-             ! JMR_MOD_END
-             
           endif
           currentCohort => currentCohort%taller
        enddo !currentCohort
@@ -369,17 +353,17 @@ contains
           ! JMR_MOD_START: Dump disturbance numbers
           ! Bits from EDTypesMod: dump_patch():
           write(fates_log(),*) 'Logged Patch attributes:----------'
-          write(fates_log(),*) 'pa%patchno            = ',currentPatch%patchno
-          write(fates_log(),*) 'pa%age                = ',currentPatch%age
-          write(fates_log(),*) 'pa%area               = ',currentPatch%area
-          write(fates_log(),*) 'pa%countcohorts       = ',currentPatch%countcohorts
-          write(fates_log(),*) 'pa%ncl_p              = ',currentPatch%ncl_p
-          write(fates_log(),*) 'pa%total_canopy_area  = ',currentPatch%total_canopy_area
-          write(fates_log(),*) 'pa%total_tree_area    = ',currentPatch%total_tree_area
-          write(fates_log(),*) 'pa%disturbance_rate   = ',currentPatch%disturbance_rate
-          write(fates_log(),*) 'pa%disturbance_rates  = ',currentPatch%disturbance_rates(:)
-          write(fates_log(),*) 'pa%disturbance_rates  = ',currentPatch%disturbance_rates(:)
-          write(fates_log(),*) 'pa%fract_ldist_not_harvested = ',currentPatch%fract_ldist_not_harvested
+          write(fates_log(),*) 'p%patchno            = ', currentPatch%patchno
+          write(fates_log(),*) 'p%age                = ', currentPatch%age
+          write(fates_log(),*) 'p%area               = ', currentPatch%area
+          write(fates_log(),*) 'p%countcohorts       = ', currentPatch%countcohorts
+          write(fates_log(),*) 'p%ncl_p              = ', currentPatch%ncl_p
+          write(fates_log(),*) 'p%total_canopy_area  = ', currentPatch%total_canopy_area
+          write(fates_log(),*) 'p%total_tree_area    = ', currentPatch%total_tree_area
+          write(fates_log(),*) 'p%disturbance_rate   = ', currentPatch%disturbance_rate
+          write(fates_log(),*) 'p%disturbance_rates  = ', currentPatch%disturbance_rates(:)
+          write(fates_log(),*) 'p%disturbance_rate - 1.0_r8 = ', cpatch%disturbance_rate - 1.0_r8
+          write(fates_log(),*) 'p%fract_ldist_not_harvested = ', currentPatch%fract_ldist_not_harvested
           ! JMR_MOD_END
           
           currentPatch%disturbance_rate = currentPatch%disturbance_rates(dtype_ilog)
@@ -396,6 +380,23 @@ contains
                 currentCohort%frmort = currentCohort%frmort*(1.0_r8 - fates_mortality_disturbance_fraction)
                 currentCohort%smort = currentCohort%smort*(1.0_r8 - fates_mortality_disturbance_fraction)
                 currentCohort%asmort = currentCohort%asmort*(1.0_r8 - fates_mortality_disturbance_fraction)
+                
+             ! JMR_MOD_START: Dump disturbance numbers
+             ! Modeled after EDTypesMod: dump_cohort():
+             write(fates_log(),*) 'Logged Cohort attributes:----------'
+             write(fates_log(),*) 'c%pft              = ', currentCohort%pft
+             write(fates_log(),*) 'c%n                = ', currentCohort%n                         
+             write(fates_log(),*) 'c%dbh              = ', currentCohort%dbh
+             write(fates_log(),*) 'c%c_area           = ', currentCohort%c_area
+             write(fates_log(),*) 'c%dmort            = ', currentCohort%dmort
+             write(fates_log(),*) 'c%lmort_direct     = ', currentCohort%lmort_direct
+             write(fates_log(),*) 'c%lmort_collateral = ', currentCohort%lmort_collateral
+             write(fates_log(),*) 'c%lmort_infra      = ', currentCohort%lmort_infra
+             write(fates_log(),*) 'c%l_degrad         = ', currentCohort%l_degrad
+             write(fates_log(),*) 'c%c_area           = ', currentCohort%c_area
+             write(fates_log(),*) 'dist_rate_ldist_notharvested', dist_rate_ldist_notharvested
+             ! JMR_MOD_END
+             
              end if
              currentCohort => currentCohort%taller
           enddo !currentCohort
