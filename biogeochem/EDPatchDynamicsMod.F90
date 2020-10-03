@@ -296,9 +296,9 @@ contains
              ! JMR_MOD_START: Dump disturbance numbers
              ! Modeled after EDTypesMod: dump_cohort():
              write(fates_log(),*) 'Logged Cohort attributes:----------'
-             write(fates_log(),*) 'co%pft            = ', ccohort%pft
-             write(fates_log(),*) 'co%n              = ', ccohort%n                         
-             write(fates_log(),*) 'co%dbh            = ', ccohort%dbh
+             write(fates_log(),*) '%pft              = ', currentCohort%pft
+             write(fates_log(),*) '%n                = ', currentCohort%n                         
+             write(fates_log(),*) '%dbh              = ', currentCohort%dbh
              write(fates_log(),*) '%c_area           = ', currentCohort%c_area
              write(fates_log(),*) '%dmort            = ', currentCohort%dmort
              write(fates_log(),*) '%lmort_direct     = ', currentCohort%lmort_direct
@@ -369,17 +369,17 @@ contains
           ! JMR_MOD_START: Dump disturbance numbers
           ! Bits from EDTypesMod: dump_patch():
           write(fates_log(),*) 'Logged Patch attributes:----------'
-          write(fates_log(),*) 'pa%patchno            = ',cpatch%patchno
-          write(fates_log(),*) 'pa%age                = ',cpatch%age
-          write(fates_log(),*) 'pa%area               = ',cpatch%area
-          write(fates_log(),*) 'pa%countcohorts       = ',cpatch%countcohorts
-          write(fates_log(),*) 'pa%ncl_p              = ',cpatch%ncl_p
-          write(fates_log(),*) 'pa%total_canopy_area  = ',cpatch%total_canopy_area
-          write(fates_log(),*) 'pa%total_tree_area    = ',cpatch%total_tree_area
-          write(fates_log(),*) 'pa%disturbance_rate   = ',cpatch%disturbance_rate
-          write(fates_log(),*) 'pa%disturbance_rates  = ',cpatch%disturbance_rates(:)
-          write(fates_log(),*) 'pa%disturbance_rates  = ',cpatch%disturbance_rates(:)
-          write(fates_log(),*) 'pa%fract_ldist_not_harvested = ',cpatch%fract_ldist_not_harvested
+          write(fates_log(),*) 'pa%patchno            = ',currentPatch%patchno
+          write(fates_log(),*) 'pa%age                = ',currentPatch%age
+          write(fates_log(),*) 'pa%area               = ',currentPatch%area
+          write(fates_log(),*) 'pa%countcohorts       = ',currentPatch%countcohorts
+          write(fates_log(),*) 'pa%ncl_p              = ',currentPatch%ncl_p
+          write(fates_log(),*) 'pa%total_canopy_area  = ',currentPatch%total_canopy_area
+          write(fates_log(),*) 'pa%total_tree_area    = ',currentPatch%total_tree_area
+          write(fates_log(),*) 'pa%disturbance_rate   = ',currentPatch%disturbance_rate
+          write(fates_log(),*) 'pa%disturbance_rates  = ',currentPatch%disturbance_rates(:)
+          write(fates_log(),*) 'pa%disturbance_rates  = ',currentPatch%disturbance_rates(:)
+          write(fates_log(),*) 'pa%fract_ldist_not_harvested = ',currentPatch%fract_ldist_not_harvested
           ! JMR_MOD_END
           
           currentPatch%disturbance_rate = currentPatch%disturbance_rates(dtype_ilog)
