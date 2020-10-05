@@ -7,7 +7,7 @@
 ! written to implement forest management the code contains generic behaviors that could be used to
 ! implement other activities, e.g. agriculture.
 !
-! Note: These notes should be revised to conform to FATES coding style, to the extent that exists.
+! Note: This code should be revised to conform to FATES coding style, to the extent that it exists.
 ! The coding style is a bit vague with a mix of 2 and 3 space identing.  I will use 2 since they
 ! indent starting at the module scope.
 !
@@ -52,9 +52,25 @@ module FatesVegetationManagementMod
   private :: harvest_mass_min_area
   private :: harvestable_biomass
   
-  private :: effective_basal_area
-  private :: effective_n
-  private :: effective_n ! Change name or add interface to overload?
+  private :: effective_basal_area ! Patch level
+  ! Cohort version?????
+  private :: patch_effective_n
+  private :: cohort_effective_n
+  
+  interface effective_basal_area
+    module procedure patch_effective_basal_area
+    module procedure cohort_effective_basal_area
+  end interface
+  
+  interface effective_n
+    module procedure patch_effective_n
+    module procedure cohort_effective_n
+  end interface
+  
+  interface effective_stem_density
+    module procedure patch_effective_n
+    module procedure cohort_effective_n
+  end interface
   
   
   ! character(len=*), parameter, private :: sourcefile = __FILE__
@@ -66,6 +82,7 @@ module FatesVegetationManagementMod
   ! These class definitions should be determined dynamically. The following definitions assume the
   ! default 16 pft parameter set.  We need a better way to get the classes of PFTs. The woody flag
   ! (EDPftvarcon_inst%woody) includes shrubs.
+  integer(i4), allocatable, dimension(:), target, private :: woody_pfts
   integer(i4), parameter, private :: tree_pfts(6) = [1,2,3,4,5,6]
   ! Shrubs?
   ! Understory?
@@ -77,8 +94,9 @@ module FatesVegetationManagementMod
   integer, parameter, private :: method_herbicide = 2
   integer, parameter, private :: method_burn = 3
   
-  ! Flux profiles:
-  null_profile = 0
+  ! Mode / flux profiles:
+  ! There are may be more practices than flux or harvest profiles.  logging_traditional -> bole_harvest
+  integer, parameter, private :: null_profile = 0
   logging_traditional = 1 ! logging_module, logging_legacy, logginng_classic
   bole_harvest = 2 ! harvest_bole ! better namespacing
   in_place = 3
@@ -91,7 +109,62 @@ contains
   ! Main module event loop entry points:
   !=================================================================================================
 
-  subroutine managed_mortality(site_in, ...)
+! Template:
+!   subroutine kill()
+!     ! ----------------------------------------------------------------------------------------------
+!     ! 
+!     ! ----------------------------------------------------------------------------------------------
+!     
+!     ! Uses:
+!     
+!     ! Arguments:
+!     
+!     ! Locals:
+!     
+!     ! ----------------------------------------------------------------------------------------------
+!     
+!   end subroutine kill
+!
+!   !=================================================================================================
+
+  subroutine vegetation_management_init(hlm_masterproc, site) ! REVIEW!
+    ! ----------------------------------------------------------------------------------------------
+    ! Perform initialization of module globals and determine what vegetation management is due...
+    !
+    ! Requires destructor!!!!!
+    ! ----------------------------------------------------------------------------------------------
+    !
+    ! Uses:
+    use FatesInterfaceTypesMod, only : numpft
+    use EDLoggingMortalityMod, only : IsItLoggingTime
+    use EDPftvarcon, only : EDPftvarcon_inst ! Will change to prt_params soon when merged to master.
+    
+    ! Arguments:
+    integer, intent(in) :: is_master_processor ! Too long?
+    type(ed_site_type), intent(inout), target :: site
+    
+    ! Locals: NA
+    
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Call IsItLoggingTime
+    call IsItLoggingTime(is_master_processor, site)
+    
+    ! Initialize globals:
+    
+    ! The woody PFTs can be determined from parameter file flags:
+    ! num_woody = count(EDPftvarcon_inst%woody == itrue)
+    !allocate(woody_pfts(num_woody))
+    allocate(woody_pfts(count(EDPftvarcon_inst%woody == itrue)))
+    woody_pfts = pack((/(I, I = 1, numpft)/), (EDPftvarcon_inst%woody(pfts) == itrue))
+    
+    ! Currently there are no other flags...
+    
+  end subroutine vegetation_management_init
+
+  !=================================================================================================
+
+  subroutine managed_mortality(site_in, ...) ! REVIEW!
     ! ----------------------------------------------------------------------------------------------
       ! Here I'm starting to work out a replacement for anthro_disturbance_rate() that works more like
       ! I want it to.  It is an early work in progress
@@ -117,6 +190,22 @@ contains
     use EDLoggingMortalityMod, only : logging_time
     use FatesInterfacezTypesMod, only : hlm_current_year, hlm_current_month, hlm_current_day ! Temp
     
+    nearzero
+    
+    ! From anthro_disturbance_rate():
+!     use EDLoggingMortalityMod, only : get_harvest_rate_area
+!     use EDLoggingMortalityMod, only : logging_time
+!     use EDLoggingMortalityMod, only : LoggingMortality_frac
+!     use EDParamsMod, only : logging_export_frac
+!     use EDPftvarcon, only : EDPftvarcon_inst
+!     use EDTypesMod, only : dtype_ilog
+!     use FatesConstantsMod, only : fates_tiny
+!     use FatesConstantsMod, only : nearzero
+!     use FatesLitterMod, only : ncwd
+!     use PRTGenericMod, only : all_carbon_elements
+!     use PRTGenericMod, only : sapw_organ
+!     use PRTGenericMod, only : struct_organ
+!     use SFParamsMod, only : SF_VAL_CWD_FRAC
     
     ! Arguments:
     type(ed_cohort_type), intent(inout), target :: cohort
@@ -126,7 +215,7 @@ contains
     
     !type (ed_patch_type) , pointer :: thin_patch...
     type (ed_patch_type), pointer :: current_patch ! <- currentPatch!!!!!
-    type (ed_cohort_type), pointer :: currentCohort ! -> current_cohort
+    type (ed_cohort_type), pointer :: current_cohort ! -> current_cohort
     
     real(r8) :: lmort_direct
     real(r8) :: lmort_collateral
@@ -137,10 +226,16 @@ contains
     !real(r8) :: dist_rate_ldist_notharvested
     !real(r8) :: harvest_rate
     
+    real(r8) :: patch_disturbance ! Accumulator
+    real(r8) :: cohort_disturbance ! Accumulator
+    !real(r8) :: cohort_mort ! ?????
+    real(r8) :: patch_mort ! patch_mortality?????
+    
     ! ----------------------------------------------------------------------------------------------
     ! An estimate of the harvest flux will be made and stored:
     site_in%harvest_carbon_flux = 0._r8
     
+    ! ----------------------------------------------------------------------------------------------
     ! Determine what vegetation management is due at the current time step.  This includes:
     ! - Logging module event codes. [IsItLoggingTime()]
     ! - Harvest demand from HLM land use input streams. [hlm_use_lu_harvest == itrue]
@@ -151,6 +246,7 @@ contains
     ! - Prescribed actives from input file. [Not yet implemented.]
     ! - Actives that are due, based on patch flag or regime heuristic. [Not yet implemented.]
     ! This logic could all be moved to a subroutine.
+    ! ----------------------------------------------------------------------------------------------
     
     thinning_needed = .false.
     harvest_needed = .false.
@@ -173,56 +269,67 @@ contains
     ! Some management activities happen elsewhere like planting (fertilization).
     
     ! ----------------------------------------------------------------------------------------------
+    ! Logging Module Event:
     ! If a traditional logging module event code has occurred we honor it: 
     ! While this is important for backward compatibility several assumptions in the traditional
-    ! logging module are not maintained in the other management activities, so care should be taken
-    ! when using them.  It seems like isolated events or events that less frequently may play well
-    ! with other vegetation management behaviors.  Testing needs to be done.
+    ! logging module are not maintained in the other vegation management activities, so care should
+    ! be taken when using them.  It seems like isolated events or events that less frequently may
+    ! play well with other vegetation management behaviors.  Testing needs to be done.
     !
     ! The best postion for this step once multiple events are allowed is unclear.  However, it
     ! seems like placing this first increases the chance of the event occurring as expected.  The
-    ! downside is adds another difference between logging module harvests and other harvests.
+    ! downside is it adds another difference between logging module harvests and other harvests.
     ! 
     ! This segment is based on code extracted from EDPatchDynamicsMod.F90: disturbance_rates().
     ! ----------------------------------------------------------------------------------------------
     if (logging_time) then
-      currentPatch => site_in%oldest_patch
-      do while (associated(currentPatch))
-        currentCohort => currentPatch%shortest
+      current_patch => site_in%oldest_patch
+      do while (associated(current_patch))
+        current_cohort => current_patch%shortest
         
-        do while(associated(currentCohort))
-          currentCohort%patchptr => currentPatch ! Why is this necessary?????
+        do while(associated(current_cohort))
+          current_cohort%patchptr => current_patch ! Why is this necessary?????
           
-          call LoggingMortality_frac(currentCohort%pft, currentCohort%dbh, &
-                                     currentCohort%canopy_layer, lmort_direct, lmort_collateral, &
+          call LoggingMortality_frac(current_cohort%pft, current_cohort%dbh, &
+                                     current_cohort%canopy_layer, lmort_direct, lmort_collateral, &
                                      lmort_infra, l_degrad, bc_in%hlm_harvest_rates, &
                                      bc_in%hlm_harvest_catnames, bc_in%hlm_harvest_units, &
-                                     currentPatch%anthro_disturbance_label, &
-                                     currentPatch%age_since_anthro_disturbance, frac_site_primary)
+                                     current_patch%anthro_disturbance_label, &
+                                     current_patch%age_since_anthro_disturbance, frac_site_primary)
 
-          currentCohort%lmort_direct     = lmort_direct
-          currentCohort%lmort_collateral = lmort_collateral
-          currentCohort%lmort_infra      = lmort_infra
-          currentCohort%l_degrad         = l_degrad
+          current_cohort%lmort_direct     = lmort_direct
+          current_cohort%lmort_collateral = lmort_collateral
+          current_cohort%lmort_infra      = lmort_infra
+          current_cohort%l_degrad         = l_degrad
 
         ! Estimate the wood product (trunk_product_site):
-        if (currentCohort%canopy_layer>=1) then
-          site_in%harvest_carbon_flux = site_in%harvest_carbon_flux + currentCohort%lmort_direct * &
-          currentCohort%n * (currentCohort%prt%GetState(sapw_organ, all_carbon_elements) + &
-          currentCohort%prt%GetState(struct_organ, all_carbon_elements)) * &
-          EDPftvarcon_inst%allom_agb_frac(currentCohort%pft) * SF_val_CWD_frac(ncwd) * &
-          logging_export_frac
-        endif
-
-          currentCohort => currentCohort%taller
+        ! JMR_Note: When would the following check not be true?
+        ! if (current_cohort%canopy_layer >= 1) then
+!           site_in%harvest_carbon_flux = site_in%harvest_carbon_flux + &
+!                                  current_cohort%lmort_direct * current_cohort%n * &
+!                                  (current_cohort%prt%GetState(sapw_organ, all_carbon_elements) + &
+!                                  current_cohort%prt%GetState(struct_organ, all_carbon_elements)) * &
+!                                  EDPftvarcon_inst%allom_agb_frac(current_cohort%pft) * &
+!                                  SF_val_CWD_frac(ncwd) * logging_export_frac
+!         endif
+        site_in%harvest_carbon_flux = site_in%harvest_carbon_flux + &
+                                      cohort_harvestable_biomass(cohort = current_cohort, &
+                                                                 harvest_profile = logging_traditional, &
+                                                                 staged = .true.)
+        
+          current_cohort => current_cohort%taller
         end do ! Cohort loop.
       
-        currentPatch => currentPatch%younger
+        current_patch => current_patch%younger
       end do ! Patch loop.
     endif ! (logging_time)
     
+    ! ----------------------------------------------------------------------------------------------
+    ! Thinning:
     ! Perform thinning before harvest since wood for thinning can be used to reduce harvest demand.
+    !
     ! As an initial test criteria search for an appropriate aged patch and thin it:
+    ! ----------------------------------------------------------------------------------------------
     if (thinning_needed)
       
       ! Making the following work would be a bit of a pain since it returns an variable length array
@@ -239,17 +346,22 @@ contains
         current_patch => current_patch%younger
       end do
       
-      ! Estimate the woodproduct  (trunk_product_site) if not done already. !!!!!
+      ! Estimate the woodproduct (trunk_product_site) if not done already. !!!!!
+!       cohort_harvestable_biomass(cohort = current_cohort, harvest_profile = bole_harvest, &
+!                                  staged = .true.)
       
     endif
     
-    ! Harvest.  An estimate of the harvest amount is also calculated...
+    ! ----------------------------------------------------------------------------------------------
+    ! Harvest:
+    !  An estimate of the harvest amount is also calculated...
     ! For testing do prioritized harvest across both primary and secondary patches:
+    ! ----------------------------------------------------------------------------------------------
     if (harvest_needed)
       
       call harvest_by_mass(site_in, ...) !...
       
-      ! Estimate the woodproduct  (trunk_product_site) if not done already. !!!!!
+      ! Estimate the woodproduct (trunk_product_site) if not done already. !!!!!
       
     endif
     
@@ -273,10 +385,9 @@ contains
       endif
     endif
     
+    ! ----------------------------------------------------------------------------------------------
     ! Planting will occur later in the event loop.
-    
-    
-    
+    ! ----------------------------------------------------------------------------------------------
     
     ! ----------------------------------------------------------------------------------------------
     ! Recalculate total canopy area prior to resolving the disturbance:
@@ -289,93 +400,202 @@ contains
     ! because cohort level crown area is calculated in the same loop.  We may be changing that?????
     ! ----------------------------------------------------------------------------------------------
     
-    currentPatch => site_in%oldest_patch
-    do while (associated(currentPatch))
-      currentPatch%total_canopy_area = 0._r8
-      currentCohort => currentPatch%shortest
-      do while(associated(currentCohort))   
-        if(currentCohort%canopy_layer == 1) then
-          currentPatch%total_canopy_area = currentPatch%total_canopy_area + currentCohort%c_area
-        end if
-        currentCohort => currentCohort%taller
+    current_patch => site_in%oldest_patch
+    do while (associated(current_patch))
+      current_patch%total_canopy_area = 0._r8
+      current_cohort => current_patch%shortest
+      do while(associated(current_cohort))
+        if (current_cohort%canopy_layer == 1) then
+          current_patch%total_canopy_area = current_patch%total_canopy_area + current_cohort%c_area
+        endif
+        current_cohort => current_cohort%taller
       end do ! Cohort loop.
-      currentPatch => currentPatch%younger
+      current_patch => current_patch%younger
     end do ! Patch loop.
     
     ! ----------------------------------------------------------------------------------------------
     ! Calculate the patch level disturbance rates based on the cumulative effect of management
     ! mortality rates:
+    !
     ! Note: Not all mortality caused by management is disturbance generating?????  A challenge is to
     ! have as much of this happen as possible even when anthro disturbance is not dominant.
     ! ----------------------------------------------------------------------------------------------
     
     if (logging_time)
-      !
+      ! Traditional logging module events:
       ! This segment is based on code extracted from EDPatchDynamicsMod.F90: disturbance_rates().
-      ! Summary:
-      ! _________
-      ! |XXXXXXXX
+      !
+      ! The complexity of the following code is deceptive.  They end result is that area logged
+      ! is always completely disturbed.  LoggingMortality_frac() calculates direct and indirect
+      ! mortality rates and labels any remaining canopy area as degraded.  The following code
+      ! add any tree free ground.  The result is that %disturbance_rates(dtype_ilog) = 1 (or very
+      ! close to that) when hlm_use_lu_harvest is false and =  hlm_harvest_rates when
+      ! hlm_use_lu_harvest is false. This begs the question if this code should be simplified to
+      ! reflect this.
+      !
+      ! Visual Summary?:
+      ! XXXXXXXX
       ! XXXXXXXX
       ! XXXXXXXX
       ! XXXXXXXX
       
+      current_patch => site_in%oldest_patch
+      do while (associated(current_patch))   
       
-      currentPatch => site_in%oldest_patch
-      do while (associated(currentPatch))   
-      
-        currentPatch%disturbance_rates(dtype_ilog)  = 0.0_r8
+        current_patch%disturbance_rates(dtype_ilog)  = 0.0_r8
         dist_rate_ldist_notharvested = 0.0_r8
         
-        currentCohort => currentPatch%shortest
-        do while(associated(currentCohort))
-          if (currentCohort%canopy_layer == 1) then
+        current_cohort => current_patch%shortest
+        do while(associated(current_cohort))
+          if (current_cohort%canopy_layer == 1) then
             ! Logging Disturbance Rate:
-            currentPatch%disturbance_rates(dtype_ilog) = &
-                                currentPatch%disturbance_rates(dtype_ilog) + &
-                                min(1.0_r8, currentCohort%lmort_direct + &
-                                currentCohort%lmort_collateral + &
-                                currentCohort%lmort_infra + &
-                                currentCohort%l_degrad) * &
-                                currentCohort%c_area/currentPatch%area
+            current_patch%disturbance_rates(dtype_ilog) = &
+                                current_patch%disturbance_rates(dtype_ilog) + &
+                                min(1.0_r8, current_cohort%lmort_direct + &
+                                current_cohort%lmort_collateral + &
+                                current_cohort%lmort_infra + &
+                                current_cohort%l_degrad) * &
+                                current_cohort%c_area/current_patch%area
             
             ! Non-harvested part of the logging disturbance rate:
-            dist_rate_ldist_notharvested = dist_rate_ldist_notharvested + currentCohort%l_degrad * &
-                                           currentCohort%c_area / currentPatch%area
-          endif ! (currentCohort%canopy_layer == 1)
+            dist_rate_ldist_notharvested = dist_rate_ldist_notharvested + current_cohort%l_degrad * &
+                                           current_cohort%c_area / current_patch%area
+          endif ! (current_cohort%canopy_layer == 1)
         
-          currentCohort => currentCohort%taller
+          current_cohort => current_cohort%taller
         enddo ! Cohort loop.
         
-        ! For non-closed-canopy areas subject to logging, add an additional increment of area disturbed
-        ! equivalent to the fraction logged to account for transfer of interstitial ground area to new secondary lands
-        if ((currentPatch%area - currentPatch%total_canopy_area) .gt. fates_tiny) then
-          ! The canopy is NOT closed. 
+        ! For non-closed-canopy areas subject to logging, add an additional increment of area
+        ! disturbed equivalent to the fraction logged to account for transfer of interstitial ground
+        ! area to new secondary lands
+        if ((current_patch%area - current_patch%total_canopy_area) .gt. fates_tiny) then
 
-          call get_harvest_rate_area(currentPatch%anthro_disturbance_label, &
+          call get_harvest_rate_area(current_patch%anthro_disturbance_label, &
                                      bc_in%hlm_harvest_catnames, bc_in%hlm_harvest_rates, &
-                                     frac_site_primary, currentPatch%age_since_anthro_disturbance, &
+                                     frac_site_primary, current_patch%age_since_anthro_disturbance, &
                                      harvest_rate)
 
-          currentPatch%disturbance_rates(dtype_ilog) = currentPatch%disturbance_rates(dtype_ilog) + &
-              (currentPatch%area - currentPatch%total_canopy_area) * harvest_rate / currentPatch%area
+          current_patch%disturbance_rates(dtype_ilog) = current_patch%disturbance_rates(dtype_ilog) + &
+              (current_patch%area - current_patch%total_canopy_area) * harvest_rate / current_patch%area
 
           ! Non-harvested part of the logging disturbance rate, i.e. the area to treeless area to
           ! transfer to the newly disturbed patch along with the timbered portion.
           dist_rate_ldist_notharvested = dist_rate_ldist_notharvested + &
-                                         (currentPatch%area - currentPatch%total_canopy_area) * &
-                                         harvest_rate / currentPatch%area
-        endif ! (currentPatch%area ...
+                                         (current_patch%area - current_patch%total_canopy_area) * &
+                                         harvest_rate / current_patch%area
+        endif ! (current_patch%area ...
 
         ! Fraction of the logging disturbance rate that is non-harvested:
-        if (currentPatch%disturbance_rates(dtype_ilog) .gt. nearzero) then
-            currentPatch%fract_ldist_not_harvested = dist_rate_ldist_notharvested / &
-                                                     currentPatch%disturbance_rates(dtype_ilog)
+        if (current_patch%disturbance_rates(dtype_ilog) .gt. nearzero) then
+            current_patch%fract_ldist_not_harvested = dist_rate_ldist_notharvested / &
+                                                     current_patch%disturbance_rates(dtype_ilog)
         endif
 
-        currentPatch => currentPatch%younger
+        current_patch => current_patch%younger
       enddo ! Patch loop
       
     else
+      ! Other vegetation management activities:
+      ! When mortality for other vegetation management activities are calculated the two values are
+      ! recorded in a cohort, a mortality fraction specifying the fraction of plants in the cohort
+      ! that die and a patch fraction that tells how much of the cohort (cohort area = patch area)
+      ! that mortality comes from.  The patch fraction is most informative for calculating the
+      ! disturbance rate.
+      !
+      ! What is a managed disturbance?:
+      !   Given that some management activities happen 'in place' is possible to consider them
+      ! non-disturbing.  For example, thinning reduces the density of trees evenly everywhere and no
+      ! 'new' patch is seeming needed.  When the patch fraction is 1 this may be more or less true.
+      ! However, there are times when we want to thin an area smaller than an existing patch.  In
+      ! these case the patch fraction is less than 1 whether or not thinning matches our internal
+      ! definition of a disturbance, the event requires a patch splitting and therefore is
+      ! disturbing in the FATES sense.
+      !   Since disturbing a whole patch produces a new patch with the same structure as one with
+      ! the same mortalities that was not split (both result in a new patch) we can treat all
+      ! activities that change composition through mortally as fully disturbing and ignore the
+      ! disturbance philosophy any further.
+      !  However, while this decision doesn't effect the patch composition it does effect the patch
+      ! age.  It is a reasonable question as to whether the anthro-disturbance flag should be set
+      !for all activities.
+      !
+      ! Calculating disturbance:
+      !   While the mortality fractions are essentially rates (dead plants / total plants / event,
+      ! with the per event implied) and are therefore additive, patch fractions are not. To get the
+      ! patch level disturbance rate we combine them in a manner discussed in detail int the Managed
+      ! Mortality Primitives section.  In short, with one management mode / flux profile we expect
+      ! that some cohorts may be unaffected (patch fraction = 0) while others are (0 < patch
+      ! fraction <= 1).  The effected cohorts should all have the same patch fraction.  More than
+      ! one value implies more that one activities and while that is potentially resolvable we are
+      ! not ready to handle that yet.  The non-zero patch fraction(s) gives us the disturbance rate
+      ! directly without an need for accumulation.
+      
+      ! Loop over the cohorts in each patch and find the largest patch fraction while checking
+      ! values for a valid combinations:
+      current_patch => site_in%oldest_patch
+      do while (associated(current_patch))
+        
+        current_patch%disturbance_rates(dtype_ilog) = 0.0_r8
+        patch_disturbance = 0.0_r8
+        
+        current_cohort => current_patch%shortest
+        do while(associated(current_cohort))
+          
+          ! Checking for more than one morality type was previous checked in ?????
+          cohort_disturbance = max(current_cohort%vm_mort_bole_harvest_pfrac, current_cohort%vm_mort_in_place)
+          
+          ! Make sure the disturbance is consistant across cohorts:
+          if (patch_disturbance == 0.0r8 .and. cohort_disturbance /= 0.0r8) then
+            patch_disturbance = cohort_disturbance
+          else if (patch_disturbance /= 0.0r8 .and. cohort_disturbance /= patch_disturbance)
+            ! Error:
+            write(fates_log(),*) 'More than one disturbance rate was detected in this patch.'
+            ! Need to add new members to dump_patch()!!!!!
+            call dump_patch(current_patch)
+            call endrun(msg = errMsg(__FILE__, __LINE__))
+          endif
+          ! When (cohort_disturbance == patch_disturbance) do nothing.
+          
+          ! Calculate the total patch wide mortality rate:
+          ! With more than one activity we would sum them...
+          ! Can dispense with cohort_mort if only used here!!!!!
+          cohort_mort = max(current_cohort%vm_mort_bole_harvest, &
+                            current_cohort%vm_mort_in_place) * &
+                        current_cohort%c_area / current_patch%area
+          ! Normalizing by area should be redundant since the cohort area should = the patch area.
+          
+          patch_mort = patch_mort + cohort_mort
+          
+          current_cohort => current_cohort%taller
+        end do ! Cohort loop.
+        
+        !
+        current_patch%disturbance_rates(dtype_ilog) = patch_disturbance
+        
+        ! Calculate the unharvested fraction:
+        ! patch_mort is the mortality at the whole patch level.  Subtracting that from the
+        ! disturbance fraction gives us the unharmed fraction of the original patch that will be
+        ! transfered (potentially) to a new patch.  We convert that to a fraction of the new patch.
+        ! Should this be recorded in all cases or just for harvest types?????
+        if (current_patch%disturbance_rates(dtype_ilog) > nearzero) then
+          current_patch%fract_ldist_not_harvested = (patch_disturbance - patch_mort) / &
+                                                   patch_disturbance
+          
+          ! Checking that resulting value:
+          if (current_patch%fract_ldist_not_harvested > 1.0_r8 + nearzero) then
+          ! %fract_ldist_not_harvested is not currently in dump_patch():
+            write(fates_log(),*) 'patch%fract_ldist_not_harvested is > 1, = ', &
+                                  current_patch%fract_ldist_not_harvested
+            call endrun(msg = errMsg(__FILE__, __LINE__))
+          else if (current_patch%fract_ldist_not_harvested > 1.0_r8)
+            current_patch%fract_ldist_not_harvested = 1.0_r8
+          endif ! (current_patch%fract_ldist_not_harvested > 1.0_r8 + nearzero)
+          
+        else
+          current_patch%fract_ldist_not_harvested = 0.0_r8
+        endif ! (current_patch%disturbance_rates(dtype_ilog) > nearzero)
+        
+        current_patch => current_patch%younger
+      end do ! Patch loop.
       
     endif ! (logging_time)
     
@@ -515,7 +735,7 @@ contains
     ! Consider adding a warning?????
     ! If neither DBH nor height is provided then fates_recruit_hgt_min will be used.
     
-    ! Note: It appears that the compliler on Cheyenne does not support the value keyword.
+    ! Note: It appears that the compliler on Cheyenne does not support the value keyword / attribute.
     ! real(r8), intent(in), optional, value :: density ! The planting density in plants / m^2 or hectare??????
     real(r8), intent(in), optional :: density ! The planting density (plants / m^2)
     real(r8), intent(in), optional :: dbh ! Sapling diameter at breast height (cm)
@@ -830,7 +1050,7 @@ contains
     stem_drop_fraction = EDPftvarcon_inst%phen_stem_drop_fraction(cohort_obj%pft)
 
      if (EDPftvarcon_inst%season_decid(cohort_obj%pft) == itrue .and. &
-         any(site%cstatus == [phen_cstat_nevercold,phen_cstat_iscold])) then
+         any(site%cstatus == [phen_cstat_nevercold, phen_cstat_iscold])) then
       cohort_obj%laimemory = b_leaf
       cohort_obj%sapwmemory = b_sapw * stem_drop_fraction
       cohort_obj%structmemory = b_struct * stem_drop_fraction	    
@@ -842,7 +1062,7 @@ contains
     endif
 
     if (EDPftvarcon_inst%stress_decid(cohort_obj%pft) == itrue .and. &
-        any(site%dstatus == [phen_dstat_timeoff,phen_dstat_moistoff])) then
+        any(site%dstatus == [phen_dstat_timeoff, phen_dstat_moistoff])) then
       cohort_obj%laimemory = b_leaf
       cohort_obj%sapwmemory = b_sapw * stem_drop_fraction
       cohort_obj%structmemory = b_struct * stem_drop_fraction	    
@@ -921,7 +1141,7 @@ contains
 
         ! Put all of the leaf mass into the first bin
         call SetState(cohort_parteh, leaf_organ, element_id, m_leaf,1)
-        do iage = 2,nleafage
+        do iage = 2, nleafage
           call SetState(cohort_parteh, leaf_organ, element_id, 0._r8, iage)
         end do
 
@@ -949,7 +1169,7 @@ contains
   ! Managed Mortality Subroutines:
   !=================================================================================================
 
-  subroutine anthro_disturbance_rate(site_in, bc_in, frac_site_primary)
+  subroutine anthro_disturbance_rate(site_in, bc_in, frac_site_primary) ! REVIEW!
     ! ----------------------------------------------------------------------------------------------
     ! Calculate the extent of any disturbance resulting from potential human vegetation management
     ! at the current time step.  The disturbance, at a patch level, may or may not subsequently
@@ -1003,8 +1223,8 @@ contains
     real(r8), intent(in) :: frac_site_primary
     
     ! Locals:
-    type (ed_patch_type), pointer :: currentPatch
-    type (ed_cohort_type), pointer :: currentCohort
+    type (ed_patch_type), pointer :: currentPatch ! -> current_patch
+    type (ed_cohort_type), pointer :: currentCohort ! -> current_cohort
 
 !     real(r8) :: cmort
 !     real(r8) :: bmort
@@ -1192,7 +1412,7 @@ contains
 
   !=================================================================================================
   
-  function anthro_mortality_rate(cohort, bc_in, frac_site_primary) result(dndt_logging) ! anthro_mortality non-disturbing?????
+  function anthro_mortality_rate(cohort, bc_in, frac_site_primary) result(dndt_logging) ! REVIEW!
     ! ----------------------------------------------------------------------------------------------
     ! Calculate mortality resulting from human vegetation management at the cohort level.
     ! Mortality is returned as a change in number (density?) per unit time (year).
@@ -1263,7 +1483,7 @@ contains
 
   !=================================================================================================
 
-  subroutine management_fluxes(current_site, current_patch, new_patch, patch_site_areadis)
+  subroutine management_fluxes(current_site, current_patch, new_patch, patch_site_areadis) ! REVIEW!
     ! ----------------------------------------------------------------------------------------------
     ! Calculate the fluxes resulting from all the management activities performed during this
     ! timestep.
@@ -1301,7 +1521,7 @@ contains
   !=================================================================================================
   
   ! Temporary name!!!!!:
-  subroutine management_fluxes2(current_site, current_patch, new_patch, patch_site_areadis)
+  subroutine management_fluxes2(current_site, current_patch, new_patch, patch_site_areadis) ! REVIEW!
     ! ----------------------------------------------------------------------------------------------
     ! Calculate the fluxes resulting from all the management activities performed during this
     ! timestep to litter, soil, product pools, the atmosphere, and partition stocks between the
@@ -1521,7 +1741,7 @@ contains
           ! be non-zero, but in the future more than one may be.  Fractional mortalties are additive
           ! so the following is theoretically future safe:
           direct_dead = (current_cohort%vm_mort_in_place + current_cohort%vm_mort_bole_harvest) * &
-                        currentCohort%n *
+                        currentCohort%n ! Check this, effective_n()?????, cohort area adjustment?
           indirect_dead = 0.0_r8 ! May be added in the future for some modes.
           
         endif ! flux_profile
@@ -1863,7 +2083,7 @@ contains
     ! Cohort  -----Patch Area-----  kill  patch         -----Split Patches-----
     !      1  TTT_TTT_TTT_TTT_TTT_   0.25  1.0          TTT_TTT_TT   T_TTT_TTT_
     !      2  T_T_T_T_T_T_T_T_T_T_   0.5   1.0     =>   T_T_T_T_T_   T_T_T_T_T_
-    !      3  TTTTTTTTTT___T___T__   0.4   0.5          TTTTTTTTTT   ___T___T__
+    !      3  TTTTTTTTTT___T___T__   0.4   0.5          TTTTTTTTTT   ___T___T__  Although both patches should be "new" here!
     !
     !
     ! Example 3:                    -Fractions-
@@ -1927,6 +2147,9 @@ contains
       !Subsequent mortalities operate on a reduced (effective) number of individuals but on the same
       ! area, potentially....
   !
+  ! Natural mortalities are considered non-disturbing and will have a 'virtual patch fraction' of 1?????
+  
+  !
   ! Sequential mortality scenarios:
     !   For simplicity we show a single cohort patch (or a patch were all cohorts experience the
     ! same mortalities).
@@ -1974,24 +2197,6 @@ contains
   !
   !=================================================================================================
 
-! Template:
-!   subroutine kill()
-!     ! ----------------------------------------------------------------------------------------------
-!     ! 
-!     ! ----------------------------------------------------------------------------------------------
-!     
-!     ! Uses:
-!     
-!     ! Arguments:
-!     
-!     ! Locals:
-!     
-!     ! ----------------------------------------------------------------------------------------------
-!     
-!   end subroutine kill
-!
-!   !=================================================================================================
-
   ! A reminder of the logging event parameters:
   ! (fates_mort_disturb_frac = 0,
 !                               fates_logging_coll_under_frac = 0,#0.55983
@@ -2032,11 +2237,8 @@ contains
   !=================================================================================================
 
   !patch_kill() cohort_kill
-  !subroutine kill(cohort, dbh_min, dbh_max, ht_min, ht_max, fraction, flux_profile)
-  ! For speed we should probably only take DBH at the cohort level?
-  ! subroutine kill(cohort, dbh_min, dbh_max, ht_min, ht_max, fraction, flux_profile)
   ! subroutine kill(cohort, cohort_fraction, flux_profile, patch_fraction)
-  subroutine kill(cohort, kill_fraction, flux_profile, area_fraction) ! Argument order?
+  subroutine kill(cohort, flux_profile, kill_fraction, area_fraction) ! Argument order? ! REVIEW!
     ! ----------------------------------------------------------------------------------------------
     ! 'Kill' a fraction of the specified cohort.
     ! This is accomplished by staging a mortality fraction...
@@ -2058,6 +2260,11 @@ contains
     ! Return harvest?
     ! What about fract_ldist_not_harvested?
     !
+    ! Move:
+    ! Note: Calculating effective states and manipulating them could be done with matrix operations
+    ! but that would require copying of all cohort states and copying them back when done.  I'm
+    ! not sure that would be any more efficient and it seems error prone. A second alternative is to
+    ! make set of duplicate cohorts that are modified.  That definitely seems costly.
     ! ----------------------------------------------------------------------------------------------
     
     ! Uses: NA
@@ -2065,31 +2272,31 @@ contains
     ! Arguments:
     type(ed_cohort_type), intent(inout), target :: cohort
     
+    integer, intent(in) :: flux_profile ! A code specifying where does the dead material goes.
+    
     real(r8), intent(in) :: kill_fraction ! How much to to remove, default to everything = 1.
     ! Alternatively a biomass to remove?
-    
-    integer, intent(in) :: flux_profile ! A code specifying where does the dead material goes.
     
     ! The fraction of the patch that the mortality is removed from:
     real(r8), intent(in), optional :: area_fraction
     
     ! Locals:
     real(r8) :: staged_mort_fraction ! ?????
-    real(r8), dimension(4) :: prev_area_fractions
+    real(r8), dimension(?????) :: prev_area_fractions ! ?????
     integer :: num_mortalities ! How many different mortality factions have already been staged?
     real(r8) :: prev_area_fraction
     real(r8) :: lmort ! The sum of logging mortality fractions.
     
     ! ----------------------------------------------------------------------------------------------
     
-    ! Check that fractions are valid values:
+    ! Check that the fractions are valid values:
     if (kill_fraction <= 0.0_r8 .or. kill_fraction > 1.0_r8) then
-      write(fates_log(),*) "Invalid value for kill_fraction argument."
+      write(fates_log(),*) 'Invalid value for kill_fraction argument.'
       call endrun(msg = errMsg(__FILE__, __LINE__))
     endif
     
     if (area_fraction <= 0.0_r8 .or. area_fraction > 1.0_r8) then
-      write(fates_log(),*) "Invalid value for area_fraction argument."
+      write(fates_log(),*) 'Invalid value for area_fraction argument.'
       call endrun(msg = errMsg(__FILE__, __LINE__))
     endif
     
@@ -2099,19 +2306,26 @@ contains
     !l_degrad  Not a mortality, !l_degrad represents the balence of the area..
     ! Non-disturbing mortalities...
     
-    prev_area_fractions = [, cohort%vm_mort_in_place_pfrac, cohort%vm_mort_bole_harvest_pfrac] !!!!!
+    prev_area_fractions = [cohort%vm_mort_in_place_pfrac, cohort%vm_mort_bole_harvest_pfrac] !!!!!
     num_mortalities = count(prev_area_fractions /= 0)
     
-    if (num_mortalities > 0) then
-      ! Short-circuit the following options:
-      write(fates_log(),*) 'A managed mortality event has already been staged.'
-      call endrun(msg = errMsg(__FILE__, __LINE__))
-      
+    ! Short-circuit the following options:
+    !if (num_mortalities > 0) then
+    !  write(fates_log(),*) 'A managed mortality event has already been staged.'
+    !  call endrun(msg = errMsg(__FILE__, __LINE__))
+    !endif
+    
     ! Draft multi-mortality code:
-!     if (num_mortalities == 1) then
-!       
-!       prev_area_fraction = maxval(prev_area_fractions)
-!       
+    if (num_mortalities == 0) then
+      
+      
+    if (num_mortalities == 1) then
+      
+      ! Determine the previous mortality type and area fraction:
+      prev_area_fraction = maxval(prev_area_fractions)
+      ! prev_flux_profile
+      
+      
 !       ! If a previously staged mortality and the current mortality both affect only part of the
 !       ! cohort area then the resulting patch splitting is ambiguous.  See managed mortality section
 !       ! notes above for a detailed explanation.
@@ -2119,7 +2333,9 @@ contains
 !         write(fates_log(),*) "Can't combining two mortalities that affect only part of a cohort area."
 !         call endrun(msg = errMsg(__FILE__, __LINE__))
 !       endif
-!       
+       
+       ! For now we only allow successive mortalities within an iterative processes involving a
+       
 !       ! Get the value of the staged mortality fraction:
 !       lmort = cohort%lmort_direct + cohort%lmort_collateral  + cohort%lmort_infra
 !       staged_mort_fraction = max(lmort, vm_mort_in_place, ...) !!!!!
@@ -2132,10 +2348,10 @@ contains
     endif
     
     
-    ! Initial the kill process by recording the event attributes in the cohort object:
+    ! Initialize the kill process by recording the event attributes in the cohort object:
     select case (flux_profile)
-      !case (logging_module) ! Legacy...
-        ! Placeholder.
+      !case (logging_traditional) ! Legacy...
+        ! Placeholder. Traditional logging module events use LoggingMortality_frac().
       
       case (in_place)
         
@@ -2183,7 +2399,7 @@ contains
   ! Competition Control Subroutines:
   !=================================================================================================
 
-  subroutine understory_control(patch, method)
+  subroutine understory_control(patch, method) ! REVIEW!
     ! ----------------------------------------------------------------------------------------------
     ! Remove all understory plants, grasses and shrubs, from the specified patch using the specified
     ! method.
@@ -2256,7 +2472,6 @@ contains
 !     
 !   end subroutine understory_mow
 
-
   !=================================================================================================
   ! Thinning Subroutines:
   !   Thinning is an intermediate operation in forest management designed to reduce uncontrolled
@@ -2276,16 +2491,33 @@ contains
   !  
   !=================================================================================================
 
-  subroutine thin_row_low(patch, pfts, row_fraction, final_basal_area, final_stem_density)
+  subroutine thin_row_low(patch, pfts, row_fraction, patch_fraction, &
+                          final_basal_area, final_stem_density)
     ! ----------------------------------------------------------------------------------------------
     ! Perform a row thinning followed by a low thinning to achieve a desired final basal area or
     ! stem density.
     !
-    ! This could be performed at a site level as well.  Would that just be a loop?
+    ! Define row and low thinning!!!!!
+    ! Wood is harvested, no matter the size.
+    !
     ! We currently add no infrastructure mortality (the row thinning is in part to allow equipment
     ! access) or collateral damage from thinning.
     !
-    ! Note: In general a low thinning can not be performed perfectly due to mechanical limitations, clustering of small and large trees, and the desire to remove ill formed or damaged trees.  This could be approximated using an approach like using an inverse proportional probably of taking larger trees.
+    ! This is a fairly specific thinning routine.  It was chosen to directly mimic an actual
+    ! management practice and is parameterized to be compatible with an operation perception.  The
+    ! two phase thinning process yields a more complex demography and the final result will be
+    ! somewhat variable, not always hitting the goal value perfectly, which is also realistic.  It
+    ! alos requires an iterative algorithm, which was useful to help develop a robust set of low
+    ! level utilities that will allow other practices to be developed.
+    !
+    ! Note: In general a low thinning can not be performed perfectly from the "bottom up" due to
+    ! mechanical limitations, clustering of small and large trees, and the desire to remove ill
+    ! formed or damaged trees, regardless of size.  This imperfection could be approximated using 
+    ! an inverse proportional probably of taking larger trees, or something like that.
+    !
+    ! Ideas:
+    ! This could be performed at a site level as well.  Would that just be a loop?
+    ! Alternatively, supply as a row frequency?
     ! ----------------------------------------------------------------------------------------------
     
     ! Uses:
@@ -2301,68 +2533,101 @@ contains
     ! Be careful when excluding PFTs that may compete in the canopy.
     integer(i4), intent(in), optional :: pfts(:) ! An array of PFT IDs to thin.
     
-    real(r8), intent(in), optional :: row_fraction ! The fraction of rows to initially thin, e.g. every 5th row = 0.2, often every 4th or 5th row...
-    real(r8), intent(in), optional :: final_basal_area ! Goal final basal area index (m^2 / ha ?????)
+    real(r8), intent(in), optional :: row_fraction       ! The fraction of rows to initially thin,
+                                                         ! e.g. every 5th row = 0.2, often every 4th or 5th row...
+                                                         ! Alternatively, supply as a row frequency?
+    real(r8), intent(in), optional :: patch_fraction ! The fraction of the patch to thin.
+                                                     ! Defaults to 1.0 / whole patch.
+                                                     ! Values > 1 result in the patch being split
+                                                     ! into thinned and unthinned components.
+    real(r8), intent(in), optional :: final_basal_area   ! Goal final basal area index (m^2 / ha ?????)
     real(r8), intent(in), optional :: final_stem_density ! Goal final stem density (trees / ha)
-    
-    ! Consider adding a patch fraction argument if the patch area is larger that the area that needs
-    ! to be thinned.  That would have to result in the patch being split into thinned and unthinned
-    ! components.
+    real(r8), intent(out), optional :: harvest_estimate  ! The wood harvested by this opperation.
     
     ! Locals:
-    !integer(i4) :: thin_pfts(:) ! Holds the PFTs to thin, computed from arguments.
-    integer(i4), dimension(:), allocatable :: thin_pfts ! Holds the PFTs to thin, computed from arguments.
+    integer(i4) :: thin_pfts(:) ! Holds the PFTs to thin, computed from arguments.
+    !integer(i4), dimension(:), allocatable :: thin_pfts ! Holds the PFTs to thin, computed from arguments.
     real(r8) :: the_row_fraction ! Or change row_fraction -> row_fraction_in or row_fraction_opt
     !real(r8) :: row_reduction ! 
+    
     logical :: use_bai ! If true use basal area index as the criteria, otherwise use stem density.
-    ! use_sd?????
     real(r8) :: patch_bai ! Basal area of the patch (including only PFTs in pfts)
     real(r8) :: patch_sd ! Stem density of the patch (including only PFTs in pfts)
     real(r8) :: cohort_ba ! Basal area of a cohort
     !real(r8) :: cohort_sd ! Cohort level stem density (plants / ha)
     real(r8) :: cohort_stems
+    real(r8) :: thin_ba_remaining
+    real(r8) :: harvest ! Accumulator
     
     type (ed_cohort_type), pointer :: current_cohort
     
     ! ----------------------------------------------------------------------------------------------
+    ! Initialize variables:
+    harvest = 0.0_r8
+    thin_ba_remaining = 0.0_r8
     
-    ! Determine which arguments were passed in, check, and process them:
+    ! Determine which arguments were passed in, validity check them, and supply default values:
     
     ! If present check that the PFTs are valid:
-    if (present(pft)) then
+    ! if (present(pfts)) then
+!       ! Check if PFTs are valid:
+!       if (any(EDPftvarcon_inst%woody(pfts) == ifalse)) then
+!       if (any(EDPftvarcon_inst%woody(pfts) == ifalse)) then
+!       !if (any(int(prt_params%woody(pfts)) == ifalse)) then
+!         write(fates_log(),*) 'thin_row_low(): Cannot thin non-woody PFTs.'
+!         call endrun(msg = errMsg(__FILE__, __LINE__))
+!       end if
+!       
+!       allocate(thin_pfts(size(pfts)))
+!       thin_pfts = pfts
+!     else ! Otherwise thin all tree (woody) PFTs:
+!       
+!       !allocate(thin_pfts(size(EDPftvarcon_inst%woody)))
+!       allocate(thin_pfts(numpft))
+!       ! Is it safe to assume that PFT IDs are sequential and start with 1?
+!       ! Do woody plants include shrubs?  If so this needs to be updated.
+!       ! Yes woody shrubs are woody!  Need a new flag?
+!       thin_pfts = (/(I, I = 1, numpft)/)
+!       thin_pfts = pack(thin_pfts, (EDPftvarcon_inst%woody(pfts) == itrue))
+!     endif
+    if (present(pfts)) then
       ! Check if PFTs are valid:
-      if (any(EDPftvarcon_inst%woody(pfts) == ifalse)) then
-      !if (any(int(prt_params%woody(pfts)) == ifalse)) then
-        write(fates_log(),*) 'thin_row_low(): Cannot thin non-woody PFTs.'
+      if (.not. any(tree_pfts == pfts)) then
+        write(fates_log(),*) 'thin_row_low(): Cannot thin non-tree PFTs.'
         call endrun(msg = errMsg(__FILE__, __LINE__))
       end if
       
-      allocate(thin_pfts(size(pfts)))
       thin_pfts = pfts
-    else ! Otherwise thin all tree (woody) PFTs:
-      
-      !allocate(thin_pfts(size(EDPftvarcon_inst%woody)))
-      allocate(thin_pfts(numpft))
-      ! Is it safe to assume that PFT IDs are sequential and start with 1?
-      ! Do woody plants include shrubs?  If so this needs to be updated.
-      ! Yes woody shrubs are woody!  Need a new flag?
-      thin_pfts = (/(I, I = 1, numpft)/)
-      thin_pfts = pack(thin_pfts, (EDPftvarcon_inst%woody(pfts) == itrue))
+    else ! Otherwise thin all tree PFTs:
+      thin_pfts = tree_pfts
     endif
     
     ! Determine the thinning amount:
     if (present(row_fraction)) then
-      if (row_fraction > 1.0_r8 .or. row_fraction <= 0.0_r8) then ! May be better high and low values.
+      if (row_fraction > 1.0_r8 .or. row_fraction <= 0.0_r8) then ! Better high and low values?
         write(fates_log(),*) 'thin_row_low(): Invalid row fraction provided.'
         call endrun(msg = errMsg(__FILE__, __LINE__))
       end if
     
       the_row_fraction = row_fraction
     else
-      the_row_fraction = 1.0_r8
+      the_row_fraction = 0.2_r8 ! Default value.
     end if
     
-    !row_reduction = 1.0_r8 - row_fraction
+    !row_reduction = 1.0_r8 - the_row_fraction
+    
+    ! Note: Since all the calculations below are per area the patch fraction does not effect them.
+    ! It is only passed on to kill().
+    if (present(patch_fraction)) then
+      if (patch_fraction > 1.0_r8 .or. patch_fraction <= 0.0_r8) then
+        write(fates_log(),*) 'thin_row_low(): Invalid patch fraction provided.'
+        call endrun(msg = errMsg(__FILE__, __LINE__))
+      end if
+    
+      the_patch_fraction = patch_fraction
+    else
+      the_patch_fraction = 1.0_r8
+    end if
     
     ! Need only BAI or stem density:
     if (present(final_basal_area) .and. present(final_stem_density)) then
@@ -2378,34 +2643,34 @@ contains
     endif
     
     ! Determine the basal area and stem densities for the relavant PFTs:
-    patch_bai = get_patch_basal_area_index(patch, thin_pfts)
-    patch_sd = get_patch_stem_density(patch, thin_pfts)
+    patch_bai = effective_basal_area(patch, thin_pfts)
+    patch_sd = effective_stem_density(patch, thin_pfts)
     
     ! If the stand is above the goal value (BAI or stem density) start thinning:
     if ((use_bai .and. (patch_bai > final_basal_area)) .or. &
         ((.not. use_bai) .and. (patch_sd > final_stem_density))) then
       
-      ! Thin every X rows = remove 1/X of each cohort:
+      ! Thin every X rows = remove 1/X of each cohort:----------------------------------------------
       current_cohort => current_patch%shortest
       do while(associated(current_cohort))
         
         if (any(pfts == current_cohort%pft)) then
-          call kill(cohort = current_cohort, faction = row_fraction) ! Flux profile!
+          call kill(cohort = current_cohort, flux_profile = bole_harvest, &
+                    kill_fraction = the_row_fraction, area_fraction = the_patch_fraction)
           
-          ! Accumulate harvest estimate?
+          ! Accumulate harvest estimate:
+          harvest = harvest + cohort_harvestable_biomass(current_cohort) ! staged = true!!!!
         endif
         
         current_cohort => current_cohort%taller
       end do ! Cohort loop.
       
+      ! If still over the goal value thin further:--------------------------------------------------
       ! The kill() call above does not result in a change to the cohort numbers yet, this will
       ! happen later.  Therefore we need to keep track of the changes to BAI, density, and plant
       ! number's manually from here on.
-      ! Could add effective argument to get_patch_basal_area_index()!!!!!
-      !patch_bai =  patch_bai * row_reduction
-      !patch_sd = patch_sd * row_reduction
-      patch_bai = get_patch_basal_area_index(patch, thin_pfts)
-      patch_sd = get_patch_stem_density(patch, thin_pfts)
+      patch_bai = effective_basal_area(patch, thin_pfts)
+      patch_sd = effective_stem_density(patch, thin_pfts)
       
       ! If still above our goal BAI / density thin out the smallest trees (low thinning) recursively
       ! until the goal has been reached:
@@ -2420,8 +2685,9 @@ contains
           if (any(pfts == current_cohort%pft)) then
             ! Get the effective (after row thinning) basal area of the cohort and determine if it
             ! can be removed in part or in whole:
-            cohort_ba = pi_const * (current_cohort%dbh / 2.0_r8)^2 * current_cohort%n * &
-                        row_reduction
+            !cohort_ba = pi_const * (current_cohort%dbh / 2.0_r8)^2 * current_cohort%n * &
+            !            row_reduction
+            cohort_ba = effective_basal_area(current_cohort)
             
             ! Remaining basal area:
             thin_ba_remaining = patch_bai - final_basal_area
@@ -2429,23 +2695,21 @@ contains
             ! If the cohort basal area is less that what still needs to be removed kill all of it:
             if (cohort_ba <= thin_ba_remaining) then
               
-              call kill(cohort = current_cohort)
-              !patch_bai = patch_bai - cohort_ba
-              !patch_bai = get_patch_basal_area_index(patch, thin_pfts)
+              call kill(cohort = current_cohort, flux_profile = bole_harvest, &
+                        area_fraction = the_patch_fraction)
               
             else ! Otherwise only take part of the cohort:
               
               cohort_fraction = thin_ba_remaining / cohort_ba
-              call kill(cohort = current_cohort,  faction = cohort_fraction)
-              
-              !patch_bai = patch_bai - (cohort_ba * cohort_fraction)
-              !patch_bai = get_patch_basal_area_index(patch, thin_pfts)
+              call kill(cohort = current_cohort, flux_profile = bole_harvest, &
+                        kill_fraction = cohort_fraction, area_fraction = the_patch_fraction)
               
             end if
           end if ! (any(pfts == current_cohort%pft))
           
-          !patch_bai = get_patch_basal_area_index(patch, thin_pfts) ! Effective!!!!!
-          patch_bai = get_patch_basal_area_index(patch, thin_pfts)
+          ! Accumulate harvest estimate:
+          harvest = harvest + cohort_harvestable_biomass(current_cohort) ! staged = true!!!!
+          patch_bai = effective_basal_area(patch, thin_pfts) ! Update the BAI calculation.
         end do ! Cohort loop.
         
       !else if ((.not. use_bai) .and. (patch_sd > final_stem_density)) then
@@ -2462,7 +2726,7 @@ contains
             ! part or in whole:
             
             ! Because of n is per nominal hectare n = stem density (n/ha)
-            !cohort_sd = effective_n(current_cohort)
+            !cohort_sd = effective_stem_density(current_cohort)
             cohort_stems = effective_n(current_cohort)
             
             ! Remaining stems to remove:
@@ -2471,28 +2735,35 @@ contains
             ! If the cohort stem count is less that what still needs to be removed kill all of it:
             if (cohort_stems <= thin_sd_remaining) then
               
-              call kill(cohort = current_cohort)
+              call kill(cohort = current_cohort, flux_profile = bole_harvest, &
+                        area_fraction = the_patch_fraction)
               
             else ! Otherwise only take part of the cohort:
               
               cohort_fraction = thin_sd_remaining / cohort_stems
-              call kill(cohort = current_cohort,  faction = cohort_fraction)
+              call kill(cohort = current_cohort, flux_profile = bole_harvest, &
+                        kill_fraction = cohort_fraction, area_fraction = the_patch_fraction)
               
             end if
           end if ! (any(pfts == current_cohort%pft))
           
-          patch_sd = get_patch_stem_density(patch, thin_pfts)
+          ! Accumulate harvest estimate:
+          harvest = harvest + cohort_harvestable_biomass(current_cohort) ! staged = true!!!!
+          patch_sd = effective_stem_density(patch, thin_pfts) ! Update the stem density.
         end do ! Cohort loop.
       endif ! (use_bai)
     endif ! Stand is above goal loop.
+    ! Consider adding warning here if patch is below goal?
     
-    ! Should anything be done if no thinning needed to be done?
-   deallocate(thin_pfts)
+    if (present(harvest_estimate))
+      harvest_estimate = harvest
+    endif
+    ! Should anything be done or reported if no thinning was needed?
   end subroutine thin_row_low
 
   !=================================================================================================
 
-  function thinnable_patch(patch, pfts, goal_basal_area) result(thinnable_patch)
+  function thinnable_patch(patch, pfts, goal_basal_area) result(thinnable_patch) ! REVIEW!
     ! ----------------------------------------------------------------------------------------------
     ! Rough Draft!!!!!
     ! Determine if a patch is is ready to be thinned based on some set of criteria.
@@ -2561,7 +2832,7 @@ contains
   !=================================================================================================
 
   ! Better name? harvest_by_mass()?
-  subroutine harvest_mass_min_area(site_in, harvest_c_primary, harvest_c_secondary, &
+  subroutine harvest_mass_min_area(site_in, harvest_c_primary, harvest_c_secondary, & ! REVIEW!
                                    pfts, dbh_min, dbh_max, ht_min, ht_max)
     ! ----------------------------------------------------------------------------------------------
     ! Harvest the requested harvest amounts from the site while attempting to use the minimal area.
@@ -2595,7 +2866,7 @@ contains
     !   Also, in a departure from the historic logging module, we don't assume that harvest can only
     ! come from the top layer of the canopy.
     !
-    !   While we use a logging metaphor above this subroutine could also be used for other purposes.
+    !   While we use a logging metaphor above, this subroutine could also be used for other purposes.
     ! Harvest of fodder would be a good application. To fully realize this a harvest mode parameter
     ! needs to be added here and in harvestable_biomass().
     ! ----------------------------------------------------------------------------------------------
@@ -2764,8 +3035,11 @@ contains
                 ! Accumulated the potentially harvestable biomass:
                 ! Currently this the bole X logging module modifiers
                 cohort_harvestable_biomass = harvestable_biomass(current_cohort)
-                patch_harvestable_biomass = patch_harvestable_biomass + &
-                                            (cohort_harvestable_biomass * patch_harvestable_stems)
+                
+                ! This is wrong!!!!! Need to use n not patch_harvestable_stems:
+                !patch_harvestable_biomass = patch_harvestable_biomass + &
+                !                            (cohort_harvestable_biomass * patch_harvestable_stems)
+                
               else
               
               current_cohort => current_cohort%taller
@@ -2830,21 +3104,18 @@ contains
 
   !=================================================================================================
 
-  function harvestable_biomass(cohort) result(harvest)
+  function plant_harvestable_biomass(cohort, harvest_profile) result(harvest)  ! REVIEW!
     ! ----------------------------------------------------------------------------------------------
-    ! Return the harvestable biomass per plant for a given PFT.
+    ! Return the harvestable biomass per plant for a given cohort.
     ! 
     ! This function compartmentalizes this calculation for a level of abstraction, to reduce
     ! dependancies and code repetion.  The calculation used historically for the logging module
-    ! is complex and depends on some assumptions might change in the future.
+    ! is complex and depends on some assumptions that might change in the future.
     !
     ! This function is also a step towards having more that one type of harvest modality.
     ! The logging module use a bole harvest.  Whole tree harvest might be more appropriate for
     ! biomass extraction etc.  We may also add biomass calculations for non-trees in the future and
     ! this provided a centralized interface.
-    ! 
-    ! Another important related assumption of the logging module is that only trees in the top
-    ! canopy layer are harvested.
     ! ----------------------------------------------------------------------------------------------
     
     ! Uses:
@@ -2855,28 +3126,51 @@ contains
     
     ! Arguments:
     type(ed_cohort_type), intent(in), target :: cohort
+    integer(i4), intent(in), optional :: harvest_profile ! The type of harvest to perform.
+                                                         ! Valid values are any harvest type flux
+                                                         ! profile).  Defaults to bole_harvest if
+                                                         ! not provided.
     
     ! Locals:
-    real(r8) :: harvest
+    real(r8) :: harvest ! Return value.
+    integer(i4) :: the_profile ! Name?
+    !integer(i4), dimension(:) :: valid_pfts ! Can't be defined this way, make a pointer?
+    integer(i4), pointer, dimension(:) :: valid_pfts
     
     ! ----------------------------------------------------------------------------------------------
     
     harvest = 0.0_r8
     
-    ! This is the code used in EDPatchDynamicsMod: disturbance_rates(), an extracted into
-    ! anthro_disturbance_rate() above:
-    ! site_in%harvest_carbon_flux = site_in%harvest_carbon_flux + currentCohort%lmort_direct * &
-!           currentCohort%n * (currentCohort%prt%GetState(sapw_organ, all_carbon_elements) + &
-!           currentCohort%prt%GetState(struct_organ, all_carbon_elements)) * &
-!           EDPftvarcon_inst%allom_agb_frac(currentCohort%pft) * SF_val_CWD_frac(ncwd) * &
-!           logging_export_frac
+    ! Determine the type of harvest:
+    if (present(harvest_profile))
+      the_profile = harvest_profile
+    else
+      the_profile = bole_harvest
+    endif
     
-    if (any(tree_pfts == chort%pft)) then
-      
-       ! Historic logging module calculation:
-       ! harvest = (sapwood + structual wood) * aboveground biomass fraction * 
-       !           the fraction of wood that is harvested that actually makes it off the site * (- transportation carbon losses?)
-       !           SF_val_CWD_frac = Talk to Jakie about this spitfire parameter
+    ! For the implemented modes the only difference is what is considered a harvestable 'tree':
+    select case(the_profile)
+      case(logging_traditional)
+        valid_pfts => woody_pfts
+        
+      case(bole_harvest)
+        valid_pfts => tree_pfts
+        
+      case default
+        write(fates_log(),*) 'Invalid harvest profile passed in.'
+        call endrun(msg = errMsg(__FILE__, __LINE__))
+    end select
+    
+    if (any(valid_pfts == cohort%pft)) then
+       ! For bole harvest we maintain the historic logging module calculation:
+       !   (Originally found in EDPatchDynamicsMod: disturbance_rates().)
+       ! bole harvest = trunk wood * export fraction * Spitfire Coarse Woody Debris fraction
+       ! Where:
+       ! harvest = (sapwood + structual wood) * aboveground biomass fraction
+       ! export fraction =  The fraction of harvested wood that actually makes it off the site.
+       !                    Is this completely open to interpretation?
+       !                    Not sure if this includes the transportation carbon losses?????
+       ! SF_val_CWD_frac = Talk to Jakie about this spitfire parameter!
        harvest = (cohort%prt%GetState(sapw_organ, all_carbon_elements) + &
                   cohort%prt%GetState(struct_organ, all_carbon_elements)) * &
                  EDPftvarcon_inst%allom_agb_frac(cohort%pft) * &
@@ -2885,12 +3179,73 @@ contains
       
       ! Add other options here:
       
+!     else
+!       write(fates_log(),*) 'Harvestable biomass is only currently defined for trees.'
+!       call endrun(msg = errMsg(__FILE__, __LINE__))
+    endif
+    ! Otherwise the cohort has 0 harvestable biomass, which is a valid result.
+    
+  end function plant_harvestable_biomass
+
+  !=================================================================================================
+
+  function cohort_harvestable_biomass(cohort, harvest_profile, staged) result(harvest)
+    ! ----------------------------------------------------------------------------------------------
+    ! Return the harvestable biomass for the whole cohort or, if staged = true, the yield based on
+    ! the harvest rates stored (staged) in the cohort object passed in.
+    !
+    ! The following is not future safe because it does not adjust n for any staged mortalities that
+    ! would occur before harvest.
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Uses: NA
+    
+    ! Arguments:
+    type(ed_cohort_type), intent(in), target :: cohort
+    ! The type of harvest to perform (harvest activity / flux profile).  Defaults to bole_harvest if not provided.  Name?
+    integer(i4), intent(in), optional :: harvest_profile ! The type of harvest to perform.
+                                                         ! Valid values are any harvest type flux
+                                                         ! profile).  Defaults to bole_harvest if
+                                                         ! not provided.
+    logical, intent(in), optional :: staged              ! If true return the harvest yield given
+                                                         ! the staged harvest rates.  Otherwise
+                                                         ! return the yield if the whole cohort was
+                                                         ! harvested. Defaults to false.?????
+    
+    ! Locals:
+    real(r8) :: harvest ! Return value.
+    type (ed_cohort_type), pointer :: current_cohort
+    real(r8) :: harvest_fraction
+    
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Determine the type of harvest:
+    if (present(harvest_profile))
+      the_profile = harvest_profile
+      ! Validity checking is performed in plant_harvestable_biomass().
+      endif
     else
-      write(fates_log(),*) 'Harvestable biomass is only currently defined for trees.'
-      call endrun(msg = errMsg(__FILE__, __LINE__))
+      the_profile = bole_harvest
     endif
     
-  end function harvestable_biomass
+    ! effective_n() won't work here because the staged harvest mortalities will be included in the
+    ! the calculation that reduces n.
+    ! harvest = plant_harvestable_biomass(cohort, harvest_profile) * effective_n(cohort)
+    harvest = plant_harvestable_biomass(cohort, harvest_profile) * cohort%n
+    
+    if (present(staged) .and. staged == .true.) then ! If staged is not passed in default to false.
+      ! Get the harvest rate (assumes only one, which should be safe):
+      harvest_fraction = max(cohort%lmort_direct, cohort%vm_mort_bole_harvest)
+      
+      if (harvest_fraction == 0.0_r8)
+        write(fates_log(),*) 'No harvest is currently staged.'
+        call endrun(msg = errMsg(__FILE__, __LINE__))
+      endif
+      
+      harvest * harvest_fraction
+    endif
+    
+  end function cohort_harvestable_biomass
 
   !=================================================================================================
   ! Utilities:
@@ -2899,42 +3254,52 @@ contains
   ! At the time management activities are calculated the patch and cohort data structures are in a
   ! state of flux.  Some mortality rates may have been calculated but have not been applied, which
   ! means the number of plants, and other dependent metrics, do not yet reflect these mortalities.
-  ! This is due to the way event loop is structured and because only one disturbance type can
-  ! currently occur in a patch per time step.  Rates are calculated and stored at one point in the
-  ! event loop and numbers are updated later. Some rates that are calculated and 'staged' many be
-  ! overridden during disturbance comparison and ultimately not occur.
+  ! This is due to the way the event sequence is structured and because only one disturbance type
+  ! can currently occur in a patch per time step.  Rates are calculated and stored at one point in
+  ! the event loop and the plant numbers are updated later. Some rates that are calculated and
+  ! 'staged' many be overridden during disturbance comparison and ultimately not occur.
   !
-  ! This complicates the calculation of management activities that depend on stand properties.  We
-  ! would like to be able to apply multiple management activities as the same time step in order
-  ! to be able to simulate dynamic and heterogeneous sites / grid cells.  Also, there is no reason
-  ! that management should be incompatible with simultaneous natural mortality.  Natural mortality
-  ! should be happening along management.  Even if we only allow for one dominant disturbance type
-  ! it should be possible to apply non-disturbing management mortality on top of natural mortality.
-  !
-  ! Not all management activities may be compatible with each other but many are.  We really need to
+  ! This complicates the calculation of management activities that depend on stand properties in a
+  ! couple ways.
+  ! 1. Iterative management decisions:
+  !   Some management actives may require an iterative or step by step approach.  This requires that
+  ! we be able to make a change to an ecosystem and see the result (within the same time step) before
+  ! proceeding.
+  ! 
+  ! 2. We would like to be able to apply multiple management activities at the same time step in
+  ! some cases in order to be able to simulate dynamic and heterogeneous sites / grid cells.
+  ! Not all management activities are compatible with each other but some are.  We really need to
   ! identify where conflicts may occur and come up with logic and rules to prevent them.  We also
   ! need to be careful about the order that activities occur in.
   !
-  ! In order to be able to combine these different sources of mortality we need numbers that reflect
-  ! the any mortality, natural or managed, that has already 'occurred' and been staged.
+  ! 3.  There is no reason fundamental reason that management should be incompatible with
+  ! simultaneous natural mortality.  Natural mortality should be happening alongside management.
+  ! Even if we only allow for one dominant disturbance type it should be possible to apply low level
+  ! natural mortality on top of management mortality.
   !
-  ! To help with this we provide several functions that return stand properties for patches assuming
-  ! all staged mortalities will be actually applied.
-  ! This also allows changes to cohorts to be made iteratively during the management application.
-  ! [Need a clarifying example here.]
-  ! Examples:
+  !   In order to be able to combine these different sources of mortality we need to be able to get
+  ! state numbers that reflect any mortality, natural or managed, that has already 'occurred', i.e.
+  ! been staged, previously in this timestep.
+  !
+  !   To help with this we provide several functions below that return stand properties for patches
+  ! and cohorts assuming all staged mortalities will be actually applied.  They should be used
+  ! rather than accessing cohort states directly.
+  !
+  !   These functions are a work in progress.  I haven't figured out quite what I need to do yet in
+  ! its entirety, but by using function calls I code the higher level behavior without dependance
+  ! on the final solution details.
+  !   Currently we are only trying to support item 1 above.  Handling multiple mortality types or
+  ! management events will be left for later.
+  !
+  !   Because n is expressed in terms of the nominal hectare BAI = BA and stem density = n.
+  ! An interface alias is provided for the later relationship to reduce dependency on that
+  ! assumption and to make for more readable code.
   !
   ! Note: Need to make kill() aware of the effective state as well!
   !
-  ! These functions are a work in progress.  I haven't figured out quite what I need to do yet in
-  ! its entirety, but by using function calls I code the higher level behavior without dependance
-  ! on the final solution details.
-  !
   !=================================================================================================
 
-  ! get_patch_basal_area_index, get_effective_patch_basal_area_index, or add effective parameter?
-  ! effective_basal_area_p?????
-  function effective_basal_area(patch, pfts) result(effective_basal_area)
+  function patch_effective_basal_area(patch, pfts) result(effective_basal_area)
     ! ----------------------------------------------------------------------------------------------
     ! Return the effective basal area for a patch after applying any existing staged potential
     ! mortalities, for only the PFTs passed in.
@@ -2960,45 +3325,45 @@ contains
       do while(associated(current_cohort))
         
         if (any(pfts == current_cohort%pft)) then
-          !effective_basal_area = effective_basal_area + effective_basal_area(cohort)
-          effective_basal_area = effective_basal_area + &
-                                 pi_const * (current_cohort%dbh / 2.0_r8)**2 * effective_n(cohort)
+          effective_basal_area = effective_basal_area + effective_basal_area(cohort)
+          ! effective_basal_area = effective_basal_area + &
+          !                        pi_const * (current_cohort%dbh / 2.0_r8)**2 * effective_n(cohort)
         endif
         
         current_cohort => current_cohort%taller
       end do ! Cohort loop.
     
-  end function effective_basal_area
+  end function patch_effective_basal_area
 
   !=================================================================================================
 
-! Currently this is probably not needed:
-!   function effective_basal_area(cohort) result(effective_basal_area)
-!     ! ----------------------------------------------------------------------------------------------
-!     ! Return the effective basal area for a cohort after applying any existing staged potential
-!     ! mortalities.
-!     !
-!     ! Should this just be inlined?
-!     ! ----------------------------------------------------------------------------------------------
-!     
-!     ! Uses: NA
-!     
-!     ! Arguments:
-!     type(ed_cohort_type), intent(in), target :: cohort
-!     
-!     ! Locals:
-!     real(r8) :: effective_basal_area ! Return value
-!     
-!     ! ----------------------------------------------------------------------------------------------
-!     
-!     ! Only the adjusted stem count is need, the rest of the equation is unchanged: 
-!     effective_basal_area = pi_const * (current_cohort%dbh / 2.0_r8)**2 * effective_n(cohort)
-!     
-!   end function effective_basal_area
+  function cohort_effective_basal_area(cohort) result(effective_basal_area)
+    ! ----------------------------------------------------------------------------------------------
+    ! Return the effective basal area for a cohort after applying any existing staged potential
+    ! mortalities.
+    !
+    ! While minimal this fucntion does reduce calling code complexity and readability.  It may be
+    ! inlined anyway.
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Uses: NA
+    
+    ! Arguments:
+    type(ed_cohort_type), intent(in), target :: cohort
+    
+    ! Locals:
+    real(r8) :: effective_basal_area ! Return value
+    
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Only the adjusted stem count is need, the rest of the equation is unchanged: 
+    effective_basal_area = pi_const * (current_cohort%dbh / 2.0_r8)**2 * effective_n(cohort)
+    
+  end function cohort_effective_basal_area
 
   !=================================================================================================
 
-  subroutine effective_n(patch, pfts) result(effective_n)
+  subroutine patch_effective_n(patch, pfts) result(effective_n)
     ! ----------------------------------------------------------------------------------------------
     ! Return the effective stem count for a patch after applying any existing staged potential
     ! mortalities, for only the PFTs passed in.
@@ -3019,27 +3384,31 @@ contains
     effective_n = 0.0_r8 ! Initialize.
     
     current_cohort => patch%shortest
-      do while(associated(current_cohort))
-        
-        if (any(pfts == current_cohort%pft)) then
-          effective_n = effective_n + effective_n(cohort)
-        endif
-        
-        current_cohort => current_cohort%taller
-      end do ! Cohort loop.
+    do while(associated(current_cohort))
     
-  end subroutine effective_n
+      if (any(pfts == current_cohort%pft)) then
+        effective_n = effective_n + effective_n(cohort)
+      endif
+      
+      current_cohort => current_cohort%taller
+    end do ! Cohort loop.
+    
+  end subroutine patch_effective_n
 
   !=================================================================================================
 
-  ! Need to create an interface to overload this name or change it:
-  function effective_n(cohort) result(effective_n)
+  function cohort_effective_n(cohort) result(effective_n)
     ! ----------------------------------------------------------------------------------------------
     ! Return the effective stem count for a cohort after applying any existing staged potential
     ! mortalities.
+    !
+    ! This function is currently limited and expects only to be called in the context of a iterative
+    ! process involving a single vegetation management mortality type.  The ability to handle
+    ! multiple mortality types may be added in the future.
     ! ----------------------------------------------------------------------------------------------
     
-    ! Uses: NA
+    ! Uses:
+    use EDTypesMod, only : dump_cohort
     
     ! Arguments:
     type(ed_cohort_type), intent(in), target :: cohort
@@ -3048,19 +3417,29 @@ contains
     real(r8) :: effective_n ! Return value
     
     ! ----------------------------------------------------------------------------------------------
+    ! The following are pretty conservative checks:
     
-    ! Placeholder code that does nothing.  Update this to compensate for staged mortalities:
-    effective_n = cohort%n ! / some mortality rate?????
+    ! This is not currently intended to be used along with logging module harvests:
+    if (cohort%lmort_direct /= 0.0_r8)
+      write(fates_log(),*) 'effective_n() is not currently intended to be use in conjunction with traditional logging module events.'
+      call dump_cohort(cohort)
+      call endrun(msg = errMsg(__FILE__, __LINE__))
+    endif
     
-    ! Places in the code that apply %dmort only seem to be in the context of disturbance, see:
-    ! EDPatchDynamicsMod: mortality_litter_fluxes():
-    !currentCohort%n * min(1.0_r8,currentCohort%dmort * &
-    !               hlm_freq_day * fates_mortality_disturbance_fraction)
-    ! EDPatchDynamicsMod: spawn_patches():
-    !currentCohort%n = currentCohort%n * (1.0_r8 - fates_mortality_disturbance_fraction * &
-    !                       min(1.0_r8,currentCohort%dmort * hlm_freq_day))
+    if (cohort%vm_mort_bole_harvest > 0 .and. cohort%vm_mort_in_place)
+      write(fates_log(),*) 'effective_n() more than one management mortality type detected.'
+      call dump_cohort(cohort)
+      call endrun(msg = errMsg(__FILE__, __LINE__))
+    endif
     
-  end function effective_n
+    staged_mortality = max(cohort%vm_mort_bole_harvest, cohort%vm_mort_in_place)
+    if (staged_mortality == 0.0_r8)
+      effective_n = cohort%n
+    else
+      effective_n = cohort%n * staged_mortality
+    endif
+    
+  end function cohort_effective_n
 
   !=================================================================================================
   ! Patch and Cohort Search Subroutines:
