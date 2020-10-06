@@ -2015,7 +2015,7 @@ contains
       current_cohort => current_cohort%taller
     enddo
     
-  end subroutine management_fluxes
+  end subroutine management_fluxes2
   
   !=================================================================================================
   ! Managed Mortality Primitives:
@@ -2270,19 +2270,17 @@ contains
     ! Uses: NA
     
     ! Arguments:
-    type(ed_cohort_type), intent(inout), target :: cohort
+    type(ed_cohort_type), intent(inout), target :: cohort ! The cohort to apply mortality to.
+    integer, intent(in) :: flux_profile ! A code specifying where the dead material goes.
+    real(r8), intent(in) :: kill_fraction ! Fraction of plants to remove.
+    ! Make optional and default to 1.0 / everything?????
     
-    integer, intent(in) :: flux_profile ! A code specifying where does the dead material goes.
-    
-    real(r8), intent(in) :: kill_fraction ! How much to to remove, default to everything = 1.
-    ! Alternatively a biomass to remove?
-    
-    ! The fraction of the patch that the mortality is removed from:
+    ! The fraction of the patch that the mortality is removed from / the size of the disturbance:
     real(r8), intent(in), optional :: area_fraction
     
     ! Locals:
     real(r8) :: staged_mort_fraction ! ?????
-    real(r8), dimension(?????) :: prev_area_fractions ! ?????
+    real(r8), dimension(2) :: prev_area_fractions ! Make dynamic?????
     integer :: num_mortalities ! How many different mortality factions have already been staged?
     real(r8) :: prev_area_fraction
     real(r8) :: lmort ! The sum of logging mortality fractions.
@@ -2299,6 +2297,9 @@ contains
       write(fates_log(),*) 'Invalid value for area_fraction argument.'
       call endrun(msg = errMsg(__FILE__, __LINE__))
     endif
+    
+    
+    ! How do we allow multiple kill() calls without overwriting data?
     
     
     ! Check if the cohort has any staged mortalities Allow one but not more than one:
@@ -2395,6 +2396,95 @@ contains
     
   end subroutine kill
 
+!=================================================================================================
+
+  subroutine kill_disturbed(cohort, flux_profile, kill_fraction) ! , area_fraction)
+    ! ----------------------------------------------------------------------------------------------
+    ! Apply a mortality event to the disturbed subset of the current cohort.
+    ! This routine treats any staged mortalities like they have already happened and kills only the
+    ! surviving plants on the nascent disturbed patch.
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Uses: NA
+    
+    ! Arguments:
+    type(ed_cohort_type), intent(inout), target :: cohort ! The cohort to apply mortality to.
+    integer, intent(in) :: flux_profile ! A code specifying where the dead material goes.
+    real(r8), intent(in) :: kill_fraction ! Fraction of plants to remove from disturbed sub-patch.
+    
+    ! If we include the area_fraction argument it needs to be interpreted differently here.
+    
+    ! Locals:
+    integer :: num_mortalities ! How many different mortality factions have already been staged?
+    integer, dimension(2) :: prev_vm_mortalities ! num_profiles?????
+    integer, dimension(2) :: prev_area_fractions
+    
+    integer :: prev_mortalilty
+    integer :: prev_pfrac
+    real(r8) ::: total_mortality
+    
+    ! ----------------------------------------------------------------------------------------------
+    num_mortalities = 0 ! Optional...
+    prev_vm_mortalities = [cohort%vm_mort_in_place, cohort%vm_mort_bole_harvest]
+    prev_area_fractions = [cohort%vm_mort_in_place_pfrac, cohort%vm_mort_bole_harvest_pfrac]
+    
+    ! Validity checking:
+    if (kill_fraction <= 0.0_r8 .or. kill_fraction > 1.0_r8) then
+      write(fates_log(),*) 'Invalid value for kill_fraction argument.'
+      call endrun(msg = errMsg(__FILE__, __LINE__))
+    endif
+    
+    ! Determine if any mortalities have been staged:
+    
+    ! We only allow vegetation management mortalities:
+    if (current_cohort%lmort_direct > 0.0_r8) then
+      write(fates_log(),*) "Can't currently mix traditional logging module events with other vegetation management."
+      call endrun(msg = errMsg(__FILE__, __LINE__))
+    endif
+    
+    ! Only allow for one mortality type that matches that being requested here:
+    num_mortalities = count(prev_area_fractions /= 0)
+    if (num_mortalities > 1)
+      write(fates_log(),*) 'There is more that one mortality staged.'
+      call endrun(msg = errMsg(__FILE__, __LINE__))
+    endif
+    
+    if (num_mortalities == 0)
+      ! If no mortality has previously occur just pass the values to kill():
+      call kill(cohort, flux_profile, kill_fraction) ! , area_fraction) ! Need names?????
+      ! Or make changes directly?
+      
+    else if (num_mortalities == 1)
+      ! Make sure the flux_profile matches the existing one:
+      ! In the future differing profiles may be allowed.
+      if (flux_profile /= get_flux_profile(cohort))
+        write(fates_log(),*) 'Previous flux profile does not match the requested one.'
+        call endrun(msg = errMsg(__FILE__, __LINE__))
+      endif
+      
+      ! Convert the kill_fraction from numbers relative to the nasent disturbed patch to the numbers
+      ! relative to full cohort:
+      
+      ! disturbed_n * kill fraction / n
+      ! rescaled_fraction = disturbed_n(cohort) * kill_fraction / cohort%n
+      
+      ! disturbed_n = n in area that is disturbed * mortality rate
+      ! disturbed_n = n * pfrac * mort
+      
+      
+      
+      ! Convert kill_fraction to a cohort-wide mortality rate and add it the existing staged rate:
+      prev_mortalilty = maxval(prev_vm_mortalities)
+      prev_pfrac = maxval(prev_area_fractions)
+      total_mortality = prev_mortalilty + kill_fraction * (prev_pfrac - prev_mortalilty)
+      
+      ! Call kill() or make the changes directly?
+      ! Passing it to kill() reduces the code overhead but it may require us to break the validity checks.
+      call kill(cohort = cohort, flux_profile = flux_profile, kill_fraction = total_mortality)
+      
+    endif ! (num_mortalities == X)
+  end subroutine kill_disturbed
+
   !=================================================================================================
   ! Competition Control Subroutines:
   !=================================================================================================
@@ -2422,7 +2512,7 @@ contains
     
     ! ----------------------------------------------------------------------------------------------
     
-    ! Check that the patch is secondary forest.
+    ! Check that the patch is secondary forest!!!!!
     
     ! Determine the grass and shrub PFTs that are being used:
     !allocate(understory_pfts(?))
@@ -3415,8 +3505,11 @@ contains
     
     ! Locals:
     real(r8) :: effective_n ! Return value
+    real(r8) :: staged_mortality
     
     ! ----------------------------------------------------------------------------------------------
+    staged_mortality = 0.0_r8
+    
     ! The following are pretty conservative checks:
     
     ! This is not currently intended to be used along with logging module harvests:
@@ -3426,8 +3519,8 @@ contains
       call endrun(msg = errMsg(__FILE__, __LINE__))
     endif
     
-    if (cohort%vm_mort_bole_harvest > 0 .and. cohort%vm_mort_in_place)
-      write(fates_log(),*) 'effective_n() more than one management mortality type detected.'
+    if (cohort%vm_mort_bole_harvest > 0.0_r8 .and. cohort%vm_mort_in_place > 0.0_r8)
+      write(fates_log(),*) 'effective_n(): more than one management mortality type staged.'
       call dump_cohort(cohort)
       call endrun(msg = errMsg(__FILE__, __LINE__))
     endif
@@ -3436,10 +3529,119 @@ contains
     if (staged_mortality == 0.0_r8)
       effective_n = cohort%n
     else
-      effective_n = cohort%n * staged_mortality
+      ! effective_n = cohort%n * staged_mortality ! Yikes, wrong!
+      effective_n = cohort%n * (1 - staged_mortality)
     endif
     
   end function cohort_effective_n
+
+  !=================================================================================================
+
+  function cohort_disturbed_n(cohort) ! disturbed_n
+    ! ----------------------------------------------------------------------------------------------
+    ! Return the effective stem count contributed by a cohort to a nascent disturbed patch based on
+    ! the staged potential mortalities.
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Uses: NA
+    
+    ! Arguments:
+    type(ed_cohort_type), intent(in), target :: cohort
+    
+    ! Locals:
+    real(r8) :: disturbed_n ! Return value
+    real(r8) :: staged_mortality
+    
+    ! ----------------------------------------------------------------------------------------------
+    staged_mortality = 0.0_r8
+    
+    ! This is not currently intended to be used along with logging module harvests:
+    if (cohort%lmort_direct /= 0.0_r8)
+      write(fates_log(),*) 'disturbed_n() is not currently intended to be use in conjunction with traditional logging module events.'
+      call dump_cohort(cohort)
+      call endrun(msg = errMsg(__FILE__, __LINE__))
+    endif
+    
+    if (cohort%vm_mort_bole_harvest > 0.0_r8 .and. cohort%vm_mort_in_place > 0.0_r8)
+      write(fates_log(),*) 'disturbed_n(): more than one management mortality type staged.'
+      call dump_cohort(cohort)
+      call endrun(msg = errMsg(__FILE__, __LINE__))
+    endif
+    
+    staged_mortality = max(cohort%vm_mort_bole_harvest, cohort%vm_mort_in_place)
+    if (staged_mortality == 0.0_r8)
+      disturbed_n = cohort%n
+    else
+      disturbed_n = (cohort%n * pfrac) - (cohort%n * staged_mortality)
+    endif
+    
+  end function cohort_disturbed_n
+
+  !=================================================================================================
+
+  function cohort_disturbed_basal_area(cohort) result(disturbed_basal_area)
+    ! ----------------------------------------------------------------------------------------------
+    ! Return the effective basal area contributed by a cohort in a nascent disturbed patch based on
+    ! the staged potential mortalities.
+    !
+    ! While minimal this fucntion does reduce calling code complexity and readability.  It may be
+    ! inlined anyway.
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Uses: NA
+    
+    ! Arguments:
+    type(ed_cohort_type), intent(in), target :: cohort
+    
+    ! Locals:
+    real(r8) :: disturbed_basal_area ! Return value
+    
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Only the adjusted stem count is need, the rest of the equation is unchanged: 
+    disturbed_basal_area = pi_const * (current_cohort%dbh / 2.0_r8)**2 * disturbed_n(cohort)
+    
+  end function cohort_disturbed_basal_area
+
+  !=================================================================================================
+
+  function get_flux_profile(cohort) result(flux_profile)
+    ! ----------------------------------------------------------------------------------------------
+    ! Return the flux profile, if any, associated with mortalities stages in the cohort.
+    ! This function will only return a sensible result if one mortality type is present.
+    !
+    ! Based on code on code in management_fluxes2().  If this persists replace that.
+    !
+    ! Note: If we changed vm_mort_in_place etc. into arrays using indexes matching the flux profile
+    ! IDs these values might be easier to manipulate.
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Uses: NA
+    
+    ! Arguments:
+    type(ed_cohort_type), intent(in), target :: cohort
+    
+    ! Locals:
+    integer :: flux_profile ! Vegetation management flux profile.
+    
+    ! ----------------------------------------------------------------------------------------------
+    
+    !flux_profile = null_profile
+    
+    if (cohort%lmort_direct > 0.0_r8) then ! Could also check logging_time.
+      flux_profile = logging_traditional
+    else if (cohort%vm_mort_in_place > 0.0_r8) then
+      flux_profile = in_place
+    else if (cohort%vm_mort_bole_harvest > 0.0_r8) then
+      flux_profile = bole_harvest
+    else
+      ! Not sure what to do here:
+      flux_profile = null_profile
+      ! write(fates_log(),*) "Flux profile could not be determined."
+      ! call endrun(msg = errMsg(__FILE__, __LINE__))
+    endif
+    
+  end function get_flux_profile
 
   !=================================================================================================
   ! Patch and Cohort Search Subroutines:
