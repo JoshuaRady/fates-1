@@ -45,7 +45,7 @@ module FatesVegetationManagementMod
   public :: anthro_disturbance_rate
   public :: anthro_mortality_rate
   public :: management_fluxes
-  public :: management_fluxes2 ! Temporary
+  !public :: management_fluxes2 ! Temporary
   
   private :: kill
   private :: kill_disturbed
@@ -235,7 +235,8 @@ contains
     use EDLoggingMortalityMod, only : LoggingMortality_frac
 !     use EDParamsMod, only : logging_export_frac
 !     use EDPftvarcon, only : EDPftvarcon_inst
-!     use EDTypesMod, only : dtype_ilog
+    use EDTypesMod, only : dtype_ilog
+    use EDTypesMod, only : dump_cohort
     use FatesConstantsMod, only : fates_tiny
     use FatesConstantsMod, only : nearzero
 !     use FatesLitterMod, only : ncwd
@@ -1622,15 +1623,19 @@ contains
     
     ! Uses:
     ! use EDtypesMod, only : area
+    use EDLoggingMortalityMod, only : harvest_litter_localization
     use EDtypesMod,   only : ed_site_type
     use EDtypesMod,   only : ed_patch_type
     use EDtypesMod,   only : ed_cohort_type
     use FatesAllometryMod , only : carea_allom
     use FatesConstantsMod, only : rsnbl_math_prec
     use FatesLitterMod, only : ncwd ! The number of coarse woody debris pools.
+    use FatesLitterMod, only : litter_type
     use FatesPlantHydraulicsMod, only : AccumulateMortalityWaterStorage
     use SFParamsMod, only : SF_val_cwd_frac
     use EDTypesMod, only : num_elements, element_list
+    use EDTypesMod, only : site_massbal_type
+    use EDTypesMod, only : site_fluxdiags_type
     
     ! Arguments:
     ! Possibly unnecessary, we could get the site from the current_patch:
@@ -1646,6 +1651,7 @@ contains
     type(site_fluxdiags_type), pointer :: flux_diags
     type(litter_type), pointer :: new_litt
     type(litter_type), pointer :: cur_litt
+    
     
     real(r8) :: remainder_area      ! Current patch's remaining area after donation [m2]
     real(r8) :: retain_frac         ! Fraction of mass to be retained
@@ -1697,19 +1703,19 @@ contains
     
     ! Calculate the fraction of litter to be retained in the donor patch and passed to the new one:
     retain_frac = (1.0_r8 - harvest_litter_localization) * &
-                  remainder_area / (newPatch%area + remainder_area)
+                  remainder_area / (new_patch%area + remainder_area)
     donate_frac = 1.0_r8 - retain_frac
     
     ! Convert the factions to areas:
     if(remainder_area > rsnbl_math_prec) then
       retain_m2 = retain_frac / remainder_area
-      donate_m2 = (1.0_r8 - retain_frac) / newPatch%area ! donate_frac / newPatch%area
+      donate_m2 = (1.0_r8 - retain_frac) / new_patch%area ! donate_frac / new_patch%area
     else
        retain_m2 = 0._r8
-       donate_m2 = 1.0_r8 / newPatch%area
+       donate_m2 = 1.0_r8 / new_patch%area
     end if
     
-    nlevsoil = currentSite%nlevsoil
+    nlevsoil = current_site%nlevsoil
     
     ! For each element process the fluxes:
     do el = 1, num_elements
@@ -1718,7 +1724,7 @@ contains
       site_mass => current_site%mass_balance(el)
       flux_diags=> current_site%flux_diags(el)
       cur_litt  => current_patch%litter(el) ! Litter pool of "current" patch
-      new_litt  => newPatch%litter(el) ! Litter pool of "new" patch
+      new_litt  => new_patch%litter(el) ! Litter pool of "new" patch
       
       ! Zero some site level accumulator diagnostics:
       trunk_product_site  = 0.0_r8
@@ -2082,7 +2088,7 @@ contains
     ! ----------------------------------------------------------------------------------------------
     ! As noted in the code of logging_litter_fluxes() by RGK the following code may not be needed:
     ! ----------------------------------------------------------------------------------------------
-    current_cohort => newPatch%shortest
+    current_cohort => new_patch%shortest
     do while(associated(current_cohort))
       call carea_allom(current_cohort%dbh, current_cohort%n, current_site%spread, &
                        current_cohort%pft,current_cohort%c_area)
@@ -2615,7 +2621,7 @@ contains
   !=================================================================================================
 
   subroutine thin_row_low(patch, pfts, row_fraction, patch_fraction, &
-                          final_basal_area, final_stem_density) ! Return the harvest amount!
+                          final_basal_area, final_stem_density, harvest_estimate) ! Return the harvest amount!
     ! ----------------------------------------------------------------------------------------------
     ! Perform a row thinning followed by a low thinning to achieve a desired final basal area or
     ! stem density.
@@ -2894,7 +2900,7 @@ contains
 
   !=================================================================================================
 
-  function thinnable_patch(patch, pfts, goal_basal_area) result(thinnable_patch) ! REVIEW!
+  function thinnable_patch(patch, pfts, goal_basal_area) ! result(thinnable_patch) ! REVIEW!
     ! ----------------------------------------------------------------------------------------------
     ! Rough Draft!!!!!
     ! Determine if a patch is is ready to be thinned based on some set of criteria.
@@ -2906,7 +2912,7 @@ contains
     ! Arguments:
     type (ed_patch_type), intent(in), target :: patch
     ! An array of PFT IDs to include in the basal area calculation:
-    integer(i4), dimesion(:), intent(in) :: pfts
+    integer(i4), dimension(:), intent(in) :: pfts
     real(r8), intent(in) :: goal_basal_area ! The goal basal area that we should thin to (m^2/ha).
     
     ! Add criteria arguments.  Some reasonable criteria would be:
@@ -3011,7 +3017,7 @@ contains
     real(r8), intent(inout) :: harvest_c_primary
     real(r8), intent(inout) :: harvest_c_secondary
     ! An array of PFT IDs to include in the basal area calculation: Make optional?
-    integer(i4), dimesion(:), intent(in) :: pfts
+    integer(i4), dimension(:), intent(in) :: pfts
     
     ! Size range of to trees to harvest.  Defaults to everything, otherwise some range of sizes,
     ! e.g. > 10cm DBH, < 15 m in height, etc.
@@ -3443,8 +3449,8 @@ contains
     ! Arguments:
     type(ed_patch_type), intent(in), target :: patch ! The patch to be calculated.
     ! An array of PFT IDs to include in the basal area calculation:
-    integer(i4), dimesion(:), intent(in) :: pfts
-    !integer(i4), dimesion(:), intent(in), optional :: pfts ! Should it be optional?
+    integer(i4), dimension(:), intent(in) :: pfts
+    !integer(i4), dimension(:), intent(in), optional :: pfts ! Should it be optional?
     
     ! Locals:
     real(r8) :: effective_basal_area ! Return value
@@ -3506,7 +3512,7 @@ contains
     
     ! Arguments:
     type(ed_patch_type), intent(in), target :: patch ! The patch to be calculated.
-    integer(i4), dimesion(:), intent(in) :: pfts ! Array of PFT IDs to include in the calculation.
+    integer(i4), dimension(:), intent(in) :: pfts ! Array of PFT IDs to include in the calculation.
     
     ! Locals:
     real(r8) :: effective_n ! Return value
@@ -3530,7 +3536,7 @@ contains
 
   !=================================================================================================
 
-  function cohort_effective_n(cohort) result(effective_n)
+  function cohort_effective_n(cohort) !result(effective_n)
     ! ----------------------------------------------------------------------------------------------
     ! Return the effective stem count for a cohort after applying any existing staged potential
     ! mortalities.
@@ -3547,7 +3553,7 @@ contains
     type(ed_cohort_type), intent(in), target :: cohort
     
     ! Locals:
-    real(r8) :: effective_n ! Return value
+    real(r8) :: cohort_effective_n ! Return value
     real(r8) :: staged_mortality
     
     ! ----------------------------------------------------------------------------------------------
@@ -3571,10 +3577,10 @@ contains
     
     staged_mortality = max(cohort%vm_mort_bole_harvest, cohort%vm_mort_in_place)
     if (staged_mortality == 0.0_r8) then
-      effective_n = cohort%n
+      cohort_effective_n = cohort%n
     else
       ! effective_n = cohort%n * staged_mortality ! Yikes, wrong!
-      effective_n = cohort%n * (1 - staged_mortality)
+      cohort_effective_n = cohort%n * (1 - staged_mortality)
     endif
     
   end function cohort_effective_n
@@ -3626,7 +3632,7 @@ contains
 
   !=================================================================================================
 
-  subroutine patch_disturbed_n(patch, pfts) result(disturbed_n)
+  subroutine patch_disturbed_n(patch, pfts)! result(disturbed_n)
     ! ----------------------------------------------------------------------------------------------
     ! Return the stem count for the nascent disturbed patch based on the staged mortalities.
     ! Because of n is per nominal hectare n = stem density (plants/ha).
@@ -3636,21 +3642,21 @@ contains
     
     ! Arguments:
     type(ed_patch_type), intent(in), target :: patch ! The patch to be calculated.
-    integer(i4), dimesion(:), intent(in) :: pfts ! Array of PFT IDs to include in the calculation.
+    integer(i4), dimension(:), intent(in) :: pfts ! Array of PFT IDs to include in the calculation.
     
     ! Locals:
-    real(r8) :: disturbed_n ! Return value
+    real(r8) :: patch_disturbed_n ! Return value
     type (ed_cohort_type), pointer :: current_cohort
     
     ! ----------------------------------------------------------------------------------------------
     
-    disturbed_n = 0.0_r8 ! Initialize.
+    patch_disturbed_n = 0.0_r8 ! Initialize.
     
     current_cohort => patch%shortest
     do while(associated(current_cohort))
     
       if (any(pfts == current_cohort%pft)) then
-        disturbed_n = disturbed_n + disturbed_n(cohort)
+        patch_disturbed_n = patch_disturbed_n + disturbed_n(cohort)
       endif
       
       current_cohort => current_cohort%taller
@@ -3699,8 +3705,8 @@ contains
     ! Arguments:
     type(ed_patch_type), intent(in), target :: patch ! The patch to be calculated.
     ! An array of PFT IDs to include in the basal area calculation:
-    integer(i4), dimesion(:), intent(in) :: pfts
-    !integer(i4), dimesion(:), intent(in), optional :: pfts ! Should it be optional?
+    integer(i4), dimension(:), intent(in) :: pfts
+    !integer(i4), dimension(:), intent(in), optional :: pfts ! Should it be optional?
     
     ! Locals:
     real(r8) :: disturbed_basal_area ! Return value
