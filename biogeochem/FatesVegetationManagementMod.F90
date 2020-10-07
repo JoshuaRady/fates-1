@@ -300,7 +300,7 @@ contains
     ! Manually trigger events for initial testing: TEMPORARY!
     if (hlm_current_year == 2050 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
       thinning_needed = .true.
-    else if (hlm_current_year == 2050 .and. hlm_current_month == 7 .and. hlm_current_day == 1) then
+    else if (hlm_current_year == 1941 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
       harvest_needed = .true.
     else if (hlm_current_year == 2050 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
       control_needed = .true.
@@ -407,11 +407,24 @@ contains
     if (harvest_needed) then
       
       !call harvest_by_mass(site_in, ...) !...
-      
-      ! Estimate the woodproduct (trunk_product_site) if not done already. !!!!!
-      
+            
       ! Simple test: Hopefully the change in the PFT, whatever it is, will be noticeable.
       !call kill(cohort = site_in%oldest_patch%tallest, kill_fraction = 0.5_r8)
+      ! Lets make sure it is noticeable by hitting all the cohorts of 2 PFTs:
+      current_patch => site_in%oldest_patch
+      do while (associated(current_patch))
+        current_cohort => current_patch%shortest
+        
+        do while(associated(current_cohort))
+          if (current_cohort%pft == 4 .or. current_cohort%pft == 12)
+            call kill(cohort = current_cohort, kill_fraction = 0.5_r8)
+          endif
+        end do ! Cohort loop.
+        
+        current_patch => current_patch%younger
+      end do ! Patch loop.
+      
+      ! Estimate the woodproduct (trunk_product_site) if not done already. !!!!!
       
     endif
     
