@@ -67,7 +67,7 @@ module EDMainMod
   use FatesPlantHydraulicsMod  , only : AccumulateMortalityWaterStorage
   use FatesAllometryMod        , only : h_allom,tree_sai,tree_lai
   use FatesPlantHydraulicsMod  , only : UpdateSizeDepRhizHydStates
-  use EDLoggingMortalityMod    , only : IsItLoggingTime
+  !use EDLoggingMortalityMod    , only : IsItLoggingTime
   use EDPatchDynamicsMod       , only : get_frac_site_primary
   use FatesGlobals             , only : endrun => fates_endrun
   use ChecksBalancesMod        , only : SiteMassStock
@@ -87,6 +87,7 @@ module EDMainMod
 
   use EDPftvarcon,            only : EDPftvarcon_inst
   
+  use FatesVegetationManagementMod, only : vegetation_management_init
   use FatesVegetationManagementMod, only : managed_fecundity
 
   ! CIME Globals
@@ -150,7 +151,8 @@ contains
 
     ! Call a routine that simply identifies if logging should occur
     ! This is limited to a global event until more structured event handling is enabled
-    call IsItLoggingTime(hlm_masterproc,currentSite)
+    !call IsItLoggingTime(hlm_masterproc,currentSite)
+    call vegetation_management_init(hlm_masterproc,currentSite)
 
     !**************************************************************************
     ! Fire, growth, biogeochemistry. 

@@ -151,7 +151,7 @@ contains
     use EDMortalityFunctionsMod , only : mortality_rates
     ! loging flux
     !use EDLoggingMortalityMod , only : LoggingMortality_frac
-    use FatesVegetationManagementMod, only : anthro_disturbance_rate
+    use FatesVegetationManagementMod, only : managed_mortality
   
     ! !ARGUMENTS:
     type(ed_site_type) , intent(inout), target :: site_in
@@ -249,7 +249,7 @@ contains
     site_in%potential_disturbance_rates(1:N_DIST_TYPES) = 0._r8
     
     ! Calculate disturbance resulting from potential human vegetation management, including but not
-    ! limited to logging.
+    ! limited to logging:
     call anthro_disturbance_rate(site_in, bc_in, frac_site_primary)
 
     ! Recalculate total canopy area prior to resolving the disturbance
@@ -394,6 +394,12 @@ contains
                 currentCohort%lmort_collateral = 0.0_r8
                 currentCohort%lmort_infra      = 0.0_r8
                 currentCohort%l_degrad         = 0.0_r8
+                ! JMR_MOD_START:
+                currentCohort%vm_mort_in_place = 0.0_r8
+                currentCohort%vm_mort_bole_harvest = 0.0_r8
+                currentCohort%vm_pfrac_in_place = 0.0_r8
+                currentCohort%vm_pfrac_bole_harvest = 0.0_r8
+                ! JMR_MOD_END.
              end if
  
              ! This may be counter-intuitive, but the diagnostic fire-mortality rate
@@ -419,6 +425,12 @@ contains
                 currentCohort%lmort_collateral = 0.0_r8
                 currentCohort%lmort_infra      = 0.0_r8
                 currentCohort%l_degrad         = 0.0_r8
+                ! JMR_MOD_START:
+                currentCohort%vm_mort_in_place = 0.0_r8
+                currentCohort%vm_mort_bole_harvest = 0.0_r8
+                currentCohort%vm_pfrac_in_place = 0.0_r8
+                currentCohort%vm_pfrac_bole_harvest = 0.0_r8
+                ! JMR_MOD_END.
              end if
              currentCohort => currentCohort%taller
           enddo !currentCohort
@@ -738,6 +750,12 @@ contains
                       nc%lmort_collateral = nan
                       nc%lmort_infra      = nan
                       nc%l_degrad         = nan
+                      ! JMR_MOD_START:
+                      nc%vm_mort_in_place = nan
+                      nc%vm_mort_bole_harvest = nan
+                      nc%vm_pfrac_in_place = nan
+                      nc%vm_pfrac_bole_harvest = nan
+                      ! JMR_MOD_END.
                       
                    else
                       ! small trees 
@@ -792,6 +810,12 @@ contains
                          nc%lmort_direct     = currentCohort%lmort_direct
                          nc%lmort_collateral = currentCohort%lmort_collateral
                          nc%lmort_infra      = currentCohort%lmort_infra
+                         ! JMR_MOD_START:
+                         nc%vm_mort_in_place = currentCohort%vm_mort_in_place
+                         nc%vm_mort_bole_harvest = currentCohort%vm_mort_bole_harvest
+                         nc%vm_pfrac_in_place = currentCohort%vm_pfrac_in_place
+                         nc%vm_pfrac_bole_harvest = currentCohort%vm_pfrac_bole_harvest
+                         ! JMR_MOD_END.
                          
                          ! understory trees that might potentially be knocked over in the disturbance. 
                          ! The existing (donor) patch should not have any impact mortality, it should
@@ -818,6 +842,12 @@ contains
                          nc%lmort_direct    = currentCohort%lmort_direct
                          nc%lmort_collateral = currentCohort%lmort_collateral
                          nc%lmort_infra      = currentCohort%lmort_infra
+                         ! JMR_MOD_START:
+                         nc%vm_mort_in_place = currentCohort%vm_mort_in_place
+                         nc%vm_mort_bole_harvest = currentCohort%vm_mort_bole_harvest
+                         nc%vm_pfrac_in_place = currentCohort%vm_pfrac_in_place
+                         nc%vm_pfrac_bole_harvest = currentCohort%vm_pfrac_bole_harvest
+                         ! JMR_MOD_END.
                          
                       endif
                    endif
@@ -875,6 +905,12 @@ contains
                    nc%lmort_direct     = currentCohort%lmort_direct
                    nc%lmort_collateral = currentCohort%lmort_collateral
                    nc%lmort_infra      = currentCohort%lmort_infra
+                   ! JMR_MOD_START:
+                   nc%vm_mort_in_place = currentCohort%vm_mort_in_place
+                   nc%vm_mort_bole_harvest = currentCohort%vm_mort_bole_harvest
+                   nc%vm_pfrac_in_place = currentCohort%vm_pfrac_in_place
+                   nc%vm_pfrac_bole_harvest = currentCohort%vm_pfrac_bole_harvest
+                   ! JMR_MOD_END.
 
 
                    ! Some of of the leaf mass from living plants has been
@@ -953,6 +989,13 @@ contains
                       nc%lmort_direct     = 0._r8
                       nc%lmort_collateral = 0._r8
                       nc%lmort_infra      = 0._r8
+                      ! JMR_MOD_START:
+                      ! There could be trouble above!!!!!
+                      nc%vm_mort_in_place = 0._r8
+                      nc%vm_mort_bole_harvest = 0._r8
+                      nc%vm_pfrac_in_place = 0._r8
+                      nc%vm_pfrac_bole_harvest = 0._r8
+                      ! JMR_MOD_END.
                       
                    else
                       
@@ -1011,6 +1054,12 @@ contains
                          nc%lmort_direct     = currentCohort%lmort_direct
                          nc%lmort_collateral = currentCohort%lmort_collateral
                          nc%lmort_infra      = currentCohort%lmort_infra
+                         ! JMR_MOD_START:
+                         nc%vm_mort_in_place = currentCohort%vm_mort_in_place
+                         nc%vm_mort_bole_harvest = currentCohort%vm_mort_bole_harvest
+                         nc%vm_pfrac_in_place = currentCohort%vm_pfrac_in_place
+                         nc%vm_pfrac_bole_harvest = currentCohort%vm_pfrac_bole_harvest
+                         ! JMR_MOD_END.
                          
                       else
                          
@@ -1033,6 +1082,12 @@ contains
                          nc%lmort_direct     = currentCohort%lmort_direct
                          nc%lmort_collateral = currentCohort%lmort_collateral
                          nc%lmort_infra      = currentCohort%lmort_infra
+                         ! JMR_MOD_START:
+                         nc%vm_mort_in_place = currentCohort%vm_mort_in_place
+                         nc%vm_mort_bole_harvest = currentCohort%vm_mort_bole_harvest
+                         nc%vm_pfrac_in_place = currentCohort%vm_pfrac_in_place
+                         nc%vm_pfrac_bole_harvest = currentCohort%vm_pfrac_bole_harvest
+                         ! JMR_MOD_END
                          
                       endif  ! is/is-not woody
                       
