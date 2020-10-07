@@ -293,11 +293,11 @@ contains
     control_needed = .false.
     
     ! Manually trigger events for initial testing: TEMPORARY!
-    if (hlm_current_year == 2050 & hlm_current_month = 1 & hlm_current_day == 1)
+    if (hlm_current_year == 2050 & hlm_current_month == 1 & hlm_current_day == 1) then
       thinning_needed = .true.
-    else if (hlm_current_year == 2050 & hlm_current_month = 1 & hlm_current_day == 1)
+    else if (hlm_current_year == 2050 & hlm_current_month == 1 & hlm_current_day == 1) then
       harvest_needed = .true.
-    else if (hlm_current_year == 2050 & hlm_current_month = 1 & hlm_current_day == 1)
+    else if (hlm_current_year == 2050 & hlm_current_month == 1 & hlm_current_day == 1) then
       control_needed = .true.
     endif
     
@@ -372,7 +372,7 @@ contains
     !
     ! As an initial test criteria search for an appropriate aged patch and thin it:
     ! ----------------------------------------------------------------------------------------------
-    if (thinning_needed)
+    if (thinning_needed) then
       
       ! Making the following work would be a bit of a pain since it returns an variable length array
       ! of pointers, which is not simple in Fortran:
@@ -381,7 +381,7 @@ contains
       
       current_patch => site_in%oldest_patch
       do while (associated(current_patch))
-        if (thinnable_patch(patch = current_patch, pfts = tree_pfts, goal_basal_area = 20.0_r8))
+        if (thinnable_patch(patch = current_patch, pfts = tree_pfts, goal_basal_area = 20.0_r8)) then
           call thin_row_low(patch = current_patch, pfts = tree_pfts, &
                             row_fraction = 0.2_r8, final_basal_area = 20.0_r8)
         endif
@@ -399,9 +399,9 @@ contains
     !
     ! For testing do prioritized harvest across both primary and secondary patches:
     ! ----------------------------------------------------------------------------------------------
-    if (harvest_needed)
+    if (harvest_needed) then
       
-      call harvest_by_mass(site_in, ...) !...
+      !call harvest_by_mass(site_in, ...) !...
       
       ! Estimate the woodproduct (trunk_product_site) if not done already. !!!!!
       
@@ -413,17 +413,17 @@ contains
     ! Understory control can probably go anywhere but we put it after harvest so we have the option
     ! to do site prep in the same time step. (One multiple events are enabled.)
     ! ----------------------------------------------------------------------------------------------
-    if (control_needed)
+    if (control_needed) then
       
       !postharvest_control()
       ! Find the patch that was most recently cleared and perform understory control on it:
       
       current_patch => site_in%youngest_patch ! Start with the youngest patch:
-      do while (associated(current_patch) & path_is_bare(current_patch) /= .true.)
-        current_patch => current_patch%older
-      end do
+!       do while (associated(current_patch) & patch_is_bare(current_patch) /= .true.)
+!         current_patch => current_patch%older
+!       end do     NEED TO ADD patch_is_bare()
       
-      if (associated(current_patch))
+      if (associated(current_patch)) then
         call understory_control(current_patch, method_mow)
       else
         ! A bare patch was not found.  Note it in the log and proceed:
@@ -477,7 +477,7 @@ contains
     ! canopy area.  I added a reporting in the new code.
     ! ----------------------------------------------------------------------------------------------
     
-    if (logging_time)
+    if (logging_time) then
       ! Traditional logging module events:
       ! This segment is based on code extracted from EDPatchDynamicsMod.F90: disturbance_rates().
       !
@@ -594,9 +594,9 @@ contains
           cohort_disturbance = max(current_cohort%vm_pfrac_bole_harvest, current_cohort%vm_mort_in_place)
           
           ! Make sure the disturbance is consistant across cohorts:
-          if (patch_disturbance == 0.0r8 .and. cohort_disturbance /= 0.0r8) then
+          if (patch_disturbance == 0.0_r8 .and. cohort_disturbance /= 0.0_r8) then
             patch_disturbance = cohort_disturbance
-          else if (patch_disturbance /= 0.0r8 .and. cohort_disturbance /= patch_disturbance)
+          else if (patch_disturbance /= 0.0_r8 .and. cohort_disturbance /= patch_disturbance) then
             ! Error:
             write(fates_log(),*) 'More than one disturbance rate was detected in this patch.'
             ! Need to add new members to dump_patch()!!!!!
@@ -641,7 +641,7 @@ contains
             write(fates_log(),*) 'patch%fract_ldist_not_harvested is > 1, = ', &
                                   current_patch%fract_ldist_not_harvested
             call endrun(msg = errMsg(__FILE__, __LINE__))
-          else if (current_patch%fract_ldist_not_harvested > 1.0_r8)
+          else if (current_patch%fract_ldist_not_harvested > 1.0_r8) then
             current_patch%fract_ldist_not_harvested = 1.0_r8
           endif ! (current_patch%fract_ldist_not_harvested > 1.0_r8 + nearzero)
           
@@ -1173,7 +1173,7 @@ contains
     ! call InitPRTObject(prt_obj)
     ! The PARTEH object is now passed in.
 
-    do el = 1,num_elements
+    do el = 1, num_elements
 
       element_id = element_list(el)
 
@@ -1630,7 +1630,7 @@ contains
     use FatesLitterMod, only : ncwd ! The number of coarse woody debris pools.
     use FatesPlantHydraulicsMod, only : AccumulateMortalityWaterStorage
     use SFParamsMod, only : SF_val_cwd_frac
-    num_elements
+    use EDTypesMod, only : num_elements, element_list
     
     ! Arguments:
     ! Possibly unnecessary, we could get the site from the current_patch:
@@ -1781,7 +1781,7 @@ contains
         ! indirect mortality they may in the future so we maintain compatibility  with this feature.
         ! ------------------------------------------------------------------------------------------
         
-        if (flux_profile = logging_traditional) then
+        if (flux_profile == logging_traditional) then
           ! Traditional logging module functionality:-----------------------------------------------
           if (currentCohort%canopy_layer == 1) then
             direct_dead = currentCohort%n * currentCohort%lmort_direct
@@ -1876,14 +1876,14 @@ contains
           end do ! Soil layer loop.
           
           ! Diagnostics on fluxes into the aboveground (AG) and below-ground (BG) CWD pools
-          flux_diags%cwd_ag_input(cwd_pool) = flux_diags%cwd_ag_input(cwd_pool) +
+          flux_diags%cwd_ag_input(cwd_pool) = flux_diags%cwd_ag_input(cwd_pool) + &
                                               SF_val_CWD_frac(cwd_pool) * ag_wood
-          flux_diags%cwd_bg_input(cwd_pool) = flux_diags%cwd_bg_input(cwd_pool) +
+          flux_diags%cwd_bg_input(cwd_pool) = flux_diags%cwd_bg_input(cwd_pool) + &
                                               SF_val_CWD_frac(cwd_pool) * bg_wood
           
           ! Diagnostic specific to resource management code
           if( element_id .eq. carbon12_element) then
-            delta_litter_stock  = delta_litter_stock +
+            delta_litter_stock  = delta_litter_stock + &
                                   (ag_wood + bg_wood) * SF_val_CWD_frac(cwd_pool)
           end if
           
@@ -2366,14 +2366,14 @@ contains
         
     ! Only allow for one mortality type that matches that being requested here:
     num_mortalities = count(prev_vm_mortalities /= 0)
-    if (num_mortalities > 1)
+    if (num_mortalities > 1) then
       write(fates_log(),*) 'There is more that one mortality staged.'
       call endrun(msg = errMsg(__FILE__, __LINE__))
       
-    else if (num_mortalities == 1)
+    else if (num_mortalities == 1) then
       ! Make sure the flux_profile matches the existing one:
       ! In the future differing profiles may be allowed.
-      if (flux_profile /= get_flux_profile(cohort))
+      if (flux_profile /= get_flux_profile(cohort)) then
         write(fates_log(),*) 'Previous flux profile does not match the requested one.'
         call endrun(msg = errMsg(__FILE__, __LINE__))
       endif
@@ -2421,7 +2421,7 @@ contains
       ! case (burn)
         ! Placeholder.
       
-      default case
+      case default
         write(fates_log(),*) 'Unrecognized flux profile.'
         call endrun(msg = errMsg(__FILE__, __LINE__))
     end select
@@ -2453,7 +2453,7 @@ contains
     
     integer :: prev_mortalilty
     integer :: prev_pfrac
-    real(r8) ::: total_mortality
+    real(r8) :: total_mortality
     
     ! ----------------------------------------------------------------------------------------------
     
@@ -2477,20 +2477,20 @@ contains
     
     ! Only allow for one mortality type that matches that being requested here:
     num_mortalities = count(prev_area_fractions /= 0)
-    if (num_mortalities > 1)
+    if (num_mortalities > 1) then
       write(fates_log(),*) 'There is more that one mortality staged.'
       call endrun(msg = errMsg(__FILE__, __LINE__))
     endif
     
-    if (num_mortalities == 0)
+    if (num_mortalities == 0) then
       ! If no mortality has previously occur just pass the values to kill():
       call kill(cohort, flux_profile, kill_fraction) ! , area_fraction) ! Need names?????
       ! Or make changes directly?
       
-    else if (num_mortalities == 1)
+    else if (num_mortalities == 1) then
       ! Make sure the flux_profile matches the existing one:
       ! In the future differing profiles may be allowed.
-      if (flux_profile /= get_flux_profile(cohort))
+      if (flux_profile /= get_flux_profile(cohort)) then
         write(fates_log(),*) 'Previous flux profile does not match the requested one.'
         call endrun(msg = errMsg(__FILE__, __LINE__))
       endif
