@@ -3068,7 +3068,7 @@ contains
     integer :: forest_class ! Primary or secondary
     integer :: num_patches ! The number of patches of a certain forest class.
     integer :: search_cycles ! Counter
-    integer :: 1 ! Counter
+    integer :: i ! Counter
     
     ! ----------------------------------------------------------------------------------------------
     
