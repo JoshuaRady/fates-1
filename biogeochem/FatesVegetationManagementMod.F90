@@ -411,7 +411,7 @@ contains
       ! Estimate the woodproduct (trunk_product_site) if not done already. !!!!!
       
       ! Simple test: Hopefully the change in the PFT, whatever it is, will be noticeable.
-      kill(cohort = site_in%oldest_patch%tallest, kill_fraction = 0.5_r8)
+      !call kill(cohort = site_in%oldest_patch%tallest, kill_fraction = 0.5_r8)
       
     endif
     
