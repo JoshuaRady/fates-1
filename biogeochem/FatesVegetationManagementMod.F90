@@ -416,7 +416,7 @@ contains
         current_cohort => current_patch%shortest
         
         do while(associated(current_cohort))
-          if (current_cohort%pft == 4 .or. current_cohort%pft == 12)
+          if (current_cohort%pft == 4 .or. current_cohort%pft == 12) then
             call kill(cohort = current_cohort, kill_fraction = 0.5_r8)
           endif
         end do ! Cohort loop.
