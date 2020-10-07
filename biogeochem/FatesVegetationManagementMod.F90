@@ -1715,6 +1715,8 @@ contains
     real(r8), parameter :: harvest_litter_localization = 0.0_r8
     
     ! ----------------------------------------------------------------------------------------------
+    direct_dead   = 0.0_r8
+    indirect_dead = 0.0_r8
     
     ! The fraction of the patch that has been disturbed and will form the new patch is provided by
     ! patch_site_areadis.  Calculate the fraction remaining in the original donor patch:
@@ -1783,10 +1785,12 @@ contains
           flux_profile = in_place
         else if (current_cohort%vm_mort_bole_harvest > 0.0_r8) then
           flux_profile = bole_harvest
-        else
-          write(fates_log(),*) "Flux profile could not be determined."
-          call endrun(msg = errMsg(__FILE__, __LINE__))
+        !else
+          !write(fates_log(),*) "Flux profile could not be determined."
+          !call endrun(msg = errMsg(__FILE__, __LINE__))
         endif
+        
+        !flux_profile = get_flux_profile(current_cohort)
         
         ! ------------------------------------------------------------------------------------------
         ! Get the number of plants that have died:
@@ -1806,7 +1810,13 @@ contains
         ! indirect mortality they may in the future so we maintain compatibility  with this feature.
         ! ------------------------------------------------------------------------------------------
         
-        if (flux_profile == logging_traditional) then
+        if (flux_profile == null_profile) then
+          ! This only means this cohort didn't experience mortality, others in the patch did.
+          ! All the flux calculations below will cancel out if there is no mortality.
+          direct_dead   = 0.0_r8
+          indirect_dead = 0.0_r8
+
+        else if (flux_profile == logging_traditional) then
           ! Traditional logging module functionality:-----------------------------------------------
           if (current_cohort%canopy_layer == 1) then
             direct_dead = current_cohort%n * current_cohort%lmort_direct
