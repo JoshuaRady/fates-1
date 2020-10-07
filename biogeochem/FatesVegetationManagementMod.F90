@@ -16,6 +16,7 @@
 module FatesVegetationManagementMod
   
   use EDTypesMod, only : ed_site_type, ed_patch_type, ed_cohort_type
+  use EDPftvarcon, only : EDPftvarcon_inst
   use FatesAllometryMod, only : h2d_allom, h_allom
   use FatesConstantsMod, only : pi_const
   use FatesConstantsMod, only : r8 => fates_r8
@@ -23,6 +24,7 @@ module FatesVegetationManagementMod
   ! explicitly sizing them.
   use FatesConstantsMod, only : i4 => fates_int
   use FatesConstantsMod, only : itrue, ifalse
+  use FatesGlobals, only : endrun => fates_endrun 
   use FatesInterfaceTypesMod, only : bc_in_type
   use PRTGenericMod, only : prt_vartypes
   
@@ -163,7 +165,7 @@ contains
     ! Uses:
     use FatesInterfaceTypesMod, only : numpft
     use EDLoggingMortalityMod, only : IsItLoggingTime
-    use EDPftvarcon, only : EDPftvarcon_inst ! Will change to prt_params soon when merged to master.
+    !use EDPftvarcon, only : EDPftvarcon_inst ! Will change to prt_params soon when merged to master.
     
     ! Arguments:
     integer, intent(in) :: is_master_processor ! Too long?
@@ -787,7 +789,7 @@ contains
     
     !use EDTypesMod.F90, only : ed_patch_type
     use EDCohortDynamicsMod, only : create_cohort, zero_cohort, InitPRTObject
-    use EDPftvarcon, only : EDPftvarcon_inst
+    !use EDPftvarcon, only : EDPftvarcon_inst
     use EDTypesMod, only : num_elements, site_massbal_type, element_list
     use PRTGenericMod, only : num_organ_types
     
@@ -963,8 +965,9 @@ contains
     ! ----------------------------------------------------------------------------------------------
     
     !use EDCohortDynamicsMod, only : zero_cohort, InitPRTObject  [Moved to calling subroutine.]
-    use EDPftvarcon, only : EDPftvarcon_inst
+    !use EDPftvarcon, only : EDPftvarcon_inst
     use EDTypesMod, only : num_elements, element_list ! site_massbal_type
+    
     use EDTypesMod, only : leaves_on, leaves_off
     use EDTypesMod, only : phen_cstat_nevercold, phen_cstat_iscold
     use EDTypesMod, only : phen_dstat_timeoff, phen_dstat_moistoff
@@ -1280,7 +1283,7 @@ contains
     use EDLoggingMortalityMod, only : logging_time
     use EDLoggingMortalityMod, only : LoggingMortality_frac
     use EDParamsMod, only : logging_export_frac
-    use EDPftvarcon, only : EDPftvarcon_inst
+    !use EDPftvarcon, only : EDPftvarcon_inst
     use EDTypesMod, only : dtype_ilog
     use FatesConstantsMod, only : fates_tiny
     use FatesConstantsMod, only : nearzero
@@ -1623,16 +1626,19 @@ contains
     
     ! Uses:
     ! use EDtypesMod, only : area
-    use EDLoggingMortalityMod, only : harvest_litter_localization
+    !use EDLoggingMortalityMod, only : harvest_litter_localization
     use EDtypesMod,   only : ed_site_type
     use EDtypesMod,   only : ed_patch_type
     use EDtypesMod,   only : ed_cohort_type
     use FatesAllometryMod , only : carea_allom
     use FatesConstantsMod, only : rsnbl_math_prec
+    use FatesInterfaceTypesMod, only : hlm_use_planthydro
     use FatesLitterMod, only : ncwd ! The number of coarse woody debris pools.
+    use FatesLitterMod, only : ndcmpy
     use FatesLitterMod, only : litter_type
     use FatesPlantHydraulicsMod, only : AccumulateMortalityWaterStorage
     use SFParamsMod, only : SF_val_cwd_frac
+    use EDParamsMod, only : logging_export_frac
     use EDTypesMod, only : num_elements, element_list
     use EDTypesMod, only : site_massbal_type
     use EDTypesMod, only : site_fluxdiags_type
@@ -1694,6 +1700,9 @@ contains
     real(r8) :: delta_litter_stock  ! Total litter flux carbon                         [kgC/site]
     real(r8) :: delta_biomass_stock ! Total mortality carbon flux (litter + product)   [kgC/site]
     real(r8) :: delta_individual    ! change in plant number through mortality         [plants/site]
+    
+    ! See EDLoggingMortalityMod about this:
+    real(r8), parameter :: harvest_litter_localization = 0.0_r8
     
     ! ----------------------------------------------------------------------------------------------
     
@@ -1789,20 +1798,20 @@ contains
         
         if (flux_profile == logging_traditional) then
           ! Traditional logging module functionality:-----------------------------------------------
-          if (currentCohort%canopy_layer == 1) then
-            direct_dead = currentCohort%n * currentCohort%lmort_direct
-            indirect_dead = currentCohort%n * &
-                            (currentCohort%lmort_collateral + currentCohort%lmort_infra)
+          if (current_cohort%canopy_layer == 1) then
+            direct_dead = current_cohort%n * current_cohort%lmort_direct
+            indirect_dead = current_cohort%n * &
+                            (current_cohort%lmort_collateral + current_cohort%lmort_infra)
           else
             ! This routine is only called during disturbance.  The litter fluxes from
             ! non-disturbance generating mortality are handled in EDPhysiology.  Disturbance
             ! generating mortality are those cohorts in the top canopy layer, or those plants that
             ! were impacted. Thus, no direct dead can occur here, and indirect = collateral impacts.
-            if (EDPftvarcon_inst%woody(currentCohort%pft) == 1) then
+            if (EDPftvarcon_inst%woody(current_cohort%pft) == 1) then
               direct_dead  = 0.0_r8
               indirect_dead = logging_coll_under_frac * &
-                              (1.0_r8 - currentPatch%fract_ldist_not_harvested) * &
-                              currentCohort%n * (patch_site_areadis/currentPatch%area) !kgC/site/day
+                              (1.0_r8 - current_patch%fract_ldist_not_harvested) * &
+                              current_cohort%n * (patch_site_areadis/current_patch%area) !kgC/site/day
             else
               ! If the cohort of interest is grass, it will not experience any mortality associated
               ! with the logging disturbance
@@ -1818,7 +1827,7 @@ contains
           ! be non-zero, but in the future more than one may be.  Fractional mortalties are additive
           ! so the following is theoretically future safe:
           direct_dead = (current_cohort%vm_mort_in_place + current_cohort%vm_mort_bole_harvest) * &
-                        currentCohort%n ! Check this, effective_n()?????, cohort area adjustment?
+                        current_cohort%n ! Check this, effective_n()?????, cohort area adjustment?
           indirect_dead = 0.0_r8 ! May be added in the future for some modes.
           
         endif ! flux_profile
@@ -3257,7 +3266,7 @@ contains
     
     ! Uses:
     use EDParamsMod, only : logging_export_frac
-    use EDPftvarcon, only : EDPftvarcon_inst ! Make global?
+    !use EDPftvarcon, only : EDPftvarcon_inst ! Make global?
     use FatesLitterMod, only : ncwd
     use SFParamsMod, only : SF_VAL_CWD_FRAC
     
@@ -3502,7 +3511,7 @@ contains
 
   !=================================================================================================
 
-  subroutine patch_effective_n(patch, pfts) result(effective_n)
+  subroutine patch_effective_n(patch, pfts) ! result(effective_n)
     ! ----------------------------------------------------------------------------------------------
     ! Return the effective stem count for a patch after applying any existing staged potential
     ! mortalities, for only the PFTs passed in.
@@ -3515,18 +3524,18 @@ contains
     integer(i4), dimension(:), intent(in) :: pfts ! Array of PFT IDs to include in the calculation.
     
     ! Locals:
-    real(r8) :: effective_n ! Return value
+    real(r8) :: patch_effective_n ! Return value
     type (ed_cohort_type), pointer :: current_cohort
     
     ! ----------------------------------------------------------------------------------------------
     
-    effective_n = 0.0_r8 ! Initialize.
+    patch_effective_n = 0.0_r8 ! Initialize.
     
     current_cohort => patch%shortest
     do while(associated(current_cohort))
     
       if (any(pfts == current_cohort%pft)) then
-        effective_n = effective_n + effective_n(cohort)
+        patch_effective_n = patch_effective_n + effective_n(cohort)
       endif
       
       current_cohort => current_cohort%taller
