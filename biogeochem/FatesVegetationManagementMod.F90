@@ -240,7 +240,7 @@ contains
 !     use EDParamsMod, only : logging_export_frac
 !     use EDPftvarcon, only : EDPftvarcon_inst
     use EDTypesMod, only : dtype_ilog
-    use EDTypesMod, only : dump_patch !, dump_cohort
+    use EDTypesMod, only : dump_patch, dump_cohort
     use FatesConstantsMod, only : fates_tiny
     use FatesConstantsMod, only : nearzero
 !     use FatesLitterMod, only : ncwd
