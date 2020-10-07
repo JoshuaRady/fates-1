@@ -293,11 +293,11 @@ contains
     control_needed = .false.
     
     ! Manually trigger events for initial testing: TEMPORARY!
-    if (hlm_current_year == 19?? & hlm_current_month = 1 & hlm_current_day == 1)
+    if (hlm_current_year == 2050 & hlm_current_month = 1 & hlm_current_day == 1)
       thinning_needed = .true.
-    else if (hlm_current_year == 19?? & hlm_current_month = 1 & hlm_current_day == 1)
+    else if (hlm_current_year == 2050 & hlm_current_month = 1 & hlm_current_day == 1)
       harvest_needed = .true.
-    else if (hlm_current_year == 19?? & hlm_current_month = 1 & hlm_current_day == 1)
+    else if (hlm_current_year == 2050 & hlm_current_month = 1 & hlm_current_day == 1)
       control_needed = .true.
     endif
     
