@@ -110,8 +110,10 @@ module FatesVegetationManagementMod
   ! default 16 pft parameter set.  We need a better way to get the classes of PFTs. The woody flag
   ! (EDPftvarcon_inst%woody) includes shrubs.
   !integer(i4), allocatable, dimension(:), target, private :: woody_pfts
-  integer(i4), parameter, target, private :: woody_pfts(9) = [1,2,3,4,5,6,7,8,9]
-  integer(i4), parameter, target, private :: tree_pfts(6) = [1,2,3,4,5,6]
+  !integer(i4), parameter, private :: woody_pfts(9) = [1,2,3,4,5,6,7,8,9]
+  !integer(i4), parameter, private :: tree_pfts(6) = [1,2,3,4,5,6]
+  integer(i4), target, private :: woody_pfts(9) = [1,2,3,4,5,6,7,8,9]
+  integer(i4), target, private :: tree_pfts(6) = [1,2,3,4,5,6]
   ! Shrubs?
   ! Understory?
   
@@ -3062,7 +3064,7 @@ contains
     real(r8), parameter :: ht_massive = 115.92_r8 ! Hyperion: Sequoia sempervirens
     
     real(r8) :: patch_harvestable_stems ! Number of plants available for harvest.
-    real(r8) :: cohort_harvestable_biomass
+    real(r8) :: cohort_harvest ! cohort_harvestable_biomass
     real(r8) :: patch_harvestable_biomass
     real(r8) :: best_patch_harvestable_stems
     real(r8) :: best_patch_harvestable_biomass
@@ -3196,7 +3198,8 @@ contains
                 
                 ! Accumulated the potentially harvestable biomass:
                 ! Currently this the bole X logging module modifiers
-                cohort_harvestable_biomass = cohort_harvestable_biomass(current_cohort)
+                !cohort_harvestable_biomass = cohort_harvestable_biomass(current_cohort)
+                cohort_harvest = cohort_harvestable_biomass(current_cohort)
                 
                 ! This is wrong!!!!! Need to use n not patch_harvestable_stems:
                 !patch_harvestable_biomass = patch_harvestable_biomass + &
@@ -3753,7 +3756,7 @@ contains
       do while(associated(current_cohort))
         
         if (any(pfts == current_cohort%pft)) then
-          disturbed_basal_area = disturbed_basal_area + cohort_disturbed_basal_area(cohort) !disturbed_basal_area(cohort)
+          disturbed_basal_area = disturbed_basal_area + cohort_disturbed_basal_area(current_cohort) !disturbed_basal_area(current_cohort)
         endif
         
         current_cohort => current_cohort%taller
