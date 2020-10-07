@@ -89,10 +89,10 @@ module FatesVegetationManagementMod
     module procedure patch_disturbed_n
   end interface
   
-  interface disturbed_stem_density
-    module procedure cohort_disturbed_n
-    module procedure patch_disturbed_n
-  end interface
+!   interface disturbed_stem_density
+!     module procedure cohort_disturbed_n
+!     module procedure patch_disturbed_n
+!   end interface
   
   interface disturbed_basal_area
     module procedure cohort_disturbed_basal_area
@@ -1627,6 +1627,8 @@ contains
     ! Uses:
     ! use EDtypesMod, only : area
     !use EDLoggingMortalityMod, only : harvest_litter_localization
+    use EDParamsMod, only : logging_coll_under_frac
+    use EDPftvarcon, only : GetDecompyFrac
     use EDtypesMod,   only : ed_site_type
     use EDtypesMod,   only : ed_patch_type
     use EDtypesMod,   only : ed_cohort_type
@@ -1642,6 +1644,8 @@ contains
     use EDTypesMod, only : num_elements, element_list
     use EDTypesMod, only : site_massbal_type
     use EDTypesMod, only : site_fluxdiags_type
+    use PRTGenericMod, only : struct_organ, leaf_organ, fnrt_organ, sapw_organ, store_organ, repro_organ
+    use PRTGenericMod, only : carbon12_element!, nitrogen_element,  phosphorus_element
     
     ! Arguments:
     ! Possibly unnecessary, we could get the site from the current_patch:
@@ -2104,7 +2108,7 @@ contains
       current_cohort => current_cohort%taller
     enddo
     
-  end subroutine management_fluxes2
+  end subroutine management_fluxes
   
   !=================================================================================================
   ! Managed Mortality Primitives:
@@ -2380,7 +2384,7 @@ contains
     endif
         
     ! Only allow for one mortality type that matches that being requested here:
-    num_mortalities = count(prev_vm_mortalities /= 0)
+    num_mortalities = count(prev_mortalities /= 0)
     if (num_mortalities > 1) then
       write(fates_log(),*) 'There is more that one mortality staged.'
       call endrun(msg = errMsg(__FILE__, __LINE__))
@@ -2458,6 +2462,7 @@ contains
     type(ed_cohort_type), intent(inout), target :: cohort ! The cohort to apply mortality to.
     integer, intent(in) :: flux_profile ! A code specifying where the dead material goes.
     real(r8), intent(in) :: kill_fraction ! Fraction of plants to remove from disturbed sub-patch.
+    ! Make optional and default to 1.0 / everything?????
     
     ! If we include the area_fraction argument it needs to be interpreted differently here.
     
@@ -2485,7 +2490,7 @@ contains
     ! Determine if any mortalities have been staged:
     
     ! We only allow vegetation management mortalities:
-    if (current_cohort%lmort_direct > 0.0_r8) then
+    if (cohort%lmort_direct > 0.0_r8) then
       write(fates_log(),*) "Can't currently mix traditional logging module events with other vegetation management."
       call endrun(msg = errMsg(__FILE__, __LINE__))
     endif
@@ -2683,6 +2688,7 @@ contains
     integer(i4) :: thin_pfts(:) ! Holds the PFTs to thin, computed from arguments.
     !integer(i4), dimension(:), allocatable :: thin_pfts ! Holds the PFTs to thin, computed from arguments.
     real(r8) :: the_row_fraction ! Or change row_fraction -> row_fraction_in or row_fraction_opt
+    real(r8) :: the_patch_fraction
     !real(r8) :: row_reduction ! 
     
     logical :: use_bai ! If true use basal area index as the criteria, otherwise use stem density.
@@ -2692,6 +2698,8 @@ contains
     !real(r8) :: cohort_sd ! Cohort level stem density (plants / ha)
     real(r8) :: cohort_stems
     real(r8) :: thin_ba_remaining
+    real(r8) :: thin_sd_remaining
+    real(r8) :: cohort_fraction
     real(r8) :: harvest ! Accumulator
     
     type (ed_cohort_type), pointer :: current_cohort
@@ -2782,14 +2790,14 @@ contains
     !patch_bai = effective_basal_area(patch, thin_pfts)
     !patch_sd = effective_stem_density(patch, thin_pfts)
     patch_bai = disturbed_basal_area(patch, thin_pfts)
-    patch_sd = disturbed_stem_density(patch, thin_pfts)
+    patch_sd = patch_disturbed_n(patch, thin_pfts) !disturbed_stem_density(patch, thin_pfts)
     
     ! If the stand is above the goal value (BAI or stem density) start thinning:
     if ((use_bai .and. (patch_bai > final_basal_area)) .or. &
         ((.not. use_bai) .and. (patch_sd > final_stem_density))) then
       
       ! Thin every X rows = remove 1/X of each cohort:----------------------------------------------
-      current_cohort => current_patch%shortest
+      current_cohort => patch%shortest
       do while(associated(current_cohort))
         
         if (any(pfts == current_cohort%pft)) then
@@ -2809,7 +2817,7 @@ contains
       ! happen later.  Therefore we need to keep track of the changes to BAI, density, and plant
       ! number's manually from here on.
       patch_bai = disturbed_basal_area(patch, thin_pfts)
-      patch_sd = disturbed_stem_density(patch, thin_pfts)
+      patch_sd = patch_disturbed_n(patch, thin_pfts) !disturbed_stem_density(patch, thin_pfts)
       
       ! If still above our goal BAI / density thin out the smallest trees (low thinning) recursively
       ! until the goal has been reached:
@@ -2818,7 +2826,7 @@ contains
       if (use_bai) then ! Thin to a goal basal area:
         
         ! Given the fixed allometry this will also give us cohorts from the lowest DBH:
-        current_cohort => current_patch%shortest
+        current_cohort => patch%shortest
         do while(patch_bai > final_basal_area)
           
           if (any(pfts == current_cohort%pft)) then
@@ -2836,7 +2844,8 @@ contains
               
               !call kill(cohort = current_cohort, flux_profile = bole_harvest, &
               !          area_fraction = the_patch_fraction)
-              call kill_disturbed(cohort = current_cohort, flux_profile = bole_harvest)
+              call kill_disturbed(cohort = current_cohort, flux_profile = bole_harvest, &
+                                  kill_fraction = 1.0_r8)
               
             else ! Otherwise only take part of the cohort:
               
@@ -2860,7 +2869,7 @@ contains
         ! This loop is identically structured to the above so the two could be combined by
         ! generalizing the comparator variables.
         
-        current_cohort => current_patch%shortest
+        current_cohort => patch%shortest
         do while(patch_sd > final_stem_density)
           
           if (any(pfts == current_cohort%pft)) then
@@ -2870,7 +2879,7 @@ contains
             ! Because of n is per nominal hectare n = stem density (n/ha)
             !cohort_sd = effective_stem_density(current_cohort)
             !cohort_stems = effective_n(current_cohort)
-            cohort_stems = disturbed_stem_density(current_cohort)
+            cohort_stems = cohort_disturbed_n(patch, thin_pfts) !disturbed_stem_density(current_cohort)
             
             ! Remaining stems to remove:
             thin_sd_remaining = patch_sd - final_stem_density
@@ -2880,7 +2889,8 @@ contains
               
               !call kill(cohort = current_cohort, flux_profile = bole_harvest, &
               !          area_fraction = the_patch_fraction)
-              call kill_disturbed(cohort = current_cohort, flux_profile = bole_harvest)
+              call kill_disturbed(cohort = current_cohort, flux_profile = bole_harvest, &
+                                kill_fraction = 1.0_r8)
               
             else ! Otherwise only take part of the cohort:
               
@@ -2895,7 +2905,7 @@ contains
           
           ! Accumulate harvest estimate:
           harvest = harvest + cohort_harvestable_biomass(current_cohort) ! staged = true!!!!
-          patch_sd = disturbed_stem_density(patch, thin_pfts) ! Update the stem density.
+          patch_sd = patch_disturbed_n(patch, thin_pfts) ! disturbed_stem_density(patch, thin_pfts) ! Update the stem density.
         end do ! Cohort loop.
       endif ! (use_bai)
     endif ! Stand is above goal loop.
@@ -3058,6 +3068,7 @@ contains
     integer :: forest_class ! Primary or secondary
     integer :: num_patches ! The number of patches of a certain forest class.
     integer :: search_cycles ! Counter
+    integer :: 1 ! Counter
     
     ! ----------------------------------------------------------------------------------------------
     
@@ -3511,7 +3522,7 @@ contains
 
   !=================================================================================================
 
-  subroutine patch_effective_n(patch, pfts) ! result(effective_n)
+  function patch_effective_n(patch, pfts) ! result(effective_n)
     ! ----------------------------------------------------------------------------------------------
     ! Return the effective stem count for a patch after applying any existing staged potential
     ! mortalities, for only the PFTs passed in.
@@ -3541,7 +3552,7 @@ contains
       current_cohort => current_cohort%taller
     end do ! Cohort loop.
     
-  end subroutine patch_effective_n
+  end function patch_effective_n
 
   !=================================================================================================
 
@@ -3641,7 +3652,7 @@ contains
 
   !=================================================================================================
 
-  subroutine patch_disturbed_n(patch, pfts)! result(disturbed_n)
+  function patch_disturbed_n(patch, pfts)! result(disturbed_n)
     ! ----------------------------------------------------------------------------------------------
     ! Return the stem count for the nascent disturbed patch based on the staged mortalities.
     ! Because of n is per nominal hectare n = stem density (plants/ha).
@@ -3671,7 +3682,7 @@ contains
       current_cohort => current_cohort%taller
     end do ! Cohort loop.
     
-  end subroutine patch_disturbed_n
+  end function patch_disturbed_n
 
   !=================================================================================================
 
