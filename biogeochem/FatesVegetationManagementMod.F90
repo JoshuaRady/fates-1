@@ -417,8 +417,8 @@ contains
         
         do while(associated(current_cohort))
           if (current_cohort%pft == 4 .or. current_cohort%pft == 12) then
-            call kill(cohort = current_cohort, flux_profile = bole_harvest, kill_fraction = 0.5_r8 &
-                      area_fraction = 1.0_r8)
+            call kill(cohort = current_cohort, flux_profile = bole_harvest, kill_fraction = 0.5_r8, &
+                      area_fraction = 1.0_r8) ! Leaving out the area_fraction right now won't work.  Fix that.
           endif
         end do ! Cohort loop.
         
