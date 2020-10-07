@@ -300,7 +300,7 @@ contains
     ! Manually trigger events for initial testing: TEMPORARY!
     if (hlm_current_year == 2050 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
       thinning_needed = .true.
-    else if (hlm_current_year == 2050 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
+    else if (hlm_current_year == 2050 .and. hlm_current_month == 7 .and. hlm_current_day == 1) then
       harvest_needed = .true.
     else if (hlm_current_year == 2050 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
       control_needed = .true.
@@ -409,6 +409,9 @@ contains
       !call harvest_by_mass(site_in, ...) !...
       
       ! Estimate the woodproduct (trunk_product_site) if not done already. !!!!!
+      
+      ! Simple test: Hopefully the change in the PFT, whatever it is, will be noticeable.
+      kill(cohort = site_in%oldest_patch%tallest, kill_fraction = 0.5_r8)
       
     endif
     
@@ -3408,12 +3411,16 @@ contains
       ! Get the harvest rate (assumes only one, which should be safe):
       harvest_fraction = max(cohort%lmort_direct, cohort%vm_mort_bole_harvest)
       
-      if (harvest_fraction == 0.0_r8) then
-        write(fates_log(),*) 'No harvest is currently staged.'
-        call endrun(msg = errMsg(__FILE__, __LINE__))
-      endif
+!       if (harvest_fraction == 0.0_r8) then
+!         write(fates_log(),*) 'No harvest is currently staged.'
+!         call endrun(msg = errMsg(__FILE__, __LINE__))
+!       endif
+!       
+!       harvest = harvest * harvest_fraction
       
-      harvest = harvest * harvest_fraction
+      if (harvest_fraction /= 0.0_r8) then
+        harvest = harvest * harvest_fraction
+      endif
     endif
     
   end function cohort_harvestable_biomass
