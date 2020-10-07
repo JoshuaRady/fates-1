@@ -110,8 +110,8 @@ module FatesVegetationManagementMod
   ! default 16 pft parameter set.  We need a better way to get the classes of PFTs. The woody flag
   ! (EDPftvarcon_inst%woody) includes shrubs.
   !integer(i4), allocatable, dimension(:), target, private :: woody_pfts
-  integer(i4), parameter, private :: woody_pfts(9) = [1,2,3,4,5,6,7,8,9]
-  integer(i4), parameter, private :: tree_pfts(6) = [1,2,3,4,5,6]
+  integer(i4), parameter, target, private :: woody_pfts(9) = [1,2,3,4,5,6,7,8,9]
+  integer(i4), parameter, target, private :: tree_pfts(6) = [1,2,3,4,5,6]
   ! Shrubs?
   ! Understory?
   
@@ -2672,7 +2672,8 @@ contains
     ! Which tree PFTs are harvestable trees.  If omitted all woody trees will be used.  Otherwise
     ! any omitted will be ignored for the purpose of calculating BAI and stem density.
     ! Be careful when excluding PFTs that may compete in the canopy.
-    integer(i4), intent(in), optional :: pfts(:)         ! An array of PFT IDs to thin.
+    !integer(i4), intent(in), optional :: pfts(:)         ! An array of PFT IDs to thin.
+    integer(i4), intent(in), optional, target :: pfts(:) ! An array of PFT IDs to thin.
     real(r8), intent(in), optional :: row_fraction       ! The fraction of rows to initially thin,
                                                          ! e.g. every 5th row = 0.2, often every 4th or 5th row...
                                                          ! Alternatively, supply as a row frequency?
@@ -2685,8 +2686,9 @@ contains
     real(r8), intent(out), optional :: harvest_estimate  ! The wood harvested by this opperation.
     
     ! Locals:
-    integer(i4) :: thin_pfts(:) ! Holds the PFTs to thin, computed from arguments.
+    !integer(i4) :: thin_pfts(:) ! Holds the PFTs to thin, computed from arguments.
     !integer(i4), dimension(:), allocatable :: thin_pfts ! Holds the PFTs to thin, computed from arguments.
+    integer(i4), pointer, dimension(:) :: thin_pfts
     real(r8) :: the_row_fraction ! Or change row_fraction -> row_fraction_in or row_fraction_opt
     real(r8) :: the_patch_fraction
     !real(r8) :: row_reduction ! 
@@ -2741,9 +2743,11 @@ contains
         call endrun(msg = errMsg(__FILE__, __LINE__))
       end if
       
-      thin_pfts = pfts
+      !thin_pfts = pfts
+      thin_pfts => pfts
     else ! Otherwise thin all tree PFTs:
-      thin_pfts = tree_pfts
+      !thin_pfts = tree_pfts
+      thin_pfts => tree_pfts
     endif
     
     ! Determine the thinning amount:
@@ -2879,7 +2883,7 @@ contains
             ! Because of n is per nominal hectare n = stem density (n/ha)
             !cohort_sd = effective_stem_density(current_cohort)
             !cohort_stems = effective_n(current_cohort)
-            cohort_stems = cohort_disturbed_n(patch, thin_pfts) !disturbed_stem_density(current_cohort)
+            cohort_stems = cohort_disturbed_n(current_cohort) !disturbed_stem_density(current_cohort)
             
             ! Remaining stems to remove:
             thin_sd_remaining = patch_sd - final_stem_density
@@ -3063,6 +3067,7 @@ contains
     real(r8) :: best_patch_harvestable_stems
     real(r8) :: best_patch_harvestable_biomass
     real(r8) :: patch_harvest_fraction
+    real(r8) :: harvest_remaining
     real(r8) :: harvest_total ! Running total of wood product harvested.
     
     integer :: forest_class ! Primary or secondary
@@ -3191,7 +3196,7 @@ contains
                 
                 ! Accumulated the potentially harvestable biomass:
                 ! Currently this the bole X logging module modifiers
-                cohort_harvestable_biomass = harvestable_biomass(current_cohort)
+                cohort_harvestable_biomass = cohort_harvestable_biomass(current_cohort)
                 
                 ! This is wrong!!!!! Need to use n not patch_harvestable_stems:
                 !patch_harvestable_biomass = patch_harvestable_biomass + &
@@ -3294,8 +3299,8 @@ contains
     ! Locals:
     real(r8) :: harvest ! Return value.
     integer(i4) :: the_profile ! Name?
-    integer(i4), dimension(:) :: valid_pfts ! Can't be defined this way, make a pointer?
-    !integer(i4), pointer, dimension(:) :: valid_pfts
+    !integer(i4), dimension(:) :: valid_pfts ! Can't be defined this way, make a pointer?
+    integer(i4), pointer, dimension(:) :: valid_pfts
     
     ! ----------------------------------------------------------------------------------------------
     
@@ -3311,12 +3316,12 @@ contains
     ! For the implemented modes the only difference is what is considered a harvestable 'tree':
     select case(the_profile)
       case(logging_traditional)
-        ! valid_pfts => woody_pfts
-        valid_pfts = woody_pfts
+        valid_pfts => woody_pfts
+        !valid_pfts = woody_pfts
         
       case(bole_harvest)
-        !valid_pfts => tree_pfts
-        valid_pfts = tree_pfts
+        valid_pfts => tree_pfts
+        !valid_pfts = tree_pfts
         
       case default
         write(fates_log(),*) 'Invalid harvest profile passed in.'
@@ -3551,7 +3556,7 @@ contains
     do while(associated(current_cohort))
     
       if (any(pfts == current_cohort%pft)) then
-        patch_effective_n = patch_effective_n + patch_effective_n(patch) ! effective_n(cohort)
+        patch_effective_n = patch_effective_n + cohort_effective_n(current_cohort) ! effective_n(current_cohort)
       endif
       
       current_cohort => current_cohort%taller
@@ -3684,7 +3689,7 @@ contains
     do while(associated(current_cohort))
     
       if (any(pfts == current_cohort%pft)) then
-        patch_disturbed_n = patch_disturbed_n + cohort_disturbed_n(cohort) !disturbed_n(cohort)
+        patch_disturbed_n = patch_disturbed_n + cohort_disturbed_n(current_cohort) !disturbed_n(cohort)
       endif
       
       current_cohort => current_cohort%taller
@@ -3716,7 +3721,7 @@ contains
     ! ----------------------------------------------------------------------------------------------
     
     ! Only the adjusted stem count is need, the rest of the equation is unchanged: 
-    disturbed_basal_area = pi_const * (current%dbh / 2.0_r8)**2 * disturbed_n(cohort)
+    disturbed_basal_area = pi_const * (cohort%dbh / 2.0_r8)**2 * disturbed_n(cohort)
     
   end function cohort_disturbed_basal_area
 
