@@ -277,6 +277,8 @@ contains
     real(r8) :: patch_mort ! patch_mortality?????
     
     ! ----------------------------------------------------------------------------------------------
+    if (debug) write(fates_log(), *) 'managed_mortality() entering.'
+    
     ! An estimate of the harvest flux will be made and stored subsequently:
     site_in%harvest_carbon_flux = 0._r8
     
@@ -601,7 +603,7 @@ contains
       ! rate directly without an need for accumulation.
       
       ! Loop over the cohorts in each patch and find the largest patch fraction while checking
-      ! values for a valid combinations:
+      ! values for valid combinations:
       current_patch => site_in%oldest_patch
       do while (associated(current_patch))
         
@@ -620,8 +622,8 @@ contains
           else if (patch_disturbance /= 0.0_r8 .and. cohort_disturbance /= patch_disturbance) then
             ! Error:
             write(fates_log(),*) 'More than one disturbance rate was detected in this patch.'
-            ! Need to add new members to dump_patch()!!!!!
             call dump_patch(current_patch)
+            call dump_cohort(current_cohort)
             call endrun(msg = errMsg(__FILE__, __LINE__))
           endif
           ! When (cohort_disturbance == patch_disturbance) do nothing.
@@ -675,6 +677,7 @@ contains
       
     endif ! (logging_time)
     
+    if (debug) write(fates_log(), *) 'managed_mortality() exiting.'
   end subroutine managed_mortality
   
   !=================================================================================================
