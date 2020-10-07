@@ -617,16 +617,32 @@ contains
           cohort_disturbance = max(current_cohort%vm_pfrac_bole_harvest, current_cohort%vm_mort_in_place)
           
           ! Make sure the disturbance is consistant across cohorts:
-          if (patch_disturbance == 0.0_r8 .and. cohort_disturbance /= 0.0_r8) then
-            patch_disturbance = cohort_disturbance
-          else if (patch_disturbance /= 0.0_r8 .and. cohort_disturbance /= patch_disturbance) then
-            ! Error:
-            write(fates_log(),*) 'More than one disturbance rate was detected in this patch.'
-            call dump_patch(current_patch)
-            call dump_cohort(current_cohort)
-            call endrun(msg = errMsg(__FILE__, __LINE__))
-          endif
+          ! This has a logic hole:
+!           if (patch_disturbance == 0.0_r8 .and. cohort_disturbance /= 0.0_r8) then
+!             patch_disturbance = cohort_disturbance
+!           else if (patch_disturbance /= 0.0_r8 .and. cohort_disturbance /= patch_disturbance) then
+!             ! Error:
+!             write(fates_log(),*) 'More than one disturbance rate was detected in this patch.'
+!             call dump_patch(current_patch)
+!             call dump_cohort(current_cohort)
+!             call endrun(msg = errMsg(__FILE__, __LINE__))
+!           endif
           ! When (cohort_disturbance == patch_disturbance) do nothing.
+          
+          !Revised:
+          if (cohort_disturbance /= 0.0_r8) then ! 
+            if (patch_disturbance == 0.0_r8) then
+              patch_disturbance = cohort_disturbance
+            else if (patch_disturbance /= cohort_disturbance) then
+              ! Don't allow multiple (different) management activities to co-occur:
+              write(fates_log(),*) 'More than one disturbance rate was detected in this patch.'
+              write(fates_log(),*) 'patch_disturbance  = ', patch_disturbance
+              write(fates_log(),*) 'cohort_disturbance = ', cohort_disturbance
+              call dump_patch(current_patch)
+              call dump_cohort(current_cohort)
+              call endrun(msg = errMsg(__FILE__, __LINE__))
+             endif
+           endif
           
           ! Calculate the total patch wide mortality rate:
           ! With more than one activity we would sum them...
