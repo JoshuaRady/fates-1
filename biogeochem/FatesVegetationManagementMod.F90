@@ -123,9 +123,9 @@ module FatesVegetationManagementMod
   ! Mode / flux profiles:
   ! There are may be more practices than flux or harvest profiles.  logging_traditional -> bole_harvest
   integer, parameter, private :: null_profile = 0
-  logging_traditional = 1 ! logging_module, logging_legacy, logginng_classic
-  bole_harvest = 2 ! harvest_bole ! better namespacing
-  in_place = 3
+  integer, parameter, private :: logging_traditional = 1 ! logging_module, logging_legacy, logginng_classic
+  integer, parameter, private :: bole_harvest = 2 ! harvest_bole ! better namespacing
+  integer, parameter, private :: in_place = 3
   
   !=================================================================================================
   
@@ -153,7 +153,7 @@ contains
 !
 !   !=================================================================================================
 
-  subroutine vegetation_management_init(hlm_masterproc, site) ! REVIEW!
+  subroutine vegetation_management_init(is_master_processor, site) ! REVIEW!
     ! ----------------------------------------------------------------------------------------------
     ! Perform initialization of module globals and determine what vegetation management is due...
     !
@@ -227,7 +227,7 @@ contains
     ! ----------------------------------------------------------------------------------------------
     
     ! Uses:
-    use FatesInterfacezTypesMod, only : hlm_current_year, hlm_current_month, hlm_current_day ! Temp!
+    use FatesInterfaceTypesMod, only : hlm_current_year, hlm_current_month, hlm_current_day ! Temp!
     
     ! From anthro_disturbance_rate():
     use EDLoggingMortalityMod, only : get_harvest_rate_area
@@ -293,11 +293,11 @@ contains
     control_needed = .false.
     
     ! Manually trigger events for initial testing: TEMPORARY!
-    if (hlm_current_year == 2050 & hlm_current_month == 1 & hlm_current_day == 1) then
+    if (hlm_current_year == 2050 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
       thinning_needed = .true.
-    else if (hlm_current_year == 2050 & hlm_current_month == 1 & hlm_current_day == 1) then
+    else if (hlm_current_year == 2050 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
       harvest_needed = .true.
-    else if (hlm_current_year == 2050 & hlm_current_month == 1 & hlm_current_day == 1) then
+    else if (hlm_current_year == 2050 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
       control_needed = .true.
     endif
     
@@ -2754,9 +2754,9 @@ contains
     if (present(final_basal_area) .and. present(final_stem_density)) then
       write(fates_log(),*) 'thin_row_low(): Provide basal area index or stem density, not both.'
       call endrun(msg = errMsg(__FILE__, __LINE__))
-    else if (present(final_basal_area) then
+    else if (present(final_basal_area)) then
       use_bai = .true.
-    else if (present(final_stem_density) then
+    else if (present(final_stem_density)) then
       use_bai = .false.
     else
       write(fates_log(),*) 'thin_row_low(): Must provide basal area index or stem density.'
@@ -2886,7 +2886,7 @@ contains
     endif ! Stand is above goal loop.
     ! Consider adding warning here if patch is below goal?
     
-    if (present(harvest_estimate))
+    if (present(harvest_estimate)) then
       harvest_estimate = harvest
     endif
     ! Should anything be done or reported if no thinning was needed?
@@ -3194,8 +3194,8 @@ contains
           ! Note: Similar to logic in thinning:
           if (harvest_remaining >= best_patch_harvestable_biomass) then
             ! If less than the remaining demand harvest all the trees in the patch:
-            harvest_patch(patch = best_patch, pfts = pfts, dbh_min = the_dbh_min,
-                          dbh_max = the_dbh_max, ht_min = the_ht_min, ht_max = the_ht_max) ! !!!!!!!!!!!!!!!!!!!!!!!! 
+!             harvest_patch(patch = best_patch, pfts = pfts, dbh_min = the_dbh_min, &    Not implemented!
+!                           dbh_max = the_dbh_max, ht_min = the_ht_min, ht_max = the_ht_max) ! !!!!!!!!!!!!!!!!!!!!!!!! 
             
             harvest_total = harvest_total + best_patch_harvestable_biomass ! Record the harvest.
           else
@@ -3203,9 +3203,9 @@ contains
             ! smallest area of a heterogeneous area represented by the patch:
             patch_harvest_fraction = harvest_remaining / best_patch_harvestable_biomass
             
-            harvest_patch(patch = best_patch, pfts = pfts, dbh_min = the_dbh_min,
-                          dbh_max = the_dbh_max, ht_min = the_ht_min, ht_max = the_ht_max,
-                          fraction = patch_harvest_fraction)
+!             harvest_patch(patch = best_patch, pfts = pfts, dbh_min = the_dbh_min, &
+!                           dbh_max = the_dbh_max, ht_min = the_ht_min, ht_max = the_ht_max, &
+!                           fraction = patch_harvest_fraction)
             
             harvest_total = harvest_total + (best_patch_harvestable_biomass * patch_harvest_fraction)
             
@@ -3273,7 +3273,7 @@ contains
     harvest = 0.0_r8
     
     ! Determine the type of harvest:
-    if (present(harvest_profile))
+    if (present(harvest_profile)) then
       the_profile = harvest_profile
     else
       the_profile = bole_harvest
@@ -3320,7 +3320,7 @@ contains
 
   !=================================================================================================
 
-  function cohort_harvestable_biomass(cohort, harvest_profile, staged) result(harvest)
+  function cohort_harvestable_biomass(cohort, harvest_profile, staged) result(harvest) ! Review!
     ! ----------------------------------------------------------------------------------------------
     ! Return the harvestable biomass for the whole cohort or, if staged = true, the yield based on
     ! the harvest rates stored (staged) in the cohort object passed in.
@@ -3351,7 +3351,7 @@ contains
     ! ----------------------------------------------------------------------------------------------
     
     ! Determine the type of harvest:
-    if (present(harvest_profile))
+    if (present(harvest_profile)) then
       the_profile = harvest_profile
       ! Validity checking is performed in plant_harvestable_biomass().
       endif
@@ -3368,12 +3368,12 @@ contains
       ! Get the harvest rate (assumes only one, which should be safe):
       harvest_fraction = max(cohort%lmort_direct, cohort%vm_mort_bole_harvest)
       
-      if (harvest_fraction == 0.0_r8)
+      if (harvest_fraction == 0.0_r8) then
         write(fates_log(),*) 'No harvest is currently staged.'
         call endrun(msg = errMsg(__FILE__, __LINE__))
       endif
       
-      harvest * harvest_fraction
+      harvest = harvest * harvest_fraction
     endif
     
   end function cohort_harvestable_biomass
@@ -3557,20 +3557,20 @@ contains
     ! The following are pretty conservative checks:
     
     ! This is not currently intended to be used along with logging module harvests:
-    if (cohort%lmort_direct /= 0.0_r8)
+    if (cohort%lmort_direct /= 0.0_r8) then
       write(fates_log(),*) 'effective_n() is not currently intended to be use in conjunction with traditional logging module events.'
       call dump_cohort(cohort)
       call endrun(msg = errMsg(__FILE__, __LINE__))
     endif
     
-    if (cohort%vm_mort_bole_harvest > 0.0_r8 .and. cohort%vm_mort_in_place > 0.0_r8)
+    if (cohort%vm_mort_bole_harvest > 0.0_r8 .and. cohort%vm_mort_in_place > 0.0_r8) then
       write(fates_log(),*) 'effective_n(): more than one management mortality type staged.'
       call dump_cohort(cohort)
       call endrun(msg = errMsg(__FILE__, __LINE__))
     endif
     
     staged_mortality = max(cohort%vm_mort_bole_harvest, cohort%vm_mort_in_place)
-    if (staged_mortality == 0.0_r8)
+    if (staged_mortality == 0.0_r8) then
       effective_n = cohort%n
     else
       ! effective_n = cohort%n * staged_mortality ! Yikes, wrong!
@@ -3603,20 +3603,20 @@ contains
     staged_mortality = 0.0_r8 ! Initialize.
     
     ! This is not currently intended to be used along with logging module harvests:
-    if (cohort%lmort_direct /= 0.0_r8)
+    if (cohort%lmort_direct /= 0.0_r8) then
       write(fates_log(),*) 'disturbed_n() is not currently intended to be use in conjunction with traditional logging module events.'
       call dump_cohort(cohort)
       call endrun(msg = errMsg(__FILE__, __LINE__))
     endif
     
-    if (cohort%vm_mort_bole_harvest > 0.0_r8 .and. cohort%vm_mort_in_place > 0.0_r8)
+    if (cohort%vm_mort_bole_harvest > 0.0_r8 .and. cohort%vm_mort_in_place > 0.0_r8) then
       write(fates_log(),*) 'disturbed_n(): more than one management mortality type staged.'
       call dump_cohort(cohort)
       call endrun(msg = errMsg(__FILE__, __LINE__))
     endif
     
     staged_mortality = max(cohort%vm_mort_bole_harvest, cohort%vm_mort_in_place)
-    if (staged_mortality == 0.0_r8)
+    if (staged_mortality == 0.0_r8) then
       disturbed_n = cohort%n
     else
       disturbed_n = (cohort%n * pfrac) - (cohort%n * staged_mortality)
