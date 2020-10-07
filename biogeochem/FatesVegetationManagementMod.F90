@@ -240,7 +240,7 @@ contains
 !     use EDParamsMod, only : logging_export_frac
 !     use EDPftvarcon, only : EDPftvarcon_inst
     use EDTypesMod, only : dtype_ilog
-    use EDTypesMod, only : dump_cohort
+    use EDTypesMod, only : dump_patch !, dump_cohort
     use FatesConstantsMod, only : fates_tiny
     use FatesConstantsMod, only : nearzero
 !     use FatesLitterMod, only : ncwd
@@ -1634,7 +1634,8 @@ contains
     use EDtypesMod,   only : ed_site_type
     use EDtypesMod,   only : ed_patch_type
     use EDtypesMod,   only : ed_cohort_type
-    use FatesAllometryMod , only : carea_allom
+    use FatesAllometryMod, only : carea_allom
+    use FatesAllometryMod, only : set_root_fraction
     use FatesConstantsMod, only : rsnbl_math_prec
     use FatesInterfaceTypesMod, only : hlm_use_planthydro
     use FatesLitterMod, only : ncwd ! The number of coarse woody debris pools.

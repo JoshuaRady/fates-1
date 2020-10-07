@@ -250,7 +250,7 @@ contains
     
     ! Calculate disturbance resulting from potential human vegetation management, including but not
     ! limited to logging:
-    call anthro_disturbance_rate(site_in, bc_in, frac_site_primary)
+    call managed_mortality(site_in, bc_in, frac_site_primary)
 
     ! Recalculate total canopy area prior to resolving the disturbance
 !     currentPatch => site_in%oldest_patch

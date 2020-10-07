@@ -338,7 +338,7 @@ module EDTypesMod
      real(r8) :: vm_mort_bole_harvest
      real(r8) :: vm_pfrac_in_place
      real(r8) :: vm_pfrac_bole_harvest
-     
+
      real(r8) :: seed_prod                               ! diagnostic seed production rate [kgC/plant/day]
 
      ! NITROGEN POOLS      
@@ -1038,10 +1038,20 @@ module EDTypesMod
      write(fates_log(),*) 'co%cmort                  = ', ccohort%cmort
      write(fates_log(),*) 'co%bmort                  = ', ccohort%bmort
      write(fates_log(),*) 'co%smort                  = ', ccohort%smort
-     write(fates_log(),*) 'co%asmort                 = ', ccohort%asmort
+     !write(fates_log(),*) 'co%asmort                 = ', ccohort%asmort
      write(fates_log(),*) 'co%hmort                  = ', ccohort%hmort
      write(fates_log(),*) 'co%frmort                 = ', ccohort%frmort
      write(fates_log(),*) 'co%asmort                 = ', ccohort%asmort
+
+     write(fates_log(),*) 'co%lmort_direct           = ', ccohort%lmort_direct
+     write(fates_log(),*) 'co%lmort_collateral       = ', ccohort%lmort_collateral
+     write(fates_log(),*) 'co%lmort_infra            = ', ccohort%lmort_infra
+     write(fates_log(),*) 'co%l_degrad               = ', ccohort%l_degrad
+     write(fates_log(),*) 'co%vm_mort_in_place       = ', ccohort%vm_mort_in_place
+     write(fates_log(),*) 'co%vm_mort_bole_harvest   = ', ccohort%vm_mort_bole_harvest
+     write(fates_log(),*) 'co%vm_pfrac_in_place      = ', ccohort%vm_pfrac_in_place
+     write(fates_log(),*) 'co%vm_pfrac_bole_harvest  = ', ccohort%vm_pfrac_bole_harvest
+
      write(fates_log(),*) 'co%isnew                  = ', ccohort%isnew
      write(fates_log(),*) 'co%dndt                   = ', ccohort%dndt
      write(fates_log(),*) 'co%dhdt                   = ', ccohort%dhdt
