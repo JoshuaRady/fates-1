@@ -3197,7 +3197,8 @@ contains
                 !patch_harvestable_biomass = patch_harvestable_biomass + &
                 !                            (cohort_harvestable_biomass * patch_harvestable_stems)
                 
-              else
+              !else
+              endif
               
               current_cohort => current_cohort%taller
             end do ! Cohort loop.
@@ -3239,14 +3240,14 @@ contains
             exit
             ! We could include the conditional (harvest_remaining > 0) in the bounding do loop but
             ! using exit avoids an potential floating point comparison issues.
-          endif
+          endif ! (harvest_remaining > 0)
         else
           ! If we have run out of patches that have harvestable trees terminate early:
           exit
         endif ! (best_patch_harvestable > 0)
         
         search_cycles = search_cycles + 1
-      end do ! (harvest_remaining > 0)
+      end do ! (search_cycles < num_patches)
       
       ! Return the actual amounts harvested to return:
       if (i == 1) then
@@ -3280,6 +3281,8 @@ contains
     !use EDPftvarcon, only : EDPftvarcon_inst ! Make global?
     use FatesLitterMod, only : ncwd
     use SFParamsMod, only : SF_VAL_CWD_FRAC
+    use PRTGenericMod, only : all_carbon_elements
+    use PRTGenericMod, only : struct_organ, sapw_organ
     
     ! Arguments:
     type(ed_cohort_type), intent(in), target :: cohort
@@ -3291,8 +3294,8 @@ contains
     ! Locals:
     real(r8) :: harvest ! Return value.
     integer(i4) :: the_profile ! Name?
-    !integer(i4), dimension(:) :: valid_pfts ! Can't be defined this way, make a pointer?
-    integer(i4), pointer, dimension(:) :: valid_pfts
+    integer(i4), dimension(:) :: valid_pfts ! Can't be defined this way, make a pointer?
+    !integer(i4), pointer, dimension(:) :: valid_pfts
     
     ! ----------------------------------------------------------------------------------------------
     
@@ -3308,10 +3311,12 @@ contains
     ! For the implemented modes the only difference is what is considered a harvestable 'tree':
     select case(the_profile)
       case(logging_traditional)
-        valid_pfts => woody_pfts
+        ! valid_pfts => woody_pfts
+        valid_pfts = woody_pfts
         
       case(bole_harvest)
-        valid_pfts => tree_pfts
+        !valid_pfts => tree_pfts
+        valid_pfts = tree_pfts
         
       case default
         write(fates_log(),*) 'Invalid harvest profile passed in.'
@@ -3373,6 +3378,7 @@ contains
     real(r8) :: harvest ! Return value.
     type (ed_cohort_type), pointer :: current_cohort
     real(r8) :: harvest_fraction
+    integer :: the_profile
     
     ! ----------------------------------------------------------------------------------------------
     
@@ -3380,7 +3386,6 @@ contains
     if (present(harvest_profile)) then
       the_profile = harvest_profile
       ! Validity checking is performed in plant_harvestable_biomass().
-      endif
     else
       the_profile = bole_harvest
     endif
@@ -3484,9 +3489,9 @@ contains
       do while(associated(current_cohort))
         
         if (any(pfts == current_cohort%pft)) then
-          effective_basal_area = effective_basal_area + effective_basal_area(cohort)
+          effective_basal_area = effective_basal_area + cohort_effective_basal_area(current_cohort) ! effective_basal_area(current_cohort)
           ! effective_basal_area = effective_basal_area + &
-          !                        pi_const * (current_cohort%dbh / 2.0_r8)**2 * effective_n(cohort)
+          !                        pi_const * (current_cohort%dbh / 2.0_r8)**2 * effective_n(current_cohort)
         endif
         
         current_cohort => current_cohort%taller
@@ -3516,7 +3521,7 @@ contains
     ! ----------------------------------------------------------------------------------------------
     
     ! Only the adjusted stem count is need, the rest of the equation is unchanged: 
-    effective_basal_area = pi_const * (current_cohort%dbh / 2.0_r8)**2 * effective_n(cohort)
+    effective_basal_area = pi_const * (cohort%dbh / 2.0_r8)**2 * cohort_effective_n(cohort)! effective_n(cohort)
     
   end function cohort_effective_basal_area
 
@@ -3546,7 +3551,7 @@ contains
     do while(associated(current_cohort))
     
       if (any(pfts == current_cohort%pft)) then
-        patch_effective_n = patch_effective_n + effective_n(cohort)
+        patch_effective_n = patch_effective_n + patch_effective_n(patch) ! effective_n(cohort)
       endif
       
       current_cohort => current_cohort%taller
@@ -3623,10 +3628,12 @@ contains
     ! Locals:
     real(r8) :: disturbed_n ! Return value
     real(r8) :: staged_mortality
+    real(r8) :: staged_pfrac
     
     ! ----------------------------------------------------------------------------------------------
     
     staged_mortality = 0.0_r8 ! Initialize.
+    staged_pfrac = 0.0_r8
     
     ! This is not currently intended to be used along with logging module harvests:
     if (cohort%lmort_direct /= 0.0_r8) then
@@ -3642,10 +3649,11 @@ contains
     endif
     
     staged_mortality = max(cohort%vm_mort_bole_harvest, cohort%vm_mort_in_place)
+    staged_pfrac = max(cohort%vm_pfrac_bole_harvest, cohort%vm_pfrac_in_place)
     if (staged_mortality == 0.0_r8) then
       disturbed_n = cohort%n
     else
-      disturbed_n = (cohort%n * pfrac) - (cohort%n * staged_mortality)
+      disturbed_n = (cohort%n * staged_pfrac) - (cohort%n * staged_mortality)
     endif
     
   end function cohort_disturbed_n
@@ -3676,7 +3684,7 @@ contains
     do while(associated(current_cohort))
     
       if (any(pfts == current_cohort%pft)) then
-        patch_disturbed_n = patch_disturbed_n + disturbed_n(cohort)
+        patch_disturbed_n = patch_disturbed_n + cohort_disturbed_n(cohort) !disturbed_n(cohort)
       endif
       
       current_cohort => current_cohort%taller
@@ -3708,7 +3716,7 @@ contains
     ! ----------------------------------------------------------------------------------------------
     
     ! Only the adjusted stem count is need, the rest of the equation is unchanged: 
-    disturbed_basal_area = pi_const * (current_cohort%dbh / 2.0_r8)**2 * disturbed_n(cohort)
+    disturbed_basal_area = pi_const * (current%dbh / 2.0_r8)**2 * disturbed_n(cohort)
     
   end function cohort_disturbed_basal_area
 
@@ -3734,19 +3742,19 @@ contains
     
     ! ----------------------------------------------------------------------------------------------
     
-    effective_basal_area = 0.0_r8 ! Initialize.
+    disturbed_basal_area = 0.0_r8 ! Initialize.
     
     current_cohort => patch%shortest
       do while(associated(current_cohort))
         
         if (any(pfts == current_cohort%pft)) then
-          disturbed_basal_area = disturbed_basal_area + disturbed_basal_area(cohort)
+          disturbed_basal_area = disturbed_basal_area + cohort_disturbed_basal_area(cohort) !disturbed_basal_area(cohort)
         endif
         
         current_cohort => current_cohort%taller
       end do ! Cohort loop.
     
-  end function disturbed_basal_area
+  end function patch_disturbed_basal_area
   
   !=================================================================================================
 
