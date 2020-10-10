@@ -820,8 +820,8 @@ contains
     use EDParamsMod, only : ED_val_understorey_death, logging_coll_under_frac
     
     ! Arguments:
-    type(ed_cohort_type), intent(inout), target :: donor_cohort ! The donor cohort to copy & update. = currentCohort
-    type(ed_cohort_type), intent(inout), target :: new_cohort ! The new cohort to initialize. = nc
+    type(ed_cohort_type), intent(inout), target :: donor_cohort ! The donor cohort to copy & update.
+    type(ed_cohort_type), intent(inout), target :: new_cohort ! The new cohort to initialize.
     
     ! Locals:
     integer :: flux_profile ! Vegetation management flux profile.
@@ -831,152 +831,148 @@ contains
     
     ! From EDPatchDynamicsMod: spawn_patches():
     ! This is the amount of patch area that is disturbed, and donated by the donor:
-    patch_site_areadis = currentPatch%area * currentPatch%disturbance_rate
+    !patch_site_areadis = currentPatch%area * currentPatch%disturbance_rate
+    patch_site_areadis = donor_cohort%patchptr%area * donor_cohort%patchptr%disturbance_rate
     
     ! Get the management activity / flux profile that is occurring in this cohort:
     flux_profile = get_flux_profile(donor_cohort)
     
     select case (flux_profile)
-      case (null_profile)
+      case (null_profile) ! This may actually happen.  Not all cohorts will always have mortality.
         write(fates_log(),*) 'Cohort has the no flux profile.'
         call endrun(msg = errMsg(__FILE__, __LINE__))
 
       case (logging_traditional) !------------------------------------------------------------------
         ! This logging code was exported from EDPatchDynamicsMod: spawn_patches()
-        ! [Direct copy prior to any additional modifications.]
+        ! [Original logic intact with formatting changes.
         
-                   ! If this cohort is in the upper canopy. It generated 
-                   if(currentCohort%canopy_layer == 1)then
-                      
-                      ! calculate the survivorship of disturbed trees because non-harvested
-                      nc%n = currentCohort%n * currentCohort%l_degrad
-                      ! nc%n            = (currentCohort%l_degrad / (currentCohort%l_degrad + &
-                      !      currentCohort%lmort_direct + currentCohort%lmort_collateral +
-                      !   currentCohort%lmort_infra) ) * &
-                      !      currentCohort%n * patch_site_areadis/currentPatch%area
-                      
-                      ! Reduce counts in the existing/donor patch according to the logging rate
-                      currentCohort%n = currentCohort%n * &
-                            (1.0_r8 - min(1.0_r8,(currentCohort%lmort_direct +    &
-                            currentCohort%lmort_collateral + &
-                            currentCohort%lmort_infra + currentCohort%l_degrad)))
+        ! If this cohort is in the upper canopy. It generated 
+        if(donor_cohort%canopy_layer == 1)then
+           
+           ! calculate the survivorship of disturbed trees because non-harvested
+           new_cohort%n = donor_cohort%n * donor_cohort%l_degrad
+           ! nc%n            = (currentCohort%l_degrad / (currentCohort%l_degrad + &
+           !      currentCohort%lmort_direct + currentCohort%lmort_collateral +
+           !   currentCohort%lmort_infra) ) * &
+           !      currentCohort%n * patch_site_areadis/currentPatch%area
+           
+           ! Reduce counts in the existing/donor patch according to the logging rate
+           donor_cohort%n = donor_cohort%n * & (1.0_r8 - min(1.0_r8, (donor_cohort%lmort_direct + &
+                 donor_cohort%lmort_collateral + & donor_cohort%lmort_infra + donor_cohort%l_degrad)))
 
-                      nc%cmort            = currentCohort%cmort
-                      nc%hmort            = currentCohort%hmort
-                      nc%bmort            = currentCohort%bmort
-                      nc%frmort           = currentCohort%frmort
-                      nc%smort            = currentCohort%smort
-                      nc%asmort           = currentCohort%asmort
-                      nc%dmort            = currentCohort%dmort
+           new_cohort%cmort            = donor_cohort%cmort
+           new_cohort%hmort            = donor_cohort%hmort
+           new_cohort%bmort            = donor_cohort%bmort
+           new_cohort%frmort           = donor_cohort%frmort
+           new_cohort%smort            = donor_cohort%smort
+           new_cohort%asmort           = donor_cohort%asmort
+           new_cohort%dmort            = donor_cohort%dmort
 
-                      ! since these are the ones that weren't logged, 
-                      ! set the logging mortality rates as zero
-                      nc%lmort_direct     = 0._r8
-                      nc%lmort_collateral = 0._r8
-                      nc%lmort_infra      = 0._r8
-                      ! JMR_MOD_START:
-                      ! There could be trouble above!!!!!
-                      nc%vm_mort_in_place = 0._r8
-                      nc%vm_mort_bole_harvest = 0._r8
-                      nc%vm_pfrac_in_place = 0._r8
-                      nc%vm_pfrac_bole_harvest = 0._r8
-                      ! JMR_MOD_END.
-                      
-                   else
-                      
-                      ! WHat to do with cohorts in the understory of a logging generated
-                      ! disturbance patch?
-                      
-                      if(EDPftvarcon_inst%woody(currentCohort%pft) == 1)then
-                         
-                         
-                         ! Survivorship of undestory woody plants.  Two step process.
-                         ! Step 1:  Reduce current number of plants to reflect the 
-                         !          change in area.
-                         !          The number density per square are doesn't change,
-                         !          but since the patch is smaller
-                         !          and cohort counts are absolute, reduce this number.
-                         nc%n = currentCohort%n * patch_site_areadis/currentPatch%area
-                         
-                         ! because the mortality rate due to impact for the cohorts which had 
-                         ! been in the understory and are now in the newly-
-                         ! disturbed patch is very high, passing the imort directly to 
-                         ! history results in large numerical errors, on account
-                         ! of the sharply reduced number densities.  so instead pass this info 
-                         ! via a site-level diagnostic variable before reducing 
-                         ! the number density.
-                         currentSite%imort_rate(currentCohort%size_class, currentCohort%pft) = &
-                              currentSite%imort_rate(currentCohort%size_class, currentCohort%pft) + &
-                              nc%n * currentPatch%fract_ldist_not_harvested * &
-                              logging_coll_under_frac / hlm_freq_day
+           ! Since these are the ones that weren't logged, set the logging mortality rates as zero:
+           new_cohort%lmort_direct     = 0._r8
+           new_cohort%lmort_collateral = 0._r8
+           new_cohort%lmort_infra      = 0._r8
+           ! JMR_MOD_START:
+           ! There could be trouble above!!!!!
+           new_cohort%vm_mort_in_place = 0._r8
+           new_cohort%vm_mort_bole_harvest = 0._r8
+           new_cohort%vm_pfrac_in_place = 0._r8
+           new_cohort%vm_pfrac_bole_harvest = 0._r8
+           ! JMR_MOD_END.
+           
+        else
+           
+           ! WHat to do with cohorts in the understory of a logging generated disturbance patch?
+           
+           if (EDPftvarcon_inst%woody(donor_cohort%pft) == 1) then
+              
+              ! Survivorship of undestory woody plants.  Two step process.
+              ! Step 1:  Reduce current number of plants to reflect the 
+              !          change in area.
+              !          The number density per square are doesn't change,
+              !          but since the patch is smaller
+              !          and cohort counts are absolute, reduce this number.
+              new_cohort%n = donor_cohort%n * patch_site_areadis/currentPatch%area
+              
+              ! because the mortality rate due to impact for the cohorts which had 
+              ! been in the understory and are now in the newly-
+              ! disturbed patch is very high, passing the imort directly to 
+              ! history results in large numerical errors, on account
+              ! of the sharply reduced number densities.  so instead pass this info 
+              ! via a site-level diagnostic variable before reducing 
+              ! the number density.
+              currentSite%imort_rate(donor_cohort%size_class, donor_cohort%pft) = &
+                   currentSite%imort_rate(donor_cohort%size_class, donor_cohort%pft) + &
+                   new_cohort%n * currentPatch%fract_ldist_not_harvested * &
+                   logging_coll_under_frac / hlm_freq_day
 
-                         currentSite%imort_carbonflux = currentSite%imort_carbonflux + &
-                              (nc%n * currentPatch%fract_ldist_not_harvested * &
-                              logging_coll_under_frac/ hlm_freq_day ) * &
-                              total_c * g_per_kg * days_per_sec * years_per_day * ha_per_m2
-                         
-                         
-                         ! Step 2:  Apply survivor ship function based on the understory death fraction
-                         
-                         ! remaining of understory plants of those that are knocked 
-                         ! over by the overstorey trees dying...  
-                         ! LOGGING SURVIVORSHIP OF UNDERSTORY PLANTS IS SET AS A NEW PARAMETER 
-                         ! in the fatesparameter files 
-                         nc%n = nc%n * (1.0_r8 - &
-                              (1.0_r8-currentPatch%fract_ldist_not_harvested) * logging_coll_under_frac)
-                         
-                         ! Step 3: Reduce the number count of cohorts in the 
-                         !         original/donor/non-disturbed patch to reflect the area change
-                         currentCohort%n = currentCohort%n * (1._r8 -  patch_site_areadis/currentPatch%area)
-                         
-                         nc%cmort            = currentCohort%cmort
-                         nc%hmort            = currentCohort%hmort
-                         nc%bmort            = currentCohort%bmort
-                         nc%frmort           = currentCohort%frmort
-                         nc%smort            = currentCohort%smort
-                         nc%asmort           = currentCohort%asmort
-                         nc%dmort            = currentCohort%dmort
-                         nc%lmort_direct     = currentCohort%lmort_direct
-                         nc%lmort_collateral = currentCohort%lmort_collateral
-                         nc%lmort_infra      = currentCohort%lmort_infra
-                         ! JMR_MOD_START:
-                         nc%vm_mort_in_place = currentCohort%vm_mort_in_place
-                         nc%vm_mort_bole_harvest = currentCohort%vm_mort_bole_harvest
-                         nc%vm_pfrac_in_place = currentCohort%vm_pfrac_in_place
-                         nc%vm_pfrac_bole_harvest = currentCohort%vm_pfrac_bole_harvest
-                         ! JMR_MOD_END.
-                         
-                      else
-                         
-                         ! grass is not killed by mortality disturbance events. 
-                         ! Just move it into the new patch area. 
-                         ! Just split the grass into the existing and new patch structures
-                         nc%n = currentCohort%n * patch_site_areadis/currentPatch%area
-                         
-                         ! Those remaining in the existing
-                         currentCohort%n = currentCohort%n * (1._r8 - patch_site_areadis/currentPatch%area)
-                         
-                         ! No grass impact mortality imposed on the newly created patch
-                         nc%cmort            = currentCohort%cmort
-                         nc%hmort            = currentCohort%hmort
-                         nc%bmort            = currentCohort%bmort
-                         nc%frmort           = currentCohort%frmort
-                         nc%smort            = currentCohort%smort
-                         nc%asmort           = currentCohort%asmort
-                         nc%dmort            = currentCohort%dmort
-                         nc%lmort_direct     = currentCohort%lmort_direct
-                         nc%lmort_collateral = currentCohort%lmort_collateral
-                         nc%lmort_infra      = currentCohort%lmort_infra
-                         ! JMR_MOD_START:
-                         nc%vm_mort_in_place = currentCohort%vm_mort_in_place
-                         nc%vm_mort_bole_harvest = currentCohort%vm_mort_bole_harvest
-                         nc%vm_pfrac_in_place = currentCohort%vm_pfrac_in_place
-                         nc%vm_pfrac_bole_harvest = currentCohort%vm_pfrac_bole_harvest
-                         ! JMR_MOD_END
-                         
-                      endif  ! is/is-not woody
-                      
-                   endif  ! Select canopy layer
+              currentSite%imort_carbonflux = currentSite%imort_carbonflux + &
+                   (new_cohort%n * currentPatch%fract_ldist_not_harvested * &
+                   logging_coll_under_frac/ hlm_freq_day ) * &
+                   total_c * g_per_kg * days_per_sec * years_per_day * ha_per_m2
+              
+              
+              ! Step 2:  Apply survivor ship function based on the understory death fraction
+              
+              ! remaining of understory plants of those that are knocked 
+              ! over by the overstorey trees dying...  
+              ! LOGGING SURVIVORSHIP OF UNDERSTORY PLANTS IS SET AS A NEW PARAMETER 
+              ! in the fatesparameter files 
+              new_cohort%n = new_cohort%n * (1.0_r8 - &
+                             (1.0_r8 - currentPatch%fract_ldist_not_harvested) *&
+                             logging_coll_under_frac)
+              
+              ! Step 3: Reduce the number count of cohorts in the 
+              !         original/donor/non-disturbed patch to reflect the area change
+              donor_cohort%n = donor_cohort%n * (1._r8 -  patch_site_areadis/currentPatch%area)
+              
+              new_cohort%cmort            = donor_cohort%cmort
+              new_cohort%hmort            = donor_cohort%hmort
+              new_cohort%bmort            = donor_cohort%bmort
+              new_cohort%frmort           = donor_cohort%frmort
+              new_cohort%smort            = donor_cohort%smort
+              new_cohort%asmort           = donor_cohort%asmort
+              new_cohort%dmort            = donor_cohort%dmort
+              new_cohort%lmort_direct     = donor_cohort%lmort_direct
+              new_cohort%lmort_collateral = donor_cohort%lmort_collateral
+              new_cohort%lmort_infra      = donor_cohort%lmort_infra
+              ! JMR_MOD_START:
+              new_cohort%vm_mort_in_place = donor_cohort%vm_mort_in_place
+              new_cohort%vm_mort_bole_harvest = donor_cohort%vm_mort_bole_harvest
+              new_cohort%vm_pfrac_in_place = donor_cohort%vm_pfrac_in_place
+              new_cohort%vm_pfrac_bole_harvest = donor_cohort%vm_pfrac_bole_harvest
+              ! JMR_MOD_END.
+              
+           else
+              
+              ! Grass is not killed by mortality disturbance events. 
+              ! Just move it into the new patch area. 
+              ! Just split the grass into the existing and new patch structures.
+              new_cohort%n = donor_cohort%n * patch_site_areadis/currentPatch%area
+              
+              ! Those remaining in the existing
+              donor_cohort%n = donor_cohort%n * (1._r8 - patch_site_areadis/currentPatch%area)
+              
+              ! No grass impact mortality imposed on the newly created patch
+              new_cohort%cmort            = donor_cohort%cmort
+              new_cohort%hmort            = donor_cohort%hmort
+              new_cohort%bmort            = donor_cohort%bmort
+              new_cohort%frmort           = donor_cohort%frmort
+              new_cohort%smort            = donor_cohort%smort
+              new_cohort%asmort           = donor_cohort%asmort
+              new_cohort%dmort            = donor_cohort%dmort
+              new_cohort%lmort_direct     = donor_cohort%lmort_direct
+              new_cohort%lmort_collateral = donor_cohort%lmort_collateral
+              new_cohort%lmort_infra      = donor_cohort%lmort_infra
+              ! JMR_MOD_START:
+              new_cohort%vm_mort_in_place = donor_cohort%vm_mort_in_place
+              new_cohort%vm_mort_bole_harvest = donor_cohort%vm_mort_bole_harvest
+              new_cohort%vm_pfrac_in_place = donor_cohort%vm_pfrac_in_place
+              new_cohort%vm_pfrac_bole_harvest = donor_cohort%vm_pfrac_bole_harvest
+              ! JMR_MOD_END
+              
+           endif ! Is / is-not woody
+        endif ! Select canopy layer
 
       case (in_place) !-----------------------------------------------------------------------------
         
