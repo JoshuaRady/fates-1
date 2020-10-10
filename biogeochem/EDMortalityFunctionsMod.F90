@@ -222,7 +222,7 @@ if (hlm_use_ed_prescribed_phys .eq. ifalse) then
     use FatesVegetationManagementMod, only : anthro_mortality_rate
     !
     ! !ARGUMENTS    
-    type(ed_site_type), intent(inout), target  :: currentSite
+    type(ed_site_type), intent(inout), target  :: currentSite ! Not actually used.
     type(ed_cohort_type),intent(inout), target :: currentCohort
     type(bc_in_type), intent(in)               :: bc_in
     real(r8), intent(in)                       :: frac_site_primary
@@ -282,8 +282,12 @@ if (hlm_use_ed_prescribed_phys .eq. ifalse) then
 !        currentCohort%dndt= -(1.0_r8-fates_mortality_disturbance_fraction) &
 !             * (cmort+hmort+bmort+frmort+smort+asmort) * &
 !             currentCohort%n
-       currentCohort%dndt= -(1.0_r8-fates_mortality_disturbance_fraction) * &
-                            (dndt_natural + dndt_vegmgmt) * currentCohort%n
+       ! The following is wrong because it applies fates_mortality_disturbance_fraction to management: 
+!        currentCohort%dndt= -(1.0_r8-fates_mortality_disturbance_fraction) * &
+!                             (dndt_natural + dndt_vegmgmt) * currentCohort%n
+       ! This should be right.  Now the canopy distinction logic only affects the natural mortality:
+       currentCohort%dndt= -((1.0_r8 - fates_mortality_disturbance_fraction) * dndt_natural + &
+                            dndt_vegmgmt) * currentCohort%n
     endif
     
     

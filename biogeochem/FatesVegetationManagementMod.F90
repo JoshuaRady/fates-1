@@ -39,6 +39,7 @@ module FatesVegetationManagementMod
   public :: vegetation_management_init
   public :: managed_mortality
   public :: managed_fecundity
+  public :: spawn_anthro_disturbed_cohorts
   ! Destructor!!!!!
   
   public :: plant
@@ -795,6 +796,205 @@ contains
     
   end subroutine
   
+  !=================================================================================================
+
+  ! This name is rather long!!!!!
+  subroutine spawn_anthro_disturbed_cohorts(donor_cohort, new_cohort)
+    ! ----------------------------------------------------------------------------------------------
+    ! For cohorts that have experienced anthropogenic disturbance initialize the new disturbed
+    ! cohort's number density and mortality rates and applying mortalities to adjust the numbers in
+    ! the donor cohort.
+    !
+    ! This routine is called from EDPatchDynamicsMod: spawn_patches() and replaces code from that
+    ! routine that handled logging disturbance.
+    ! The former code in spawn_patches() contained a lot of logging assumptions.  The addition of
+    ! more vegetation management activities with differing assumptions would make an already
+    ! complicated piece of code even more so.  To reduce the need of other modules to know the
+    ! internal assumptions of this module and to make the code more maintainable this routine was
+    ! created.
+    !
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Uses:
+    use EDParamsMod, only : fates_mortality_disturbance_fraction
+    use EDParamsMod, only : ED_val_understorey_death, logging_coll_under_frac
+    
+    ! Arguments:
+    type(ed_cohort_type), intent(inout), target :: donor_cohort ! The donor cohort to copy & update. = currentCohort
+    type(ed_cohort_type), intent(inout), target :: new_cohort ! The new cohort to initialize. = nc
+    
+    ! Locals:
+    integer :: flux_profile ! Vegetation management flux profile.
+    real(r8) :: patch_site_areadis ! Total area disturbed in m2 per patch per day
+    
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! From EDPatchDynamicsMod: spawn_patches():
+    ! This is the amount of patch area that is disturbed, and donated by the donor:
+    patch_site_areadis = currentPatch%area * currentPatch%disturbance_rate
+    
+    ! Get the management activity / flux profile that is occurring in this cohort:
+    flux_profile = get_flux_profile(donor_cohort)
+    
+    select case (flux_profile)
+      case (null_profile)
+        write(fates_log(),*) 'Cohort has the no flux profile.'
+        call endrun(msg = errMsg(__FILE__, __LINE__))
+
+      case (logging_traditional) !------------------------------------------------------------------
+        ! This logging code was exported from EDPatchDynamicsMod: spawn_patches()
+        ! [Direct copy prior to any additional modifications.]
+        
+                   ! If this cohort is in the upper canopy. It generated 
+                   if(currentCohort%canopy_layer == 1)then
+                      
+                      ! calculate the survivorship of disturbed trees because non-harvested
+                      nc%n = currentCohort%n * currentCohort%l_degrad
+                      ! nc%n            = (currentCohort%l_degrad / (currentCohort%l_degrad + &
+                      !      currentCohort%lmort_direct + currentCohort%lmort_collateral +
+                      !   currentCohort%lmort_infra) ) * &
+                      !      currentCohort%n * patch_site_areadis/currentPatch%area
+                      
+                      ! Reduce counts in the existing/donor patch according to the logging rate
+                      currentCohort%n = currentCohort%n * &
+                            (1.0_r8 - min(1.0_r8,(currentCohort%lmort_direct +    &
+                            currentCohort%lmort_collateral + &
+                            currentCohort%lmort_infra + currentCohort%l_degrad)))
+
+                      nc%cmort            = currentCohort%cmort
+                      nc%hmort            = currentCohort%hmort
+                      nc%bmort            = currentCohort%bmort
+                      nc%frmort           = currentCohort%frmort
+                      nc%smort            = currentCohort%smort
+                      nc%asmort           = currentCohort%asmort
+                      nc%dmort            = currentCohort%dmort
+
+                      ! since these are the ones that weren't logged, 
+                      ! set the logging mortality rates as zero
+                      nc%lmort_direct     = 0._r8
+                      nc%lmort_collateral = 0._r8
+                      nc%lmort_infra      = 0._r8
+                      ! JMR_MOD_START:
+                      ! There could be trouble above!!!!!
+                      nc%vm_mort_in_place = 0._r8
+                      nc%vm_mort_bole_harvest = 0._r8
+                      nc%vm_pfrac_in_place = 0._r8
+                      nc%vm_pfrac_bole_harvest = 0._r8
+                      ! JMR_MOD_END.
+                      
+                   else
+                      
+                      ! WHat to do with cohorts in the understory of a logging generated
+                      ! disturbance patch?
+                      
+                      if(EDPftvarcon_inst%woody(currentCohort%pft) == 1)then
+                         
+                         
+                         ! Survivorship of undestory woody plants.  Two step process.
+                         ! Step 1:  Reduce current number of plants to reflect the 
+                         !          change in area.
+                         !          The number density per square are doesn't change,
+                         !          but since the patch is smaller
+                         !          and cohort counts are absolute, reduce this number.
+                         nc%n = currentCohort%n * patch_site_areadis/currentPatch%area
+                         
+                         ! because the mortality rate due to impact for the cohorts which had 
+                         ! been in the understory and are now in the newly-
+                         ! disturbed patch is very high, passing the imort directly to 
+                         ! history results in large numerical errors, on account
+                         ! of the sharply reduced number densities.  so instead pass this info 
+                         ! via a site-level diagnostic variable before reducing 
+                         ! the number density.
+                         currentSite%imort_rate(currentCohort%size_class, currentCohort%pft) = &
+                              currentSite%imort_rate(currentCohort%size_class, currentCohort%pft) + &
+                              nc%n * currentPatch%fract_ldist_not_harvested * &
+                              logging_coll_under_frac / hlm_freq_day
+
+                         currentSite%imort_carbonflux = currentSite%imort_carbonflux + &
+                              (nc%n * currentPatch%fract_ldist_not_harvested * &
+                              logging_coll_under_frac/ hlm_freq_day ) * &
+                              total_c * g_per_kg * days_per_sec * years_per_day * ha_per_m2
+                         
+                         
+                         ! Step 2:  Apply survivor ship function based on the understory death fraction
+                         
+                         ! remaining of understory plants of those that are knocked 
+                         ! over by the overstorey trees dying...  
+                         ! LOGGING SURVIVORSHIP OF UNDERSTORY PLANTS IS SET AS A NEW PARAMETER 
+                         ! in the fatesparameter files 
+                         nc%n = nc%n * (1.0_r8 - &
+                              (1.0_r8-currentPatch%fract_ldist_not_harvested) * logging_coll_under_frac)
+                         
+                         ! Step 3: Reduce the number count of cohorts in the 
+                         !         original/donor/non-disturbed patch to reflect the area change
+                         currentCohort%n = currentCohort%n * (1._r8 -  patch_site_areadis/currentPatch%area)
+                         
+                         nc%cmort            = currentCohort%cmort
+                         nc%hmort            = currentCohort%hmort
+                         nc%bmort            = currentCohort%bmort
+                         nc%frmort           = currentCohort%frmort
+                         nc%smort            = currentCohort%smort
+                         nc%asmort           = currentCohort%asmort
+                         nc%dmort            = currentCohort%dmort
+                         nc%lmort_direct     = currentCohort%lmort_direct
+                         nc%lmort_collateral = currentCohort%lmort_collateral
+                         nc%lmort_infra      = currentCohort%lmort_infra
+                         ! JMR_MOD_START:
+                         nc%vm_mort_in_place = currentCohort%vm_mort_in_place
+                         nc%vm_mort_bole_harvest = currentCohort%vm_mort_bole_harvest
+                         nc%vm_pfrac_in_place = currentCohort%vm_pfrac_in_place
+                         nc%vm_pfrac_bole_harvest = currentCohort%vm_pfrac_bole_harvest
+                         ! JMR_MOD_END.
+                         
+                      else
+                         
+                         ! grass is not killed by mortality disturbance events. 
+                         ! Just move it into the new patch area. 
+                         ! Just split the grass into the existing and new patch structures
+                         nc%n = currentCohort%n * patch_site_areadis/currentPatch%area
+                         
+                         ! Those remaining in the existing
+                         currentCohort%n = currentCohort%n * (1._r8 - patch_site_areadis/currentPatch%area)
+                         
+                         ! No grass impact mortality imposed on the newly created patch
+                         nc%cmort            = currentCohort%cmort
+                         nc%hmort            = currentCohort%hmort
+                         nc%bmort            = currentCohort%bmort
+                         nc%frmort           = currentCohort%frmort
+                         nc%smort            = currentCohort%smort
+                         nc%asmort           = currentCohort%asmort
+                         nc%dmort            = currentCohort%dmort
+                         nc%lmort_direct     = currentCohort%lmort_direct
+                         nc%lmort_collateral = currentCohort%lmort_collateral
+                         nc%lmort_infra      = currentCohort%lmort_infra
+                         ! JMR_MOD_START:
+                         nc%vm_mort_in_place = currentCohort%vm_mort_in_place
+                         nc%vm_mort_bole_harvest = currentCohort%vm_mort_bole_harvest
+                         nc%vm_pfrac_in_place = currentCohort%vm_pfrac_in_place
+                         nc%vm_pfrac_bole_harvest = currentCohort%vm_pfrac_bole_harvest
+                         ! JMR_MOD_END
+                         
+                      endif  ! is/is-not woody
+                      
+                   endif  ! Select canopy layer
+
+      case (in_place) !-----------------------------------------------------------------------------
+        
+        
+      case (bole_harvest) !-------------------------------------------------------------------------
+        
+        
+      ! case (burn)
+        ! Placeholder.
+      
+      case default
+        write(fates_log(),*) 'Unrecognized flux profile.'
+        call endrun(msg = errMsg(__FILE__, __LINE__))
+    end select
+    
+    
+  end subroutine spawn_anthro_disturbed_cohorts
+
 !   !=================================================================================================
 !
 !   subroutine vegetation_management_close()
@@ -2453,7 +2653,7 @@ contains
     select case (flux_profile)
       case (logging_traditional) ! Legacy...
         ! Traditional logging module events use LoggingMortality_frac().
-        write(fates_log(),*) 'kill() is not for use witt traditional logging event. '
+        write(fates_log(),*) 'kill() is not for use with traditional logging event. '
         call endrun(msg = errMsg(__FILE__, __LINE__))
       
       case (in_place)
