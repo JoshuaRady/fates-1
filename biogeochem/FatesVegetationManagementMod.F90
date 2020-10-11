@@ -827,6 +827,8 @@ contains
     integer :: flux_profile ! Vegetation management flux profile.
     real(r8) :: patch_site_areadis ! Total area disturbed in m2 per patch per day
     
+    !currentPatch
+    
     ! ----------------------------------------------------------------------------------------------
     
     ! From EDPatchDynamicsMod: spawn_patches():
@@ -847,7 +849,7 @@ contains
         ! [Original logic intact with formatting changes.
         
         ! If this cohort is in the upper canopy. It generated 
-        if(donor_cohort%canopy_layer == 1)then
+        if (donor_cohort%canopy_layer == 1) then
            
            ! calculate the survivorship of disturbed trees because non-harvested
            new_cohort%n = donor_cohort%n * donor_cohort%l_degrad
@@ -858,7 +860,8 @@ contains
            
            ! Reduce counts in the existing/donor patch according to the logging rate
            donor_cohort%n = donor_cohort%n * & (1.0_r8 - min(1.0_r8, (donor_cohort%lmort_direct + &
-                 donor_cohort%lmort_collateral + & donor_cohort%lmort_infra + donor_cohort%l_degrad)))
+                            donor_cohort%lmort_collateral + & donor_cohort%lmort_infra +
+                            donor_cohort%l_degrad)))
 
            new_cohort%cmort            = donor_cohort%cmort
            new_cohort%hmort            = donor_cohort%hmort
@@ -892,7 +895,7 @@ contains
               !          The number density per square are doesn't change,
               !          but since the patch is smaller
               !          and cohort counts are absolute, reduce this number.
-              new_cohort%n = donor_cohort%n * patch_site_areadis/currentPatch%area
+              new_cohort%n = donor_cohort%n * patch_site_areadis / currentPatch%area
               
               ! because the mortality rate due to impact for the cohorts which had 
               ! been in the understory and are now in the newly-
@@ -908,7 +911,7 @@ contains
 
               currentSite%imort_carbonflux = currentSite%imort_carbonflux + &
                    (new_cohort%n * currentPatch%fract_ldist_not_harvested * &
-                   logging_coll_under_frac/ hlm_freq_day ) * &
+                   logging_coll_under_frac / hlm_freq_day ) * &
                    total_c * g_per_kg * days_per_sec * years_per_day * ha_per_m2
               
               
@@ -919,12 +922,12 @@ contains
               ! LOGGING SURVIVORSHIP OF UNDERSTORY PLANTS IS SET AS A NEW PARAMETER 
               ! in the fatesparameter files 
               new_cohort%n = new_cohort%n * (1.0_r8 - &
-                             (1.0_r8 - currentPatch%fract_ldist_not_harvested) *&
+                             (1.0_r8 - currentPatch%fract_ldist_not_harvested) * &
                              logging_coll_under_frac)
               
               ! Step 3: Reduce the number count of cohorts in the 
               !         original/donor/non-disturbed patch to reflect the area change
-              donor_cohort%n = donor_cohort%n * (1._r8 -  patch_site_areadis/currentPatch%area)
+              donor_cohort%n = donor_cohort%n * (1._r8 - patch_site_areadis / currentPatch%area)
               
               new_cohort%cmort            = donor_cohort%cmort
               new_cohort%hmort            = donor_cohort%hmort
@@ -948,10 +951,10 @@ contains
               ! Grass is not killed by mortality disturbance events. 
               ! Just move it into the new patch area. 
               ! Just split the grass into the existing and new patch structures.
-              new_cohort%n = donor_cohort%n * patch_site_areadis/currentPatch%area
+              new_cohort%n = donor_cohort%n * patch_site_areadis / currentPatch%area
               
               ! Those remaining in the existing
-              donor_cohort%n = donor_cohort%n * (1._r8 - patch_site_areadis/currentPatch%area)
+              donor_cohort%n = donor_cohort%n * (1._r8 - patch_site_areadis / currentPatch%area)
               
               ! No grass impact mortality imposed on the newly created patch
               new_cohort%cmort            = donor_cohort%cmort
