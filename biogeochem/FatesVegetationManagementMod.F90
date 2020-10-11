@@ -303,7 +303,7 @@ contains
     ! Manually trigger events for initial testing: TEMPORARY!
     if (hlm_current_year == 2050 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
       thinning_needed = .true.
-    else if (hlm_current_year == 1941 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
+    else if (hlm_current_year == 2050 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
       harvest_needed = .true.
     else if (hlm_current_year == 2050 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
       control_needed = .true.
@@ -723,9 +723,7 @@ contains
     
     ! ----------------------------------------------------------------------------------------------
     
-    if (debug) then
-      write(fates_log(), *) 'managed_fecundity() entering.'
-    end if
+    if (debug) write(fates_log(), *) 'managed_fecundity() entering.'
     
     ! ToDo: 
     ! Determine which patch or patches to plant into:
@@ -790,10 +788,7 @@ contains
         
     end if ! if (logging_time)
     
-    if (debug) then
-      write(fates_log(), *) 'managed_fecundity() exiting.'
-    end if
-    
+    if (debug) write(fates_log(), *) 'managed_fecundity() exiting.'
   end subroutine
   
   !=================================================================================================
@@ -826,18 +821,24 @@ contains
     ! Locals:
     integer :: flux_profile ! Vegetation management flux profile.
     real(r8) :: patch_site_areadis ! Total area disturbed in m2 per patch per day
-    
-    !currentPatch
+    type (ed_patch_type), pointer :: parent_patch ! <- currentPatch
     
     ! ----------------------------------------------------------------------------------------------
+    if (debug) write(fates_log(), *) 'spawn_anthro_disturbed_cohorts() entering.'
+    
+    parent_patch => donor_cohort%patchptr
     
     ! From EDPatchDynamicsMod: spawn_patches():
     ! This is the amount of patch area that is disturbed, and donated by the donor:
     !patch_site_areadis = currentPatch%area * currentPatch%disturbance_rate
-    patch_site_areadis = donor_cohort%patchptr%area * donor_cohort%patchptr%disturbance_rate
+    !patch_site_areadis = donor_cohort%patchptr%area * donor_cohort%patchptr%disturbance_rate
+    patch_site_areadis = parent_patch%area * parent_patch%disturbance_rate
     
     ! Get the management activity / flux profile that is occurring in this cohort:
     flux_profile = get_flux_profile(donor_cohort)
+    
+    ! Temporarily short circuit the above to make sure that the historic logging code is called:
+    flux_profile = logging_traditional
     
     select case (flux_profile)
       case (null_profile) ! This may actually happen.  Not all cohorts will always have mortality.
@@ -895,7 +896,7 @@ contains
               !          The number density per square are doesn't change,
               !          but since the patch is smaller
               !          and cohort counts are absolute, reduce this number.
-              new_cohort%n = donor_cohort%n * patch_site_areadis / currentPatch%area
+              new_cohort%n = donor_cohort%n * patch_site_areadis / parent_patch%area
               
               ! because the mortality rate due to impact for the cohorts which had 
               ! been in the understory and are now in the newly-
@@ -906,11 +907,11 @@ contains
               ! the number density.
               currentSite%imort_rate(donor_cohort%size_class, donor_cohort%pft) = &
                    currentSite%imort_rate(donor_cohort%size_class, donor_cohort%pft) + &
-                   new_cohort%n * currentPatch%fract_ldist_not_harvested * &
+                   new_cohort%n * parent_patch%fract_ldist_not_harvested * &
                    logging_coll_under_frac / hlm_freq_day
 
               currentSite%imort_carbonflux = currentSite%imort_carbonflux + &
-                   (new_cohort%n * currentPatch%fract_ldist_not_harvested * &
+                   (new_cohort%n * parent_patch%fract_ldist_not_harvested * &
                    logging_coll_under_frac / hlm_freq_day ) * &
                    total_c * g_per_kg * days_per_sec * years_per_day * ha_per_m2
               
@@ -922,12 +923,12 @@ contains
               ! LOGGING SURVIVORSHIP OF UNDERSTORY PLANTS IS SET AS A NEW PARAMETER 
               ! in the fatesparameter files 
               new_cohort%n = new_cohort%n * (1.0_r8 - &
-                             (1.0_r8 - currentPatch%fract_ldist_not_harvested) * &
+                             (1.0_r8 - parent_patch%fract_ldist_not_harvested) * &
                              logging_coll_under_frac)
               
               ! Step 3: Reduce the number count of cohorts in the 
               !         original/donor/non-disturbed patch to reflect the area change
-              donor_cohort%n = donor_cohort%n * (1._r8 - patch_site_areadis / currentPatch%area)
+              donor_cohort%n = donor_cohort%n * (1._r8 - patch_site_areadis / parent_patch%area)
               
               new_cohort%cmort            = donor_cohort%cmort
               new_cohort%hmort            = donor_cohort%hmort
@@ -951,10 +952,10 @@ contains
               ! Grass is not killed by mortality disturbance events. 
               ! Just move it into the new patch area. 
               ! Just split the grass into the existing and new patch structures.
-              new_cohort%n = donor_cohort%n * patch_site_areadis / currentPatch%area
+              new_cohort%n = donor_cohort%n * patch_site_areadis / parent_patch%area
               
               ! Those remaining in the existing
-              donor_cohort%n = donor_cohort%n * (1._r8 - patch_site_areadis / currentPatch%area)
+              donor_cohort%n = donor_cohort%n * (1._r8 - patch_site_areadis / parent_patch%area)
               
               ! No grass impact mortality imposed on the newly created patch
               new_cohort%cmort            = donor_cohort%cmort
@@ -991,7 +992,7 @@ contains
         call endrun(msg = errMsg(__FILE__, __LINE__))
     end select
     
-    
+    if (debug) write(fates_log(), *) 'spawn_anthro_disturbed_cohorts() exiting.'
   end subroutine spawn_anthro_disturbed_cohorts
 
 !   !=================================================================================================
@@ -1101,7 +1102,7 @@ contains
     end if
     
     if (debug) then
-    write(fates_log(),*) 'FatesVegetationManagementMod: plant() running with:'
+      write(fates_log(),*) 'FatesVegetationManagementMod: plant() running with:'
       write(fates_log(), '(A,F5.3)') 'Density =', the_density
       write(fates_log(), '(A,F5.3)') 'DBH =', the_dbh
       write(fates_log(), '(A,F5.3)') 'Height =', the_height
@@ -2008,20 +2009,19 @@ contains
         ! In that case 0 = no mortality, 1 = non-disturbing mortality, and the rest are disturbing
         ! mortalities that should = patch_site_areadis.
         ! ------------------------------------------------------------------------------------------
-        flux_profile = null_profile
-        
-        if (current_cohort%lmort_direct > 0.0_r8) then ! Could also check logging_time.
-          flux_profile = logging_traditional
-        else if (current_cohort%vm_mort_in_place > 0.0_r8) then
-          flux_profile = in_place
-        else if (current_cohort%vm_mort_bole_harvest > 0.0_r8) then
-          flux_profile = bole_harvest
-        !else
-          !write(fates_log(),*) "Flux profile could not be determined."
-          !call endrun(msg = errMsg(__FILE__, __LINE__))
-        endif
-        
-        !flux_profile = get_flux_profile(current_cohort)
+!         flux_profile = null_profile
+!         
+!         if (current_cohort%lmort_direct > 0.0_r8) then ! Could also check logging_time.
+!           flux_profile = logging_traditional
+!         else if (current_cohort%vm_mort_in_place > 0.0_r8) then
+!           flux_profile = in_place
+!         else if (current_cohort%vm_mort_bole_harvest > 0.0_r8) then
+!           flux_profile = bole_harvest
+!         !else
+!           !write(fates_log(),*) "Flux profile could not be determined."
+!           !call endrun(msg = errMsg(__FILE__, __LINE__))
+!         endif
+        flux_profile = get_flux_profile(current_cohort)
         
         ! ------------------------------------------------------------------------------------------
         ! Get the number of plants that have died:
@@ -4050,6 +4050,21 @@ contains
       ! write(fates_log(),*) "Flux profile could not be determined."
       ! call endrun(msg = errMsg(__FILE__, __LINE__))
     endif
+    
+    ! If we assume this routine is only called when a managed disturbance has occurred then report
+    ! on any cohorts during a logging event that don't have immediately obvious mortality.
+    if (logging_time .and. flux_profile == null_profile) then
+      !write(fates_log(),*) 'Logging event cohort without obvious mortalities.'
+      !call dump_cohort(cohort)
+      
+      ! Actually this is a better test.  We expect at least one mortality (including %lmort_direct,
+      ! see above) should be true:
+      if (.not. (cohort%lmort_collateral > 0.0_r8 .or. cohort%lmort_infra > 0.0_r8 .or.
+                 cohort%l_degrad > 0.0_r8)) then
+        write(fates_log(),*) 'Logging event cohort without expected mortalities / degradation.'
+        call dump_cohort(cohort)
+      end if
+    end if
     
   end function get_flux_profile
 
