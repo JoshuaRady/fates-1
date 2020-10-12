@@ -844,9 +844,9 @@ contains
     
     plant_c = donor_cohort%prt%GetState(sapw_organ, all_carbon_elements) + &
               donor_cohort%prt%GetState(struct_organ, all_carbon_elements) + &
-              donor_cohort%prt%GetState(leaf_c, all_carbon_elements) + &
-              donor_cohort%prt%GetState(fnrt_c, all_carbon_elements) + &
-              donor_cohort%prt%GetState(store_c, all_carbon_elements)
+              donor_cohort%prt%GetState(leaf_organ, all_carbon_elements) + &
+              donor_cohort%prt%GetState(fnrt_organ, all_carbon_elements) + &
+              donor_cohort%prt%GetState(store_organ, all_carbon_elements)
     ! plant_c = donor_cohort%prt%GetState(store_c, all_carbon_elements) ! Would this work?
 
     
