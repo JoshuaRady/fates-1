@@ -815,6 +815,8 @@ contains
     use EDParamsMod, only : ED_val_understorey_death, logging_coll_under_frac
     use FatesInterfaceTypesMod, only : hlm_freq_day
     use FatesConstantsMod, only : days_per_sec, g_per_kg, ha_per_m2, years_per_day
+    use PRTGenericMod, only : struct_organ, leaf_organ, fnrt_organ, sapw_organ, store_organ
+    use PRTGenericMod, only : all_carbon_elements
     
     ! Arguments:
     type(ed_site_type), intent(inout), target :: parent_site ! The parent site of the cohorts.
