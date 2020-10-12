@@ -4044,7 +4044,7 @@ contains
     
     ! Uses: NA
     use EDLoggingMortalityMod, only : logging_time ! Make global?
-    
+    use EDTypesMod, only : dump_cohort ! Make global?
     
     ! Arguments:
     type(ed_cohort_type), intent(in), target :: cohort
