@@ -959,7 +959,7 @@ contains
 
                ! Logging is the dominant disturbance  
                elseif (currentPatch%disturbance_mode .eq. dtype_ilog ) then
-                   call spawn_anthro_disturbed_cohorts(currentCohort, nc)
+                   call spawn_anthro_disturbed_cohorts(currentSite, currentCohort, nc)
 !                    
 !                    ! If this cohort is in the upper canopy. It generated 
 !                    if(currentCohort%canopy_layer == 1)then

@@ -794,7 +794,7 @@ contains
   !=================================================================================================
 
   ! This name is rather long!!!!!
-  subroutine spawn_anthro_disturbed_cohorts(donor_cohort, new_cohort)
+  subroutine spawn_anthro_disturbed_cohorts(parent_site, donor_cohort, new_cohort)
     ! ----------------------------------------------------------------------------------------------
     ! For cohorts that have experienced anthropogenic disturbance initialize the new disturbed
     ! cohort's number density and mortality rates and applying mortalities to adjust the numbers in
@@ -813,26 +813,40 @@ contains
     ! Uses:
     use EDParamsMod, only : fates_mortality_disturbance_fraction
     use EDParamsMod, only : ED_val_understorey_death, logging_coll_under_frac
+    use FatesInterfaceTypesMod, only : hlm_freq_day
+    use FatesConstantsMod, only : days_per_sec, g_per_kg, ha_per_m2, years_per_day
     
     ! Arguments:
+    type(ed_site_type), intent(inout), target :: parent_site ! The parent site of the cohorts.
     type(ed_cohort_type), intent(inout), target :: donor_cohort ! The donor cohort to copy & update.
     type(ed_cohort_type), intent(inout), target :: new_cohort ! The new cohort to initialize.
     
     ! Locals:
     integer :: flux_profile ! Vegetation management flux profile.
     real(r8) :: patch_site_areadis ! Total area disturbed in m2 per patch per day
+    !type (ed_site_type), pointer :: parent_site ! <- currentSite
     type (ed_patch_type), pointer :: parent_patch ! <- currentPatch
+    real(r8) :: plant_c ! Total plant carbon [kg] <- total_c
     
     ! ----------------------------------------------------------------------------------------------
     if (debug) write(fates_log(), *) 'spawn_anthro_disturbed_cohorts() entering.'
     
     parent_patch => donor_cohort%patchptr
+    !parent_site => parent_patch% ! Patches do not link to their parent site!
     
     ! From EDPatchDynamicsMod: spawn_patches():
     ! This is the amount of patch area that is disturbed, and donated by the donor:
     !patch_site_areadis = currentPatch%area * currentPatch%disturbance_rate
     !patch_site_areadis = donor_cohort%patchptr%area * donor_cohort%patchptr%disturbance_rate
     patch_site_areadis = parent_patch%area * parent_patch%disturbance_rate
+    
+    plant_c = donor_cohort%prt%GetState(sapw_organ, all_carbon_elements) + &
+              donor_cohort%prt%GetState(struct_organ, all_carbon_elements) + &
+              donor_cohort%prt%GetState(leaf_c, all_carbon_elements) + &
+              donor_cohort%prt%GetState(fnrt_c, all_carbon_elements) + &
+              donor_cohort%prt%GetState(store_c, all_carbon_elements)
+    ! plant_c = donor_cohort%prt%GetState(store_c, all_carbon_elements) ! Would this work?
+
     
     ! Get the management activity / flux profile that is occurring in this cohort:
     flux_profile = get_flux_profile(donor_cohort)
@@ -861,7 +875,7 @@ contains
            
            ! Reduce counts in the existing/donor patch according to the logging rate
            donor_cohort%n = donor_cohort%n * & (1.0_r8 - min(1.0_r8, (donor_cohort%lmort_direct + &
-                            donor_cohort%lmort_collateral + & donor_cohort%lmort_infra +
+                            donor_cohort%lmort_collateral + & donor_cohort%lmort_infra + &
                             donor_cohort%l_degrad)))
 
            new_cohort%cmort            = donor_cohort%cmort
@@ -905,15 +919,15 @@ contains
               ! of the sharply reduced number densities.  so instead pass this info 
               ! via a site-level diagnostic variable before reducing 
               ! the number density.
-              currentSite%imort_rate(donor_cohort%size_class, donor_cohort%pft) = &
-                   currentSite%imort_rate(donor_cohort%size_class, donor_cohort%pft) + &
+              parent_site%imort_rate(donor_cohort%size_class, donor_cohort%pft) = &
+                   parent_site%imort_rate(donor_cohort%size_class, donor_cohort%pft) + &
                    new_cohort%n * parent_patch%fract_ldist_not_harvested * &
                    logging_coll_under_frac / hlm_freq_day
 
-              currentSite%imort_carbonflux = currentSite%imort_carbonflux + &
+              parent_site%imort_carbonflux = parent_site%imort_carbonflux + &
                    (new_cohort%n * parent_patch%fract_ldist_not_harvested * &
                    logging_coll_under_frac / hlm_freq_day ) * &
-                   total_c * g_per_kg * days_per_sec * years_per_day * ha_per_m2
+                   plant_c * g_per_kg * days_per_sec * years_per_day * ha_per_m2
               
               
               ! Step 2:  Apply survivor ship function based on the understory death fraction
@@ -4027,6 +4041,8 @@ contains
     ! ----------------------------------------------------------------------------------------------
     
     ! Uses: NA
+    use EDLoggingMortalityMod, only : logging_time ! Make global?
+    
     
     ! Arguments:
     type(ed_cohort_type), intent(in), target :: cohort
@@ -4059,7 +4075,7 @@ contains
       
       ! Actually this is a better test.  We expect at least one mortality (including %lmort_direct,
       ! see above) should be true:
-      if (.not. (cohort%lmort_collateral > 0.0_r8 .or. cohort%lmort_infra > 0.0_r8 .or.
+      if (.not. (cohort%lmort_collateral > 0.0_r8 .or. cohort%lmort_infra > 0.0_r8 .or. &
                  cohort%l_degrad > 0.0_r8)) then
         write(fates_log(),*) 'Logging event cohort without expected mortalities / degradation.'
         call dump_cohort(cohort)
