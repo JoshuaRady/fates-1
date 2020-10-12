@@ -737,7 +737,7 @@ contains
     if (logging_time) then
       
       if (debug) then
-        write(fates_log(), *) 'Planting triggered by logging event (for testing).'
+        !write(fates_log(), *) 'Planting triggered by logging event (for testing).'
       end if
       
       ! Temporary patch determination:
@@ -847,7 +847,7 @@ contains
               donor_cohort%prt%GetState(leaf_organ, all_carbon_elements) + &
               donor_cohort%prt%GetState(fnrt_organ, all_carbon_elements) + &
               donor_cohort%prt%GetState(store_organ, all_carbon_elements)
-    ! plant_c = donor_cohort%prt%GetState(store_c, all_carbon_elements) ! Would this work?
+    ! plant_c = donor_cohort%prt%GetState(all_organs, all_carbon_elements) ! Would this work?
 
     
     ! Get the management activity / flux profile that is occurring in this cohort:
@@ -863,7 +863,9 @@ contains
 
       case (logging_traditional) !------------------------------------------------------------------
         ! This logging code was exported from EDPatchDynamicsMod: spawn_patches()
-        ! [Original logic intact with formatting changes.
+        ! [Original logic intact with formatting changes.]
+        
+        if (debug) write(fates_log(), *) 'spawn_anthro_disturbed_cohorts() traditional logging event.'
         
         ! If this cohort is in the upper canopy. It generated 
         if (donor_cohort%canopy_layer == 1) then
@@ -931,7 +933,6 @@ contains
                    logging_coll_under_frac / hlm_freq_day ) * &
                    plant_c * g_per_kg * days_per_sec * years_per_day * ha_per_m2
               
-              
               ! Step 2:  Apply survivor ship function based on the understory death fraction
               
               ! remaining of understory plants of those that are knocked 
@@ -995,10 +996,10 @@ contains
         endif ! Select canopy layer
 
       case (in_place) !-----------------------------------------------------------------------------
-        
+        if (debug) write(fates_log(), *) 'spawn_anthro_disturbed_cohorts() in_place VM event.'
         
       case (bole_harvest) !-------------------------------------------------------------------------
-        
+        if (debug) write(fates_log(), *) 'spawn_anthro_disturbed_cohorts() bole_harvest VM event.'
         
       ! case (burn)
         ! Placeholder.
@@ -1963,6 +1964,8 @@ contains
     real(r8), parameter :: harvest_litter_localization = 0.0_r8
     
     ! ----------------------------------------------------------------------------------------------
+    if (debug) write(fates_log(), *) 'management_fluxes() entering.'
+    
     direct_dead   = 0.0_r8
     indirect_dead = 0.0_r8
     
@@ -2371,6 +2374,7 @@ contains
       current_cohort => current_cohort%taller
     enddo
     
+    if (debug) write(fates_log(), *) 'management_fluxes() exiting.'
   end subroutine management_fluxes
   
   !=================================================================================================
@@ -4038,8 +4042,12 @@ contains
     !
     ! Based on code on code in management_fluxes2().  If this persists replace that.
     !
+    ! This routine may not identify all cohorts that are subject to logging module mortalities
+    ! because some are calculated without mortality rates stored in the cohort.  Work is ongoing to
+    ! solve this issue. 
+    !
     ! Note: If we changed vm_mort_in_place etc. into arrays using indexes matching the flux profile
-    ! IDs these values might be easier to manipulate.
+    ! IDs these values might be easier to manipulate and extend.
     ! ----------------------------------------------------------------------------------------------
     
     ! Uses: NA
@@ -4054,34 +4062,22 @@ contains
     
     ! ----------------------------------------------------------------------------------------------
     
-    !flux_profile = null_profile
-    
-    if (cohort%lmort_direct > 0.0_r8) then ! Could also check logging_time.
+    if (cohort%lmort_direct > 0.0_r8 .or. cohort%lmort_collateral > 0.0_r8 .or. &
+        cohort%lmort_infra > 0.0_r8 .or. cohort%l_degrad > 0.0_r8) then ! Could also check logging_time.
       flux_profile = logging_traditional
     else if (cohort%vm_mort_in_place > 0.0_r8) then
       flux_profile = in_place
     else if (cohort%vm_mort_bole_harvest > 0.0_r8) then
       flux_profile = bole_harvest
     else
-      ! Not sure what to do here:
       flux_profile = null_profile
-      ! write(fates_log(),*) "Flux profile could not be determined."
-      ! call endrun(msg = errMsg(__FILE__, __LINE__))
     endif
     
     ! If we assume this routine is only called when a managed disturbance has occurred then report
     ! on any cohorts during a logging event that don't have immediately obvious mortality.
     if (logging_time .and. flux_profile == null_profile) then
-      !write(fates_log(),*) 'Logging event cohort without obvious mortalities.'
-      !call dump_cohort(cohort)
-      
-      ! Actually this is a better test.  We expect at least one mortality (including %lmort_direct,
-      ! see above) should be true:
-      if (.not. (cohort%lmort_collateral > 0.0_r8 .or. cohort%lmort_infra > 0.0_r8 .or. &
-                 cohort%l_degrad > 0.0_r8)) then
-        write(fates_log(),*) 'Logging event cohort without expected mortalities / degradation.'
-        call dump_cohort(cohort)
-      end if
+      write(fates_log(),*) 'Logging event cohort without expected mortalities / degradation.'
+      call dump_cohort(cohort)
     end if
     
   end function get_flux_profile
