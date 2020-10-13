@@ -429,8 +429,8 @@ contains
 !       end do ! Patch loop.
       
       ! Test 2:
-      harvest_mass_min_area(site_in = site_in, harvest_c_primary = 5000, harvest_c_secondary = 0, & ! REVIEW!
-                            pfts = tree_pfts, dbh_min = 10)
+      call harvest_mass_min_area(site_in = site_in, harvest_c_primary = 5000, harvest_c_secondary = 0, & ! REVIEW!
+                                 pfts = tree_pfts, dbh_min = 10)
       
       
       ! Estimate the woodproduct (trunk_product_site) if not done already. !!!!!
