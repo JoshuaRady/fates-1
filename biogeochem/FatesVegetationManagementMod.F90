@@ -116,7 +116,7 @@ module FatesVegetationManagementMod
   integer(i4), target, private :: woody_pfts(9) = [1,2,3,4,5,6,7,8,9]
   integer(i4), target, private :: tree_pfts(6) = [1,2,3,4,5,6]
   ! Shrubs?
-  ! Understory?
+  integer(i4), target, private :: understory_pfts(6) = [7,8,9,10,11,12]
   
   ! Understory control modes:
   ! Note: The order an value of these have no significance and are subject to change.  Use the
@@ -442,17 +442,24 @@ contains
       !postharvest_control()
       ! Find the patch that was most recently cleared and perform understory control on it:
       
-      current_patch => site_in%youngest_patch ! Start with the youngest patch:
+      !current_patch => site_in%youngest_patch ! Start with the youngest patch:
 !       do while (associated(current_patch) & patch_is_bare(current_patch) /= .true.)
 !         current_patch => current_patch%older
 !       end do     NEED TO ADD patch_is_bare()
       
-      if (associated(current_patch)) then
+!       if (associated(current_patch)) then
+!         call understory_control(current_patch, method_mow)
+!       else
+!         ! A bare patch was not found.  Note it in the log and proceed:
+!         write(fates_log(),*) 'anthro_disturbance_rate_2()?????: No bare patch found.'
+!       endif
+      
+      current_patch => site_in%oldest_patch
+      do while (associated(current_patch))
         call understory_control(current_patch, method_mow)
-      else
-        ! A bare patch was not found.  Note it in the log and proceed:
-        write(fates_log(),*) 'anthro_disturbance_rate_2()?????: No bare patch found.'
-      endif
+        current_patch => current_patch%younger
+      end do ! Patch loop.
+      
     endif
     
     ! ----------------------------------------------------------------------------------------------
@@ -2876,7 +2883,7 @@ contains
   ! Competition Control Subroutines:
   !=================================================================================================
 
-  subroutine understory_control(patch, method) ! REVIEW!
+  subroutine understory_control(patch, method) ! REVIEW! Add area_fraction!!!!!
     ! ----------------------------------------------------------------------------------------------
     ! Remove all understory plants, grasses and shrubs, from the specified patch using the specified
     ! method.
@@ -2895,7 +2902,8 @@ contains
     
     ! Locals:
     !integer(i4), dimension(:), allocatable :: understory_pfts
-    integer(i4), dimension(numpft) :: understory_pfts
+    !integer(i4), dimension(numpft) :: understory_pfts
+    type (ed_cohort_type), pointer :: current_cohort
     
     ! ----------------------------------------------------------------------------------------------
     
@@ -2916,7 +2924,17 @@ contains
         ! Patch kill:
         ! kill(patch = patch, pfts = pfts, flux_profile = ?????)
         
+        current_cohort => current_patch%shortest
+        do while(associated(current_cohort))
+          if (any(current_cohort%pft == understory_pfts)) then
+            call kill(cohort = current_cohort, flux_profile = in_place, kill_fraction = 1.0_r8, &
+                      area_fraction = 1.0_r8) ! Leaving out the area_fraction right now won't work.  Fix that.
+          endif
+          current_cohort => current_cohort%taller
+        end do ! Cohort loop.
+        
       case(method_burn)
+        write(fates_log(),*) 'understory_control(): method_burn not yet implemented.'
         
       case default
         write(fates_log(),*) 'understory_control(): Invalid method requested.'
