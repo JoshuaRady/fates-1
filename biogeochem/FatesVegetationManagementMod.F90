@@ -3199,6 +3199,7 @@ contains
           ! Accumulate harvest estimate:
           harvest = harvest + cohort_harvestable_biomass(current_cohort) ! staged = true!!!!
           patch_bai = disturbed_basal_area(patch, thin_pfts) ! Update the BAI calculation.
+          current_cohort => current_cohort%taller
         end do ! Cohort loop.
         
       !else if ((.not. use_bai) .and. (patch_sd > final_stem_density)) then
@@ -3244,6 +3245,7 @@ contains
           ! Accumulate harvest estimate:
           harvest = harvest + cohort_harvestable_biomass(current_cohort) ! staged = true!!!!
           patch_sd = patch_disturbed_n(patch, thin_pfts) ! disturbed_stem_density(patch, thin_pfts) ! Update the stem density.
+          current_cohort => current_cohort%taller
         end do ! Cohort loop.
       endif ! (use_bai)
     endif ! Stand is above goal loop.
