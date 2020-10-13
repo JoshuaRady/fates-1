@@ -277,6 +277,8 @@ contains
     real(r8) :: cohort_mort ! ?????
     real(r8) :: patch_mort ! patch_mortality?????
     
+    real(r8) :: c_1st, c_2nd ! Testing!
+    
     ! ----------------------------------------------------------------------------------------------
     if (debug) write(fates_log(), *) 'managed_mortality() entering.'
     
@@ -429,8 +431,10 @@ contains
 !       end do ! Patch loop.
       
       ! Test 2:
-      call harvest_mass_min_area(site_in = site_in, harvest_c_primary = 5000, harvest_c_secondary = 0, & ! REVIEW!
-                                 pfts = tree_pfts, dbh_min = 10)
+      c_1st = 5000.0_r8
+      c_2nd = 0.0_r8
+      call harvest_mass_min_area(site_in = site_in, harvest_c_primary = c_1st, harvest_c_secondary = c_2nd, & ! REVIEW!
+                                 pfts = tree_pfts, dbh_min = 10.0_r8)
       
       
       ! Estimate the woodproduct (trunk_product_site) if not done already. !!!!!
