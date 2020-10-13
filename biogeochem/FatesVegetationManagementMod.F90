@@ -2924,7 +2924,7 @@ contains
         ! Patch kill:
         ! kill(patch = patch, pfts = pfts, flux_profile = ?????)
         
-        current_cohort => current_patch%shortest
+        current_cohort => patch%shortest
         do while(associated(current_cohort))
           if (any(current_cohort%pft == understory_pfts)) then
             call kill(cohort = current_cohort, flux_profile = in_place, kill_fraction = 1.0_r8, &
