@@ -1011,7 +1011,7 @@ contains
         if (abs(parent_patch%disturbance_rate - donor_cohort%vm_pfrac_bole_harvest) > 1.0e-10_r8) then
           write(fates_log(),*) 'parent_patch%disturbance_rate /= donor_cohort%vm_pfrac_bole_harvest'
           ! call endrun(msg = errMsg(__FILE__, __LINE__))
-        else
+        endif
         
         ! Update the plant numbers:
         ! Any floating point magic needed here?????
