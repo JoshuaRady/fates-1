@@ -1779,7 +1779,7 @@ contains
     ! Vegetation management:
     n%vm_mort_in_place      = o%vm_mort_in_place
     n%vm_mort_bole_harvest  = o%vm_mort_bole_harvest
-    n%vm_pfrac_in_place     = on%vm_pfrac_in_place
+    n%vm_pfrac_in_place     = o%vm_pfrac_in_place
     n%vm_pfrac_bole_harvest = o%vm_pfrac_bole_harvest
 
     ! Flags
