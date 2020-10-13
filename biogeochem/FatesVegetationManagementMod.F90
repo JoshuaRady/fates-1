@@ -303,9 +303,9 @@ contains
     ! Manually trigger events for initial testing: TEMPORARY!
     if (hlm_current_year == 2050 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
       thinning_needed = .true.
-    else if (hlm_current_year == 2050 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
+    else if (hlm_current_year == 1949 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
       harvest_needed = .true.
-    else if (hlm_current_year == 1942 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
+    else if (hlm_current_year == 1943 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
       control_needed = .true.
     endif
     
@@ -418,7 +418,8 @@ contains
       do while (associated(current_patch))
         current_cohort => current_patch%shortest
         do while(associated(current_cohort))
-          if (current_cohort%pft == 4 .or. current_cohort%pft == 12) then
+          !if (current_cohort%pft == 4 .or. current_cohort%pft == 12) then
+          if (any(current_cohort%pft == [2,4,12])) then
             call kill(cohort = current_cohort, flux_profile = bole_harvest, kill_fraction = 0.5_r8, &
                       area_fraction = 1.0_r8) ! Leaving out the area_fraction right now won't work.  Fix that.
           endif
@@ -741,7 +742,9 @@ contains
     ! that any new cohorts are not eliminated.
     
     ! For testing we use the logging event code to trigger a planting event:
-    if (logging_time) then
+    !if (logging_time) then
+    ! New testing:
+    if (hlm_current_year == 1943 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
       
       if (debug) then
         !write(fates_log(), *) 'Planting triggered by logging event (for testing).'
