@@ -301,11 +301,11 @@ contains
     control_needed = .false.
     
     ! Manually trigger events for initial testing: TEMPORARY!
-    if (hlm_current_year == 2050 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
+    if (hlm_current_year == 1942 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
       thinning_needed = .true.
-    else if (hlm_current_year == 1949 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
+    else if (hlm_current_year == 2050 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
       harvest_needed = .true.
-    else if (hlm_current_year == 1943 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
+    else if (hlm_current_year == 2050 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
       control_needed = .true.
     endif
     
@@ -411,22 +411,27 @@ contains
       
       !call harvest_by_mass(site_in, ...) !...
             
-      ! Simple test: Hopefully the change in the PFT, whatever it is, will be noticeable.
+      ! This works:
       !call kill(cohort = site_in%oldest_patch%tallest, kill_fraction = 0.5_r8)
       ! Lets make sure it is noticeable by hitting all the cohorts of 2 PFTs:
-      current_patch => site_in%oldest_patch
-      do while (associated(current_patch))
-        current_cohort => current_patch%shortest
-        do while(associated(current_cohort))
-          !if (current_cohort%pft == 4 .or. current_cohort%pft == 12) then
-          if (any(current_cohort%pft == [2,4,12])) then
-            call kill(cohort = current_cohort, flux_profile = bole_harvest, kill_fraction = 0.5_r8, &
-                      area_fraction = 1.0_r8) ! Leaving out the area_fraction right now won't work.  Fix that.
-          endif
-          current_cohort => current_cohort%taller
-        end do ! Cohort loop.
-        current_patch => current_patch%younger
-      end do ! Patch loop.
+!       current_patch => site_in%oldest_patch
+!       do while (associated(current_patch))
+!         current_cohort => current_patch%shortest
+!         do while(associated(current_cohort))
+!           !if (current_cohort%pft == 4 .or. current_cohort%pft == 12) then
+!           if (any(current_cohort%pft == [2,4,12])) then
+!             call kill(cohort = current_cohort, flux_profile = bole_harvest, kill_fraction = 0.5_r8, &
+!                       area_fraction = 1.0_r8) ! Leaving out the area_fraction right now won't work.  Fix that.
+!           endif
+!           current_cohort => current_cohort%taller
+!         end do ! Cohort loop.
+!         current_patch => current_patch%younger
+!       end do ! Patch loop.
+      
+      ! Test 2:
+      harvest_mass_min_area(site_in = site_in, harvest_c_primary = 5000, harvest_c_secondary = 0, & ! REVIEW!
+                            pfts = tree_pfts, dbh_min = 10)
+      
       
       ! Estimate the woodproduct (trunk_product_site) if not done already. !!!!!
       
@@ -744,7 +749,7 @@ contains
     ! For testing we use the logging event code to trigger a planting event:
     !if (logging_time) then
     ! New testing:
-    if (hlm_current_year == 1943 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
+    if (hlm_current_year == 2050 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
       
       if (debug) then
         !write(fates_log(), *) 'Planting triggered by logging event (for testing).'
