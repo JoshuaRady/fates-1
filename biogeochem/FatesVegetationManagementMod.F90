@@ -301,11 +301,11 @@ contains
     control_needed = .false.
     
     ! Manually trigger events for initial testing: TEMPORARY!
-    if (hlm_current_year == 1942 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
+    if (hlm_current_year == 2050 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
       thinning_needed = .true.
     else if (hlm_current_year == 2050 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
       harvest_needed = .true.
-    else if (hlm_current_year == 2050 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
+    else if (hlm_current_year == 1942 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
       control_needed = .true.
     endif
     
@@ -2720,7 +2720,7 @@ contains
     endif
     
     if (area_fraction <= 0.0_r8 .or. area_fraction > 1.0_r8) then
-      write(fates_log(),*) 'Invalid value for area_fraction argument.'
+      write(fates_log(),*) 'Invalid value for area_fraction argument.', area_fraction
       call endrun(msg = errMsg(__FILE__, __LINE__))
     endif
         
