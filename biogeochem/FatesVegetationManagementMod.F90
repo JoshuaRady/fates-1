@@ -303,7 +303,7 @@ contains
     ! Manually trigger events for initial testing: TEMPORARY!
     if (hlm_current_year == 2050 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
       thinning_needed = .true.
-    else if (hlm_current_year == 2050 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
+    else if (hlm_current_year == 1942 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
       harvest_needed = .true.
     else if (hlm_current_year == 2050 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
       control_needed = .true.
@@ -793,6 +793,8 @@ contains
   
   !=================================================================================================
 
+  ! Move management_fluxes() and related routines here.
+
   ! This name is rather long!!!!!
   subroutine spawn_anthro_disturbed_cohorts(parent_site, donor_cohort, new_cohort)
     ! ----------------------------------------------------------------------------------------------
@@ -808,6 +810,8 @@ contains
     ! internal assumptions of this module and to make the code more maintainable this routine was
     ! created.
     !
+    ! This routine pairs with management_fluxes() performing complementary modifications to plant
+    ! numbers.
     ! ----------------------------------------------------------------------------------------------
     
     ! Uses:
@@ -841,6 +845,7 @@ contains
     !patch_site_areadis = currentPatch%area * currentPatch%disturbance_rate
     !patch_site_areadis = donor_cohort%patchptr%area * donor_cohort%patchptr%disturbance_rate
     patch_site_areadis = parent_patch%area * parent_patch%disturbance_rate
+    ! Note: patch_site_areadis / parent_patch%area is used a lot below.
     
     plant_c = donor_cohort%prt%GetState(sapw_organ, all_carbon_elements) + &
               donor_cohort%prt%GetState(struct_organ, all_carbon_elements) + &
@@ -972,7 +977,7 @@ contains
               new_cohort%n = donor_cohort%n * patch_site_areadis / parent_patch%area
               
               ! Those remaining in the existing
-              donor_cohort%n = donor_cohort%n * (1._r8 - patch_site_areadis / parent_patch%area)
+              donor_cohort%n = donor_cohort%n * (1.0_r8 - patch_site_areadis / parent_patch%area)
               
               ! No grass impact mortality imposed on the newly created patch
               new_cohort%cmort            = donor_cohort%cmort
@@ -1000,6 +1005,44 @@ contains
         
       case (bole_harvest) !-------------------------------------------------------------------------
         if (debug) write(fates_log(), *) 'spawn_anthro_disturbed_cohorts() bole_harvest VM event.'
+        
+        ! Check the area:
+        ! I don't know what a reasonable tolerance is.
+        if (abs(parent_patch%disturbance_rate - donor_cohort%vm_pfrac_bole_harvest) > 1.0e-10_r8) then
+          write(fates_log(),*) 'parent_patch%disturbance_rate /= donor_cohort%vm_pfrac_bole_harvest'
+          ! call endrun(msg = errMsg(__FILE__, __LINE__))
+        else
+        
+        ! Update the plant numbers:
+        ! Any floating point magic needed here?????
+        
+        ! Give the new patch the proportional number of trees for its area fraction:
+        new_cohort%n = donor_cohort%n * (patch_site_areadis / parent_patch%area)
+        ! Then apply all the mortality to it.
+        new_cohort%n = new_cohort%n - (donor_cohort%n * donor_cohort%vm_mort_bole_harvest)
+        
+        ! The old patch has no management mortality, its just smaller:
+        donor_cohort%n = donor_cohort%n * (1.0_r8 - patch_site_areadis / parent_patch%area)
+        
+        ! Copy the mortality data members to the new cohort:
+        new_cohort%cmort            = donor_cohort%cmort
+        new_cohort%hmort            = donor_cohort%hmort
+        new_cohort%bmort            = donor_cohort%bmort
+        new_cohort%frmort           = donor_cohort%frmort
+        new_cohort%smort            = donor_cohort%smort
+        new_cohort%asmort           = donor_cohort%asmort
+        new_cohort%dmort            = donor_cohort%dmort
+
+        ! This follows the example of the traditional logging module events:
+        ! I'm not exactly why we set the new patch to 0.  It may be that being new it has no history.
+        new_cohort%lmort_direct     = 0._r8
+        new_cohort%lmort_collateral = 0._r8
+        new_cohort%lmort_infra      = 0._r8
+        
+        new_cohort%vm_mort_in_place      = 0._r8
+        new_cohort%vm_mort_bole_harvest  = 0._r8
+        new_cohort%vm_pfrac_in_place     = 0._r8
+        new_cohort%vm_pfrac_bole_harvest = 0._r8
         
       ! case (burn)
         ! Placeholder.
