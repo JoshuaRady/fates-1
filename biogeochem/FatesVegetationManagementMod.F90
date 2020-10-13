@@ -854,7 +854,7 @@ contains
     flux_profile = get_flux_profile(donor_cohort)
     
     ! Temporarily short circuit the above to make sure that the historic logging code is called:
-    flux_profile = logging_traditional
+    !flux_profile = logging_traditional
     
     select case (flux_profile)
       case (null_profile) ! This may actually happen.  Not all cohorts will always have mortality.
@@ -4053,6 +4053,7 @@ contains
     ! Uses: NA
     use EDLoggingMortalityMod, only : logging_time ! Make global?
     use EDTypesMod, only : dump_cohort ! Make global?
+    use EDTypesMod, only : dtype_ilog ! Just for debugging.
     
     ! Arguments:
     type(ed_cohort_type), intent(in), target :: cohort
@@ -4062,23 +4063,40 @@ contains
     
     ! ----------------------------------------------------------------------------------------------
     
+    ! We assume this routine is only called when a managed disturbance has occurred.
+    ! This is a safety check since logging_traditional could be returned even for a cohort in an
+    ! undisturbed patch given the logic that follows.
+    if (debug) then
+      if (cohort%patchptr%disturbance_mode /= dtype_ilog) then
+        write(fates_log(),*) 'get_flux_profile() called for cohort in patch without managed disturbance.'
+      end if
+    endif
+    
     if (cohort%lmort_direct > 0.0_r8 .or. cohort%lmort_collateral > 0.0_r8 .or. &
-        cohort%lmort_infra > 0.0_r8 .or. cohort%l_degrad > 0.0_r8) then ! Could also check logging_time.
+        cohort%lmort_infra > 0.0_r8 .or. cohort%l_degrad > 0.0_r8) then
       flux_profile = logging_traditional
     else if (cohort%vm_mort_in_place > 0.0_r8) then
       flux_profile = in_place
     else if (cohort%vm_mort_bole_harvest > 0.0_r8) then
       flux_profile = bole_harvest
     else
-      flux_profile = null_profile
+      ! If logging_time is true and we have not detected any other management mortalities assume
+      ! this cohort is subject to traditional logging:
+      ! This is a temporary hack and not future safe.  It could eat unmodified cohorts from other
+      ! VM events that occur during the same time step as a traditional logging module event.
+      if (logging_time) then
+        flux_profile = logging_traditional
+      else
+        flux_profile = null_profile
+      endif
     endif
     
     ! If we assume this routine is only called when a managed disturbance has occurred then report
     ! on any cohorts during a logging event that don't have immediately obvious mortality.
-    if (logging_time .and. flux_profile == null_profile) then
-      write(fates_log(),*) 'Logging event cohort without expected mortalities / degradation.'
-      call dump_cohort(cohort)
-    end if
+    !if (logging_time .and. flux_profile == null_profile) then
+    !  write(fates_log(),*) 'Logging event cohort without expected mortalities / degradation.'
+    !  call dump_cohort(cohort)
+    !end if
     
   end function get_flux_profile
 
