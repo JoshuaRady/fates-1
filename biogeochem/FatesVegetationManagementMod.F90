@@ -1010,6 +1010,44 @@ contains
       case (in_place) !-----------------------------------------------------------------------------
         if (debug) write(fates_log(), *) 'spawn_anthro_disturbed_cohorts() in_place VM event.'
         
+        ! This is almost identical to bole_harvest ans should be combined!
+        
+        if (abs(parent_patch%disturbance_rate - donor_cohort%vm_pfrac_in_place) > 1.0e-10_r8) then
+          write(fates_log(),*) 'parent_patch%disturbance_rate /= donor_cohort%vm_pfrac_in_place'
+          ! call endrun(msg = errMsg(__FILE__, __LINE__))
+        endif
+        
+        ! Update the plant numbers:
+        ! Any floating point magic needed here?????
+        
+        ! Give the new patch the proportional number of trees for its area fraction:
+        new_cohort%n = donor_cohort%n * (patch_site_areadis / parent_patch%area)
+        ! Then apply all the mortality to it.
+        new_cohort%n = new_cohort%n - (donor_cohort%n * donor_cohort%vm_mort_in_place)
+        
+        ! The old patch has no management mortality, its just smaller:
+        donor_cohort%n = donor_cohort%n * (1.0_r8 - patch_site_areadis / parent_patch%area)
+        
+        ! Copy the mortality data members to the new cohort:
+        new_cohort%cmort            = donor_cohort%cmort
+        new_cohort%hmort            = donor_cohort%hmort
+        new_cohort%bmort            = donor_cohort%bmort
+        new_cohort%frmort           = donor_cohort%frmort
+        new_cohort%smort            = donor_cohort%smort
+        new_cohort%asmort           = donor_cohort%asmort
+        new_cohort%dmort            = donor_cohort%dmort
+
+        ! This follows the example of the traditional logging module events:
+        ! I'm not exactly why we set the new patch to 0.  It may be that being new it has no history.
+        new_cohort%lmort_direct     = 0._r8
+        new_cohort%lmort_collateral = 0._r8
+        new_cohort%lmort_infra      = 0._r8
+        
+        new_cohort%vm_mort_in_place      = 0._r8
+        new_cohort%vm_mort_bole_harvest  = 0._r8
+        new_cohort%vm_pfrac_in_place     = 0._r8
+        new_cohort%vm_pfrac_bole_harvest = 0._r8
+        
       case (bole_harvest) !-------------------------------------------------------------------------
         if (debug) write(fates_log(), *) 'spawn_anthro_disturbed_cohorts() bole_harvest VM event.'
         
