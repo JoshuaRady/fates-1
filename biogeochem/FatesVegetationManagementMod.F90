@@ -845,7 +845,7 @@ contains
     !patch_site_areadis = currentPatch%area * currentPatch%disturbance_rate
     !patch_site_areadis = donor_cohort%patchptr%area * donor_cohort%patchptr%disturbance_rate
     patch_site_areadis = parent_patch%area * parent_patch%disturbance_rate
-    ! Note: patch_site_areadis / parent_patch%area is used a lot below.
+    ! Note: patch_site_areadis / parent_patch%area is used a lot below. Just need %patchptr%disturbance_rate?
     
     plant_c = donor_cohort%prt%GetState(sapw_organ, all_carbon_elements) + &
               donor_cohort%prt%GetState(struct_organ, all_carbon_elements) + &
@@ -862,9 +862,9 @@ contains
     !flux_profile = logging_traditional
     
     select case (flux_profile)
-      case (null_profile) ! This may actually happen.  Not all cohorts will always have mortality.
-        write(fates_log(),*) 'Cohort has the no flux profile.'
-        call endrun(msg = errMsg(__FILE__, __LINE__))
+!       case (null_profile) ! This may actually happen.  Not all cohorts will always have mortality.
+!         write(fates_log(),*) 'Cohort has the no flux profile.'
+!         call endrun(msg = errMsg(__FILE__, __LINE__))
 
       case (logging_traditional) !------------------------------------------------------------------
         ! This logging code was exported from EDPatchDynamicsMod: spawn_patches()
@@ -1047,6 +1047,30 @@ contains
       ! case (burn)
         ! Placeholder.
       
+      case (null_profile) !-------------------------------------------------------------------------
+        ! This cohort has experienced no managed mortality (but others in the patch may have).
+        ! Note: The following behavior is the same as logging module grass above.
+        
+        ! Split the trees proportionally among the new and old patches:
+        new_cohort%n = donor_cohort%n * patch_site_areadis / parent_patch%area
+        donor_cohort%n = donor_cohort%n * (1.0_r8 - patch_site_areadis / parent_patch%area)
+        
+        ! Copy the mortality data members to the new cohort:
+        new_cohort%cmort            = donor_cohort%cmort
+        new_cohort%hmort            = donor_cohort%hmort
+        new_cohort%bmort            = donor_cohort%bmort
+        new_cohort%frmort           = donor_cohort%frmort
+        new_cohort%smort            = donor_cohort%smort
+        new_cohort%asmort           = donor_cohort%asmort
+        new_cohort%dmort            = donor_cohort%dmort
+        new_cohort%lmort_direct     = donor_cohort%lmort_direct
+        new_cohort%lmort_collateral = donor_cohort%lmort_collateral
+        new_cohort%lmort_infra      = donor_cohort%lmort_infra
+        new_cohort%vm_mort_in_place      = donor_cohort%vm_mort_in_place
+        new_cohort%vm_mort_bole_harvest  = donor_cohort%vm_mort_bole_harvest
+        new_cohort%vm_pfrac_in_place     = donor_cohort%vm_pfrac_in_place
+        new_cohort%vm_pfrac_bole_harvest = donor_cohort%vm_pfrac_bole_harvest
+        
       case default
         write(fates_log(),*) 'Unrecognized flux profile.'
         call endrun(msg = errMsg(__FILE__, __LINE__))
