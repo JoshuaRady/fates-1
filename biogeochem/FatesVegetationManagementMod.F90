@@ -720,7 +720,7 @@ contains
     
     use EDLoggingMortalityMod, only : logging_time ! Temporary trigger for planting
     use FatesGlobals, only : endrun => fates_endrun
-    use FatesInterfaceTypesMod , only : hlm_current_year ! For testing.
+    use FatesInterfaceTypesMod, only : hlm_current_year, hlm_current_month, hlm_current_day ! For testing.
     
     ! Arguments:
     type(ed_site_type), intent(inout), target :: site
