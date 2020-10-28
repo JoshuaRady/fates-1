@@ -3240,7 +3240,8 @@ contains
         
         ! Given the fixed allometry this will also give us cohorts from the lowest DBH:
         current_cohort => patch%shortest
-        do while(patch_bai > final_basal_area)
+        ! do while(patch_bai > final_basal_area)
+        do while(associated(current_cohort) .and. patch_bai > final_basal_area)
           
           if (any(pfts == current_cohort%pft)) then
             ! Get the effective (after row thinning) basal area of the cohort and determine if it
@@ -4219,11 +4220,14 @@ contains
     ! We assume this routine is only called when a managed disturbance has occurred.
     ! This is a safety check since logging_traditional could be returned even for a cohort in an
     ! undisturbed patch given the logic that follows.
+    ! This condition occurs in all cases when the this is called during mortality assignment because
+    ! cohort%patchptr%disturbance_mode has not been set and equals fates_unset_int.
+    ! Is this still helpful in any way then?
     if (debug) then
       if (cohort%patchptr%disturbance_mode /= dtype_ilog) then
         write(fates_log(),*) 'get_flux_profile() called for cohort in patch without managed disturbance.'
-        write(fates_log(),*) 'cohort%patchptr%disturbance_mode = ', cohort%patchptr%disturbance_mode
-        call dump_patch(cohort%patchptr) ! Overkill?
+        !write(fates_log(),*) 'cohort%patchptr%disturbance_mode = ', cohort%patchptr%disturbance_mode
+        ! call dump_patch(cohort%patchptr) ! Overkill?
       end if
     endif
     
