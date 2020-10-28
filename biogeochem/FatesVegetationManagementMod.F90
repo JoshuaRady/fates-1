@@ -3228,107 +3228,107 @@ contains
       ! The kill() call above does not result in a change to the cohort numbers yet, this will
       ! happen later.  Therefore we need to keep track of the changes to BAI, density, and plant
       ! number's manually from here on.
-      patch_bai = disturbed_basal_area(patch, thin_pfts)
-      patch_sd = patch_disturbed_n(patch, thin_pfts) !disturbed_stem_density(patch, thin_pfts)
-      
-      ! If still above our goal BAI / density thin out the smallest trees (low thinning) recursively
-      ! until the goal has been reached:
-      
-      !if (use_bai .and. (patch_bai > final_basal_area))
-      if (use_bai) then ! Thin to a goal basal area:
-        if (debug) write(fates_log(), *) 'thin_row_low() starting low thinning by BAI.'
-        
-        ! Given the fixed allometry this will also give us cohorts from the lowest DBH:
-        current_cohort => patch%shortest
-        ! do while(patch_bai > final_basal_area)
-        do while(associated(current_cohort) .and. patch_bai > final_basal_area)
-          
-          if (any(pfts == current_cohort%pft)) then
-            ! Get the effective (after row thinning) basal area of the cohort and determine if it
-            ! can be removed in part or in whole:
-            !cohort_ba = pi_const * (current_cohort%dbh / 2.0_r8)^2 * current_cohort%n * &
-            !            row_reduction
-            cohort_ba = disturbed_basal_area(current_cohort)
-            
-            ! Remaining basal area:
-            thin_ba_remaining = patch_bai - final_basal_area
-            
-            ! If the cohort basal area is less that what still needs to be removed kill all of it:
-            if (cohort_ba <= thin_ba_remaining) then
-              if (debug) write(fates_log(), *) 'thin_row_low() cut whole cohort.'
-              
-              !call kill(cohort = current_cohort, flux_profile = bole_harvest, &
-              !          area_fraction = the_patch_fraction)
-              call kill_disturbed(cohort = current_cohort, flux_profile = bole_harvest, &
-                                  kill_fraction = 1.0_r8)
-              
-            else ! Otherwise only take part of the cohort:
-              if (debug) write(fates_log(), *) 'thin_row_low() cut part of cohort.'
-              
-              cohort_fraction = thin_ba_remaining / cohort_ba
-              !call kill(cohort = current_cohort, flux_profile = bole_harvest, &
-              !          kill_fraction = cohort_fraction, area_fraction = the_patch_fraction)
-              call kill_disturbed(cohort = current_cohort, flux_profile = bole_harvest, &
-                                  kill_fraction = cohort_fraction)
-              
-            end if
-          end if ! (any(pfts == current_cohort%pft))
-          
-          ! Accumulate harvest estimate:
-          harvest = harvest + cohort_harvestable_biomass(current_cohort) ! staged = true!!!!
-          patch_bai = disturbed_basal_area(patch, thin_pfts) ! Update the BAI calculation.
-          current_cohort => current_cohort%taller
-        end do ! Cohort loop.
-        
-      !else if ((.not. use_bai) .and. (patch_sd > final_stem_density)) then
-      else ! Thin to a goal stem density:
-        if (debug) write(fates_log(), *) 'thin_row_low() starting row by stem density.'
-        
-        ! This loop is identically structured to the above so the two could be combined by
-        ! generalizing the comparator variables.
-        
-        current_cohort => patch%shortest
-        do while(patch_sd > final_stem_density)
-          
-          if (any(pfts == current_cohort%pft)) then
-            ! Get the effective number of stems in cohort and determine if they can be removed in
-            ! part or in whole:
-            
-            ! Because of n is per nominal hectare n = stem density (n/ha)
-            !cohort_sd = effective_stem_density(current_cohort)
-            !cohort_stems = effective_n(current_cohort)
-            cohort_stems = cohort_disturbed_n(current_cohort) !disturbed_stem_density(current_cohort)
-            
-            ! Remaining stems to remove:
-            thin_sd_remaining = patch_sd - final_stem_density
-            
-            ! If the cohort stem count is less that what still needs to be removed kill all of it:
-            if (cohort_stems <= thin_sd_remaining) then
-              if (debug) write(fates_log(), *) 'thin_row_low() cut whole cohort.'
-              
-              !call kill(cohort = current_cohort, flux_profile = bole_harvest, &
-              !          area_fraction = the_patch_fraction)
-              call kill_disturbed(cohort = current_cohort, flux_profile = bole_harvest, &
-                                kill_fraction = 1.0_r8)
-              
-            else ! Otherwise only take part of the cohort:
-              if (debug) write(fates_log(), *) 'thin_row_low() cut part of cohort.'
-              
-              cohort_fraction = thin_sd_remaining / cohort_stems
-              !call kill(cohort = current_cohort, flux_profile = bole_harvest, &
-              !          kill_fraction = cohort_fraction, area_fraction = the_patch_fraction)
-              call kill_disturbed(cohort = current_cohort, flux_profile = bole_harvest, &
-                        kill_fraction = cohort_fraction)
-              
-            end if
-          end if ! (any(pfts == current_cohort%pft))
-          
-          ! Accumulate harvest estimate:
-          harvest = harvest + cohort_harvestable_biomass(current_cohort) ! staged = true!!!!
-          patch_sd = patch_disturbed_n(patch, thin_pfts) ! disturbed_stem_density(patch, thin_pfts) ! Update the stem density.
-          current_cohort => current_cohort%taller
-        end do ! Cohort loop.
-      endif ! (use_bai)
+!       patch_bai = disturbed_basal_area(patch, thin_pfts)
+!       patch_sd = patch_disturbed_n(patch, thin_pfts) !disturbed_stem_density(patch, thin_pfts)
+!       
+!       ! If still above our goal BAI / density thin out the smallest trees (low thinning) recursively
+!       ! until the goal has been reached:
+!       
+!       !if (use_bai .and. (patch_bai > final_basal_area))
+!       if (use_bai) then ! Thin to a goal basal area:
+!         if (debug) write(fates_log(), *) 'thin_row_low() starting low thinning by BAI.'
+!         
+!         ! Given the fixed allometry this will also give us cohorts from the lowest DBH:
+!         current_cohort => patch%shortest
+!         ! do while(patch_bai > final_basal_area)
+!         do while(associated(current_cohort) .and. patch_bai > final_basal_area)
+!           
+!           if (any(pfts == current_cohort%pft)) then
+!             ! Get the effective (after row thinning) basal area of the cohort and determine if it
+!             ! can be removed in part or in whole:
+!             !cohort_ba = pi_const * (current_cohort%dbh / 2.0_r8)^2 * current_cohort%n * &
+!             !            row_reduction
+!             cohort_ba = disturbed_basal_area(current_cohort)
+!             
+!             ! Remaining basal area:
+!             thin_ba_remaining = patch_bai - final_basal_area
+!             
+!             ! If the cohort basal area is less that what still needs to be removed kill all of it:
+!             if (cohort_ba <= thin_ba_remaining) then
+!               if (debug) write(fates_log(), *) 'thin_row_low() cut whole cohort.'
+!               
+!               !call kill(cohort = current_cohort, flux_profile = bole_harvest, &
+!               !          area_fraction = the_patch_fraction)
+!               call kill_disturbed(cohort = current_cohort, flux_profile = bole_harvest, &
+!                                   kill_fraction = 1.0_r8)
+!               
+!             else ! Otherwise only take part of the cohort:
+!               if (debug) write(fates_log(), *) 'thin_row_low() cut part of cohort.'
+!               
+!               cohort_fraction = thin_ba_remaining / cohort_ba
+!               !call kill(cohort = current_cohort, flux_profile = bole_harvest, &
+!               !          kill_fraction = cohort_fraction, area_fraction = the_patch_fraction)
+!               call kill_disturbed(cohort = current_cohort, flux_profile = bole_harvest, &
+!                                   kill_fraction = cohort_fraction)
+!               
+!             end if
+!           end if ! (any(pfts == current_cohort%pft))
+!           
+!           ! Accumulate harvest estimate:
+!           harvest = harvest + cohort_harvestable_biomass(current_cohort) ! staged = true!!!!
+!           patch_bai = disturbed_basal_area(patch, thin_pfts) ! Update the BAI calculation.
+!           current_cohort => current_cohort%taller
+!         end do ! Cohort loop.
+!         
+!       !else if ((.not. use_bai) .and. (patch_sd > final_stem_density)) then
+!       else ! Thin to a goal stem density:
+!         if (debug) write(fates_log(), *) 'thin_row_low() starting row by stem density.'
+!         
+!         ! This loop is identically structured to the above so the two could be combined by
+!         ! generalizing the comparator variables.
+!         
+!         current_cohort => patch%shortest
+!         do while(patch_sd > final_stem_density)
+!           
+!           if (any(pfts == current_cohort%pft)) then
+!             ! Get the effective number of stems in cohort and determine if they can be removed in
+!             ! part or in whole:
+!             
+!             ! Because of n is per nominal hectare n = stem density (n/ha)
+!             !cohort_sd = effective_stem_density(current_cohort)
+!             !cohort_stems = effective_n(current_cohort)
+!             cohort_stems = cohort_disturbed_n(current_cohort) !disturbed_stem_density(current_cohort)
+!             
+!             ! Remaining stems to remove:
+!             thin_sd_remaining = patch_sd - final_stem_density
+!             
+!             ! If the cohort stem count is less that what still needs to be removed kill all of it:
+!             if (cohort_stems <= thin_sd_remaining) then
+!               if (debug) write(fates_log(), *) 'thin_row_low() cut whole cohort.'
+!               
+!               !call kill(cohort = current_cohort, flux_profile = bole_harvest, &
+!               !          area_fraction = the_patch_fraction)
+!               call kill_disturbed(cohort = current_cohort, flux_profile = bole_harvest, &
+!                                 kill_fraction = 1.0_r8)
+!               
+!             else ! Otherwise only take part of the cohort:
+!               if (debug) write(fates_log(), *) 'thin_row_low() cut part of cohort.'
+!               
+!               cohort_fraction = thin_sd_remaining / cohort_stems
+!               !call kill(cohort = current_cohort, flux_profile = bole_harvest, &
+!               !          kill_fraction = cohort_fraction, area_fraction = the_patch_fraction)
+!               call kill_disturbed(cohort = current_cohort, flux_profile = bole_harvest, &
+!                         kill_fraction = cohort_fraction)
+!               
+!             end if
+!           end if ! (any(pfts == current_cohort%pft))
+!           
+!           ! Accumulate harvest estimate:
+!           harvest = harvest + cohort_harvestable_biomass(current_cohort) ! staged = true!!!!
+!           patch_sd = patch_disturbed_n(patch, thin_pfts) ! disturbed_stem_density(patch, thin_pfts) ! Update the stem density.
+!           current_cohort => current_cohort%taller
+!         end do ! Cohort loop.
+!       endif ! (use_bai)
     endif ! Stand is above goal loop.
     ! Consider adding warning here if patch is below goal?
     
