@@ -3894,7 +3894,7 @@ contains
   !
   !=================================================================================================
 
-  function patch_effective_basal_area(patch, pfts) result(effective_basal_area)
+  function patch_effective_basal_area(patch, pfts) result(effective_basal_area) ! Currently not called.
     ! ----------------------------------------------------------------------------------------------
     ! Return the effective basal area for a patch after applying any existing staged potential
     ! mortalities, for only the PFTs passed in.
@@ -3932,7 +3932,7 @@ contains
 
   !=================================================================================================
 
-  function cohort_effective_basal_area(cohort) result(effective_basal_area)
+  function cohort_effective_basal_area(cohort) result(effective_basal_area) ! Currently not called.
     ! ----------------------------------------------------------------------------------------------
     ! Return the effective basal area for a cohort after applying any existing staged potential
     ! mortalities.
@@ -3952,7 +3952,7 @@ contains
     ! ----------------------------------------------------------------------------------------------
     
     ! Only the adjusted stem count is need, the rest of the equation is unchanged: 
-    effective_basal_area = pi_const * (cohort%dbh / 2.0_r8)**2 * cohort_effective_n(cohort)! effective_n(cohort)
+    effective_basal_area = pi_const * (cohort%dbh / 200.0_r8)**2.0_r8 * cohort_effective_n(cohort)! effective_n(cohort)
     
   end function cohort_effective_basal_area
 
@@ -4187,6 +4187,9 @@ contains
         current_cohort => current_cohort%taller
       end do ! Cohort loop.
     
+     if (debug) then
+       write(fates_log(), *) 'patch_disturbed_basal_area(): basal area = ', disturbed_basal_area
+     end if
   end function patch_disturbed_basal_area
   
   !=================================================================================================
