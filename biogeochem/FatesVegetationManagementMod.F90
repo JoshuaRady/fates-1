@@ -4205,7 +4205,7 @@ contains
     
     ! Uses: NA
     use EDLoggingMortalityMod, only : logging_time ! Make global?
-    use EDTypesMod, only : dump_cohort ! Make global?
+    use EDTypesMod, only : dump_patch, dump_cohort ! Make global?
     use EDTypesMod, only : dtype_ilog ! Just for debugging.
     
     ! Arguments:
