@@ -4223,7 +4223,7 @@ contains
       if (cohort%patchptr%disturbance_mode /= dtype_ilog) then
         write(fates_log(),*) 'get_flux_profile() called for cohort in patch without managed disturbance.'
         write(fates_log(),*) 'cohort%patchptr%disturbance_mode = ', cohort%patchptr%disturbance_mode
-        call dump_patch(current_patch) ! Overkill?
+        call dump_patch(cohort%patchptr) ! Overkill?
       end if
     endif
     
