@@ -2746,7 +2746,7 @@ contains
     ! Make optional and default to 1.0 / everything?????
     
     ! The fraction of the patch that the mortality is removed from / the size of the disturbance:
-    real(r8), intent(in), optional :: area_fraction
+    real(r8), intent(in), optional :: area_fraction ! Not currently handled as optional!!!!!
     
     ! Locals:
     !real(r8), dimension(2) :: prev_area_fractions ! Make dynamic?????
@@ -2924,7 +2924,9 @@ contains
       
       ! Call kill() or make the changes directly?
       ! Passing it to kill() reduces the code overhead but it may require us to break the validity checks.
-      call kill(cohort = cohort, flux_profile = flux_profile, kill_fraction = total_mortality)
+      !call kill(cohort = cohort, flux_profile = flux_profile, kill_fraction = total_mortality)
+      call kill(cohort = cohort, flux_profile = flux_profile, kill_fraction = total_mortality, &
+                area_fraction = 1.0_r8) ! Temporarily hardwire!!!!!
       
     endif ! (num_mortalities == X)
   end subroutine kill_disturbed
@@ -3109,6 +3111,8 @@ contains
     type (ed_cohort_type), pointer :: current_cohort
     
     ! ----------------------------------------------------------------------------------------------
+    if (debug) write(fates_log(), *) 'thin_row_low() entering.'
+    
     ! Initialize variables:
     harvest = 0.0_r8
     thin_ba_remaining = 0.0_r8
@@ -3203,6 +3207,8 @@ contains
         ((.not. use_bai) .and. (patch_sd > final_stem_density))) then
       
       ! Thin every X rows = remove 1/X of each cohort:----------------------------------------------
+      if (debug) write(fates_log(), *) 'thin_row_low() starting row thinning.'
+      
       current_cohort => patch%shortest
       do while(associated(current_cohort))
         
@@ -3230,6 +3236,7 @@ contains
       
       !if (use_bai .and. (patch_bai > final_basal_area))
       if (use_bai) then ! Thin to a goal basal area:
+        if (debug) write(fates_log(), *) 'thin_row_low() starting low thinning by BAI.'
         
         ! Given the fixed allometry this will also give us cohorts from the lowest DBH:
         current_cohort => patch%shortest
@@ -3247,6 +3254,7 @@ contains
             
             ! If the cohort basal area is less that what still needs to be removed kill all of it:
             if (cohort_ba <= thin_ba_remaining) then
+              if (debug) write(fates_log(), *) 'thin_row_low() cut whole cohort.'
               
               !call kill(cohort = current_cohort, flux_profile = bole_harvest, &
               !          area_fraction = the_patch_fraction)
@@ -3254,6 +3262,7 @@ contains
                                   kill_fraction = 1.0_r8)
               
             else ! Otherwise only take part of the cohort:
+              if (debug) write(fates_log(), *) 'thin_row_low() cut part of cohort.'
               
               cohort_fraction = thin_ba_remaining / cohort_ba
               !call kill(cohort = current_cohort, flux_profile = bole_harvest, &
@@ -3272,6 +3281,7 @@ contains
         
       !else if ((.not. use_bai) .and. (patch_sd > final_stem_density)) then
       else ! Thin to a goal stem density:
+        if (debug) write(fates_log(), *) 'thin_row_low() starting row by stem density.'
         
         ! This loop is identically structured to the above so the two could be combined by
         ! generalizing the comparator variables.
@@ -3293,6 +3303,7 @@ contains
             
             ! If the cohort stem count is less that what still needs to be removed kill all of it:
             if (cohort_stems <= thin_sd_remaining) then
+              if (debug) write(fates_log(), *) 'thin_row_low() cut whole cohort.'
               
               !call kill(cohort = current_cohort, flux_profile = bole_harvest, &
               !          area_fraction = the_patch_fraction)
@@ -3300,6 +3311,7 @@ contains
                                 kill_fraction = 1.0_r8)
               
             else ! Otherwise only take part of the cohort:
+              if (debug) write(fates_log(), *) 'thin_row_low() cut part of cohort.'
               
               cohort_fraction = thin_sd_remaining / cohort_stems
               !call kill(cohort = current_cohort, flux_profile = bole_harvest, &
@@ -3323,6 +3335,8 @@ contains
       harvest_estimate = harvest
     endif
     ! Should anything be done or reported if no thinning was needed?
+    
+    if (debug) write(fates_log(), *) 'thin_row_low() exiting.'
   end subroutine thin_row_low
 
   !=================================================================================================
@@ -3480,6 +3494,7 @@ contains
     integer :: i ! Counter
     
     ! ----------------------------------------------------------------------------------------------
+    if (debug) write(fates_log(), *) 'harvest_mass_min_area() entering.'
     
     ! An estimate of the harvest flux will be made and stored: ?????????????????
     !site_in%harvest_carbon_flux = 0._r8
@@ -3668,6 +3683,7 @@ contains
       
     end do ! Primary and secondary loop.
     
+    if (debug) write(fates_log(), *) 'harvest_mass_min_area() exiting.'
   end subroutine harvest_mass_min_area
 
   !=================================================================================================
@@ -4206,6 +4222,8 @@ contains
     if (debug) then
       if (cohort%patchptr%disturbance_mode /= dtype_ilog) then
         write(fates_log(),*) 'get_flux_profile() called for cohort in patch without managed disturbance.'
+        write(fates_log(),*) 'cohort%patchptr%disturbance_mode = ', cohort%patchptr%disturbance_mode
+        call dump_patch(current_patch) ! Overkill?
       end if
     endif
     
