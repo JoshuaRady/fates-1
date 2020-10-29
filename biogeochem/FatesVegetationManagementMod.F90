@@ -2930,6 +2930,13 @@ contains
         write(fates_log(), *) 'prev_mortalilty = ', prev_mortalilty
         write(fates_log(), *) 'prev_pfrac = ', prev_pfrac
         write(fates_log(), *) 'total_mortality = ', total_mortality
+        
+        write(fates_log(), *) 'cohort%vm_mort_in_place = ', cohort%vm_mort_in_place
+        write(fates_log(), *) 'cohort%vm_mort_bole_harvest = ', cohort%vm_mort_bole_harvest
+        write(fates_log(), *) 'prev_vm_mortalities = ', prev_vm_mortalities
+        write(fates_log(), *) 'cohort%vm_pfrac_in_place = ', cohort%vm_pfrac_in_place
+        write(fates_log(), *) 'cohort%vm_pfrac_bole_harvest = ', cohort%vm_pfrac_bole_harvest
+        write(fates_log(), *) 'prev_area_fractions = ', prev_area_fractions
       end if
       
       ! Call kill() or make the changes directly?
