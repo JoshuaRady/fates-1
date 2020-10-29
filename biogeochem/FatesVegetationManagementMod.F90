@@ -2894,7 +2894,7 @@ contains
     endif
     
     if (num_mortalities == 0) then
-      ! If no mortality has previously occur just pass the values to kill():
+      ! If no mortality has previously occured just pass the values to kill():
       call kill(cohort, flux_profile, kill_fraction) ! , area_fraction) ! Need names?????
       ! Or make changes directly?
       
@@ -2905,6 +2905,9 @@ contains
         write(fates_log(),*) 'Previous flux profile does not match the requested one.'
         call endrun(msg = errMsg(__FILE__, __LINE__))
       endif
+      
+      ! Should also check the area fraction matches pfrac!
+      
       
       ! Convert the kill_fraction from numbers relative to the nasent disturbed patch to the numbers
       ! relative to full cohort:
@@ -2921,6 +2924,13 @@ contains
       prev_mortalilty = maxval(prev_vm_mortalities)
       prev_pfrac = maxval(prev_area_fractions)
       total_mortality = prev_mortalilty + kill_fraction * (prev_pfrac - prev_mortalilty)
+      
+      ! I suspect there is a problem with this calculation:
+      if (debug) then
+        write(fates_log(), *) 'prev_mortalilty = ', prev_mortalilty
+        write(fates_log(), *) 'prev_pfrac = ', prev_pfrac
+        write(fates_log(), *) 'total_mortality = ', total_mortality
+      end if
       
       ! Call kill() or make the changes directly?
       ! Passing it to kill() reduces the code overhead but it may require us to break the validity checks.
