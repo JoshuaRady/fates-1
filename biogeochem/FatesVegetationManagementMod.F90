@@ -3266,6 +3266,13 @@ contains
               if (debug) write(fates_log(), *) 'thin_row_low() cut part of cohort.'
               
               cohort_fraction = thin_ba_remaining / cohort_ba
+              
+              if (debug) then
+                write(fates_log(), *) 'thin_ba_remaining = ', thin_ba_remaining
+                write(fates_log(), *) 'cohort_ba = ', cohort_ba
+                write(fates_log(), *) 'cohort_fraction = ', cohort_fraction
+              end if
+              
               !call kill(cohort = current_cohort, flux_profile = bole_harvest, &
               !          kill_fraction = cohort_fraction, area_fraction = the_patch_fraction)
               call kill_disturbed(cohort = current_cohort, flux_profile = bole_harvest, &
@@ -3276,7 +3283,7 @@ contains
           
           ! Accumulate harvest estimate:
           harvest = harvest + cohort_harvestable_biomass(current_cohort) ! staged = true!!!!
-          patch_bai = disturbed_basal_area(patch, thin_pfts) ! Update the BAI calculation.
+          patch_bai = disturbed_basal_area(patch, thin_pfts) ! Update the BAI calculation.  Move up, only necissary if this was a valid PFT!
           current_cohort => current_cohort%taller
         end do ! Cohort loop.
         
