@@ -2859,8 +2859,8 @@ contains
     
     ! Locals:
     integer :: num_mortalities ! How many different mortality factions have already been staged?
-    integer, dimension(2) :: prev_vm_mortalities ! num_profiles?????
-    integer, dimension(2) :: prev_area_fractions
+    real(r8), dimension(2) :: prev_vm_mortalities ! num_profiles?????
+    real(r8), dimension(2) :: prev_area_fractions
     
     integer :: prev_mortalilty
     integer :: prev_pfrac
