@@ -2862,8 +2862,8 @@ contains
     real(r8), dimension(2) :: prev_vm_mortalities ! num_profiles?????
     real(r8), dimension(2) :: prev_area_fractions
     
-    integer :: prev_mortalilty
-    integer :: prev_pfrac
+    real(r8) :: prev_mortalilty
+    real(r8) :: prev_pfrac
     real(r8) :: total_mortality
     
     ! ----------------------------------------------------------------------------------------------
