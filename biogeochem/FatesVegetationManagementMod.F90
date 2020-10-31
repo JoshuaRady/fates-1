@@ -393,7 +393,7 @@ contains
       do while (associated(current_patch))
         if (thinnable_patch(patch = current_patch, pfts = tree_pfts, goal_basal_area = 20.0_r8)) then
           call thin_row_low(patch = current_patch, pfts = tree_pfts, &
-                            row_fraction = 0.2_r8, final_basal_area = 20.0_r8)
+                            row_fraction = 0.2_r8, final_basal_area = 25.0_r8)
         endif
         current_patch => current_patch%younger
       end do
@@ -3299,7 +3299,7 @@ contains
           end if ! (any(pfts == current_cohort%pft))
           
           ! Accumulate harvest estimate:
-          harvest = harvest + cohort_harvestable_biomass(current_cohort) ! staged = true!!!!
+          harvest = harvest + cohort_harvestable_biomass(current_cohort) ! staged = true!!!!  Move up into conditional, may harvest 0 to all!
           patch_bai = disturbed_basal_area(patch, thin_pfts) ! Update the BAI calculation.  Move up, only necissary if this was a valid PFT!
           current_cohort => current_cohort%taller
         end do ! Cohort loop.
@@ -4202,7 +4202,7 @@ contains
     disturbed_basal_area = 0.0_r8 ! Initialize.
     
     current_cohort => patch%shortest
-      do while(associated(current_cohort))
+      do while(associated(current_cohort)) ! Bad indenting!
         
         if (any(pfts == current_cohort%pft)) then
           disturbed_basal_area = disturbed_basal_area + cohort_disturbed_basal_area(current_cohort) !disturbed_basal_area(current_cohort)
