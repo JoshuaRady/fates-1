@@ -836,6 +836,7 @@ contains
     ! Uses:
     use EDParamsMod, only : fates_mortality_disturbance_fraction
     use EDParamsMod, only : ED_val_understorey_death, logging_coll_under_frac
+    use EDTypesMod, only : dump_cohort ! dump_patch
     use FatesInterfaceTypesMod, only : hlm_freq_day
     use FatesConstantsMod, only : days_per_sec, g_per_kg, ha_per_m2, years_per_day
     use PRTGenericMod, only : struct_organ, leaf_organ, fnrt_organ, sapw_organ, store_organ
@@ -1063,6 +1064,14 @@ contains
       case (bole_harvest) !-------------------------------------------------------------------------
         if (debug) write(fates_log(), *) 'spawn_anthro_disturbed_cohorts() bole_harvest VM event.'
         
+        if (debug) then
+          write(fates_log(), *) 'Starting conditions:'
+          write(fates_log(), *) 'parent_patch%area =',  parent_patch%area
+          write(fates_log(), *) 'Patch_site_areadis =', Patch_site_areadis
+          write(fates_log(), *) 'parent_patch%disturbance_rate =', parent_patch%disturbance_rate
+          call dump_cohort(donor_cohort)
+        end if
+        
         ! Check the area:
         ! I don't know what a reasonable tolerance is.
         if (abs(parent_patch%disturbance_rate - donor_cohort%vm_pfrac_bole_harvest) > 1.0e-10_r8) then
@@ -1100,6 +1109,14 @@ contains
         new_cohort%vm_mort_bole_harvest  = 0._r8
         new_cohort%vm_pfrac_in_place     = 0._r8
         new_cohort%vm_pfrac_bole_harvest = 0._r8
+        
+        if (debug) then
+          write(fates_log(), *) 'Ending conditions:'
+          write(fates_log(), *) 'donor_cohort:'
+          call dump_cohort(donor_cohort)
+          write(fates_log(), *) 'new_cohort:'
+          call dump_cohort(new_cohort)
+        end if
         
       ! case (burn)
         ! Placeholder.
