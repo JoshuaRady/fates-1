@@ -4246,8 +4246,8 @@ contains
                                 'Effective n = ', cohort_effective_n(current_cohort), &
                                 'Disturbed n = ', cohort_disturbed_n(current_cohort)
           write(fates_log(), *) 'Basal Area = ', pi_const * (current_cohort%dbh / 200.0_r8)**2.0_r8 * current_cohort%n, &
-                                'Effective BA = ', effective_basal_area, &
-                                'Total EBA = ', effective_basal_area
+                                'Disturbed BA = ', disturbed_basal_area, &
+                                'Total EBA = ', total_basal_area
         endif
         
         current_cohort => current_cohort%taller
