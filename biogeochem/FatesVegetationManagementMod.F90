@@ -1070,8 +1070,8 @@ contains
           write(fates_log(), *) 'Patch_site_areadis =', Patch_site_areadis
           write(fates_log(), *) 'parent_patch%disturbance_rate =', parent_patch%disturbance_rate
           !call dump_cohort(donor_cohort)
-          write(fates_log(), *) 'donor_cohort%n = ', donor_cohort%n,
-          write(fates_log(), *) 'lmort_direct%n = ', lmort_direct%n,
+          write(fates_log(), *) 'donor_cohort%n = ', donor_cohort%n
+          write(fates_log(), *) 'donor_cohort%lmort_direct = ', donor_cohort%lmort_direct
           write(fates_log(), *) 'donor_cohort%vm_mort_bole_harvest = ', donor_cohort%vm_mort_bole_harvest
           write(fates_log(), *) 'donor_cohort%vm_pfrac_bole_harvest = ', donor_cohort%vm_pfrac_bole_harvest
         end if
