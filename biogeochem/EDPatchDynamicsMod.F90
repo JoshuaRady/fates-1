@@ -465,6 +465,7 @@ contains
     use EDParamsMod         , only : ED_val_understorey_death, logging_coll_under_frac
     use EDCohortDynamicsMod , only : zero_cohort, copy_cohort, terminate_cohorts
     use FatesVegetationManagementMod, only : management_fluxes, spawn_anthro_disturbed_cohorts
+    use FatesVegetationManagementMod, only : patch_disturbed_basal_area ! JMR_MOD: Temporary reporting
 
     !
     ! !ARGUMENTS:
@@ -959,6 +960,7 @@ contains
 
                ! Logging is the dominant disturbance  
                elseif (currentPatch%disturbance_mode .eq. dtype_ilog ) then
+                   patch_disturbed_basal_area(currentPatch) ! JMR_Temp!
                    call spawn_anthro_disturbed_cohorts(currentSite, currentCohort, nc)
 !                    
 !                    ! If this cohort is in the upper canopy. It generated 
@@ -1134,6 +1136,7 @@ contains
                 
                 currentCohort => currentCohort%taller      
              enddo ! currentCohort 
+             patch_disturbed_basal_area(currentPatch) ! JMR_MOD: Temporary reporting!
              call sort_cohorts(currentPatch)
              
              !update area of donor patch
@@ -1147,6 +1150,8 @@ contains
              call fuse_cohorts(currentSite,currentPatch, bc_in)
              call terminate_cohorts(currentSite, currentPatch, 2,16)
              call sort_cohorts(currentPatch)
+             
+             patch_disturbed_basal_area(currentPatch) ! JMR_MOD: Temporary reporting
 
           end if    ! if ( new_patch%area > nearzero ) then 
        

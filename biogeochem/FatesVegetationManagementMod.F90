@@ -1065,11 +1065,15 @@ contains
         if (debug) write(fates_log(), *) 'spawn_anthro_disturbed_cohorts() bole_harvest VM event.'
         
         if (debug) then
-          write(fates_log(), *) 'Starting conditions:'
+          write(fates_log(), *) 'Starting conditions:--------------------'
           write(fates_log(), *) 'parent_patch%area =',  parent_patch%area
           write(fates_log(), *) 'Patch_site_areadis =', Patch_site_areadis
           write(fates_log(), *) 'parent_patch%disturbance_rate =', parent_patch%disturbance_rate
-          call dump_cohort(donor_cohort)
+          !call dump_cohort(donor_cohort)
+          write(fates_log(), *) 'donor_cohort%n = ', donor_cohort%n,
+          write(fates_log(), *) 'lmort_direct%n = ', lmort_direct%n,
+          write(fates_log(), *) 'donor_cohort%vm_mort_bole_harvest = ', donor_cohort%vm_mort_bole_harvest
+          write(fates_log(), *) 'donor_cohort%vm_pfrac_bole_harvest = ', donor_cohort%vm_pfrac_bole_harvest
         end if
         
         ! Check the area:
@@ -1112,10 +1116,11 @@ contains
         
         if (debug) then
           write(fates_log(), *) 'Ending conditions:'
-          write(fates_log(), *) 'donor_cohort:'
-          call dump_cohort(donor_cohort)
-          write(fates_log(), *) 'new_cohort:'
-          call dump_cohort(new_cohort)
+          !write(fates_log(), *) 'donor_cohort:'
+          !call dump_cohort(donor_cohort)
+          !write(fates_log(), *) 'new_cohort:'
+          !call dump_cohort(new_cohort)
+          write(fates_log(), *) 'donor_cohort%n = ', donor_cohort%n, 'new_cohort%n = ', new_cohort%n
         end if
         
       ! case (burn)
@@ -1123,6 +1128,7 @@ contains
       
       case (null_profile) !-------------------------------------------------------------------------
         ! This cohort has experienced no managed mortality (but others in the patch may have).
+        if (debug) write(fates_log(), *) 'spawn_anthro_disturbed_cohorts() cohort has no managed mortality.'
         ! Note: The following behavior is the same as logging module grass above.
         
         ! Split the trees proportionally among the new and old patches:
@@ -4212,17 +4218,36 @@ contains
     
     ! Locals:
     real(r8) :: disturbed_basal_area ! Return value
+    real(r8) :: total_basal_area ! Temporary!
     type (ed_cohort_type), pointer :: current_cohort
     
     ! ----------------------------------------------------------------------------------------------
+    if (debug) write(fates_log(), *) 'patch_disturbed_basal_area():'
     
     disturbed_basal_area = 0.0_r8 ! Initialize.
+    total_basal_area = 0.0_r8 ! Temporary!
     
     current_cohort => patch%shortest
       do while(associated(current_cohort)) ! Bad indenting!
         
         if (any(pfts == current_cohort%pft)) then
           disturbed_basal_area = disturbed_basal_area + cohort_disturbed_basal_area(current_cohort) !disturbed_basal_area(current_cohort)
+        !endif
+          if (debug) write(fates_log(), *) 'Cohort is in +++++++++++, PFT = ', current_cohort%pft
+        else
+          if (debug) write(fates_log(), *) 'Cohort is out ----------, PFT = ', current_cohort%pft
+        endif
+        
+        if (debug) then
+          total_basal_area = total_basal_area + (pi_const * (current_cohort%dbh / 200.0_r8)**2.0_r8 * current_cohort%n) ! Move if kept.
+          !write(fates_log(), *) 'Next cohort:'
+          write(fates_log(), *) 'current_cohort%dbh = ', current_cohort%dbh
+          write(fates_log(), *) 'current_cohort%n = ', current_cohort%n, &
+                                'Effective n = ', cohort_effective_n(current_cohort), &
+                                'Disturbed n = ', cohort_disturbed_n(current_cohort)
+          write(fates_log(), *) 'Basal Area = ', pi_const * (current_cohort%dbh / 200.0_r8)**2.0_r8 * current_cohort%n, &
+                                'Effective BA = ', effective_basal_area, &
+                                'Total EBA = ', effective_basal_area
         endif
         
         current_cohort => current_cohort%taller
