@@ -960,7 +960,7 @@ contains
 
                ! Logging is the dominant disturbance  
                elseif (currentPatch%disturbance_mode .eq. dtype_ilog ) then
-                   patch_disturbed_basal_area(currentPatch) ! JMR_Temp!
+                   write(fates_log(),*) 'Disturbed BA = ', patch_disturbed_basal_area(currentPatch) ! JMR_MOD: Temporary reporting
                    call spawn_anthro_disturbed_cohorts(currentSite, currentCohort, nc)
 !                    
 !                    ! If this cohort is in the upper canopy. It generated 
@@ -1136,7 +1136,7 @@ contains
                 
                 currentCohort => currentCohort%taller      
              enddo ! currentCohort 
-             patch_disturbed_basal_area(currentPatch) ! JMR_MOD: Temporary reporting!
+             write(fates_log(),*) 'Disturbed BA = ', patch_disturbed_basal_area(currentPatch) ! JMR_MOD: Temporary reporting
              call sort_cohorts(currentPatch)
              
              !update area of donor patch
@@ -1151,7 +1151,7 @@ contains
              call terminate_cohorts(currentSite, currentPatch, 2,16)
              call sort_cohorts(currentPatch)
              
-             patch_disturbed_basal_area(currentPatch) ! JMR_MOD: Temporary reporting
+             write(fates_log(),*) 'Disturbed BA = ', patch_disturbed_basal_area(currentPatch) ! JMR_MOD: Temporary reporting
 
           end if    ! if ( new_patch%area > nearzero ) then 
        
