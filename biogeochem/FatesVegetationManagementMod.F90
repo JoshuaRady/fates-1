@@ -67,7 +67,7 @@ module FatesVegetationManagementMod
   private :: cohort_disturbed_n
   private :: patch_disturbed_n
   private :: cohort_disturbed_basal_area
-  private :: patch_disturbed_basal_area
+  public :: patch_disturbed_basal_area ! Temporarily public
   private :: get_flux_profile
   
   interface effective_basal_area
