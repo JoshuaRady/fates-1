@@ -961,8 +961,8 @@ contains
                ! Logging is the dominant disturbance  
                elseif (currentPatch%disturbance_mode .eq. dtype_ilog ) then
                    !write(fates_log(),*) 'Disturbed BA = ', patch_disturbed_basal_area(currentPatch, [1,2,3,4,5,6]) ! JMR_MOD: Temporary reporting
-                   write(fates_log(),*) 'spawn_patches() Before:' ! JMR_MOD: Temporary reporting
-                   write(fates_log(),*) patch_disturbed_basal_area(currentPatch, tree_pfts) ! JMR_MOD: Temporary reporting
+                   !write(fates_log(),*) 'spawn_patches() Before:' ! JMR_MOD: Temporary reporting
+                   !write(fates_log(),*) patch_disturbed_basal_area(currentPatch, tree_pfts) ! JMR_MOD: Temporary reporting
                    call spawn_anthro_disturbed_cohorts(currentSite, currentCohort, nc)
 !                    
 !                    ! If this cohort is in the upper canopy. It generated 
@@ -1155,9 +1155,13 @@ contains
              call terminate_cohorts(currentSite, currentPatch, 2,16)
              call sort_cohorts(currentPatch)
              
+             ! JMR_MOD_START: Temporary reporting
              !write(fates_log(),*) 'Disturbed BA = ', patch_disturbed_basal_area(currentPatch, [1,2,3,4,5,6]) ! JMR_MOD: Temporary reporting
              write(fates_log(),*) 'spawn_patches() After sorting and fusing:' ! JMR_MOD: Temporary reporting
              write(fates_log(),*) patch_disturbed_basal_area(currentPatch, tree_pfts) ! JMR_MOD: Temporary reporting
+             write(fates_log(),*) 'New patch:'
+             write(fates_log(),*) patch_disturbed_basal_area(new_patch, tree_pfts) ! JMR_MOD: Temporary reporting
+             ! JMR_MOD_END.
 
           end if    ! if ( new_patch%area > nearzero ) then 
        

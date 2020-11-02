@@ -1065,15 +1065,17 @@ contains
         if (debug) write(fates_log(), *) 'spawn_anthro_disturbed_cohorts() bole_harvest VM event.'
         
         if (debug) then
-          write(fates_log(), *) 'Starting conditions:--------------------'
-          write(fates_log(), *) 'parent_patch%area =',  parent_patch%area
-          write(fates_log(), *) 'Patch_site_areadis =', Patch_site_areadis
-          write(fates_log(), *) 'parent_patch%disturbance_rate =', parent_patch%disturbance_rate
+          !write(fates_log(), *) 'Starting conditions:--------------------'
+          !write(fates_log(), *) 'parent_patch%area =',  parent_patch%area
+          !write(fates_log(), *) 'Patch_site_areadis =', Patch_site_areadis
+          !write(fates_log(), *) 'parent_patch%disturbance_rate =', parent_patch%disturbance_rate
           !call dump_cohort(donor_cohort)
-          write(fates_log(), *) 'donor_cohort%n = ', donor_cohort%n
-          write(fates_log(), *) 'donor_cohort%lmort_direct = ', donor_cohort%lmort_direct
-          write(fates_log(), *) 'donor_cohort%vm_mort_bole_harvest = ', donor_cohort%vm_mort_bole_harvest
-          write(fates_log(), *) 'donor_cohort%vm_pfrac_bole_harvest = ', donor_cohort%vm_pfrac_bole_harvest
+          !write(fates_log(), *) 'donor_cohort%n = ', donor_cohort%n
+          !write(fates_log(), *) 'donor_cohort%lmort_direct = ', donor_cohort%lmort_direct
+          !write(fates_log(), *) 'donor_cohort%vm_mort_bole_harvest = ', donor_cohort%vm_mort_bole_harvest
+          !write(fates_log(), *) 'donor_cohort%vm_pfrac_bole_harvest = ', donor_cohort%vm_pfrac_bole_harvest
+          ! Revised:
+          write(fates_log(), *) 'Initial donor_cohort%n = ', donor_cohort%n
         end if
         
         ! Check the area:
@@ -1115,12 +1117,15 @@ contains
         new_cohort%vm_pfrac_bole_harvest = 0._r8
         
         if (debug) then
-          write(fates_log(), *) 'Ending conditions:'
+          !write(fates_log(), *) 'Ending conditions:'
           !write(fates_log(), *) 'donor_cohort:'
           !call dump_cohort(donor_cohort)
           !write(fates_log(), *) 'new_cohort:'
           !call dump_cohort(new_cohort)
-          write(fates_log(), *) 'donor_cohort%n = ', donor_cohort%n, 'new_cohort%n = ', new_cohort%n
+          !write(fates_log(), *) 'donor_cohort%n = ', donor_cohort%n, 'new_cohort%n = ', new_cohort%n
+          ! Revised:
+          write(fates_log(), *) 'donor_cohort%n         = ', donor_cohort%n
+          write(fates_log(), *) 'new_cohort%n           = ', new_cohort%n
         end if
         
       ! case (burn)
@@ -4257,7 +4262,7 @@ contains
     
      if (debug) then
        !write(fates_log(), *) 'patch_disturbed_basal_area(): basal area = ', disturbed_basal_area
-       write(fates_log(), *) 'patch_disturbed_basal_area():-----------'
+       !write(fates_log(), *) 'patch_disturbed_basal_area():-----------'
        write(fates_log(), *) 'Patch BA = ', total_basal_area, 'Disturbed BA = ', disturbed_basal_area
      end if
   end function patch_disturbed_basal_area
