@@ -114,7 +114,7 @@ module FatesVegetationManagementMod
   !integer(i4), parameter, private :: woody_pfts(9) = [1,2,3,4,5,6,7,8,9]
   !integer(i4), parameter, private :: tree_pfts(6) = [1,2,3,4,5,6]
   integer(i4), target, private :: woody_pfts(9) = [1,2,3,4,5,6,7,8,9]
-  integer(i4), target, private :: tree_pfts(6) = [1,2,3,4,5,6]
+  integer(i4), target, public :: tree_pfts(6) = [1,2,3,4,5,6] ! Temporarily public
   ! Shrubs?
   integer(i4), target, private :: understory_pfts(6) = [7,8,9,10,11,12]
   
@@ -4232,29 +4232,33 @@ contains
         
         if (any(pfts == current_cohort%pft)) then
           disturbed_basal_area = disturbed_basal_area + cohort_disturbed_basal_area(current_cohort) !disturbed_basal_area(current_cohort)
+          
+          total_basal_area = total_basal_area + (pi_const * (current_cohort%dbh / 200.0_r8)**2.0_r8 * current_cohort%n) ! Temporary!
         !endif
-          if (debug) write(fates_log(), *) 'Cohort is in +++++++++++, PFT = ', current_cohort%pft
-        else
-          if (debug) write(fates_log(), *) 'Cohort is out ----------, PFT = ', current_cohort%pft
+          !if (debug) write(fates_log(), *) 'Cohort is in +++++++++++, PFT = ', current_cohort%pft
+        !else
+          !if (debug) write(fates_log(), *) 'Cohort is out ----------, PFT = ', current_cohort%pft
         endif
         
-        if (debug) then
-          total_basal_area = total_basal_area + (pi_const * (current_cohort%dbh / 200.0_r8)**2.0_r8 * current_cohort%n) ! Move if kept.
+        !if (debug) then
+          !total_basal_area = total_basal_area + (pi_const * (current_cohort%dbh / 200.0_r8)**2.0_r8 * current_cohort%n) ! Move if kept.
           !write(fates_log(), *) 'Next cohort:'
-          write(fates_log(), *) 'current_cohort%dbh = ', current_cohort%dbh
-          write(fates_log(), *) 'current_cohort%n = ', current_cohort%n, &
-                                'Effective n = ', cohort_effective_n(current_cohort), &
-                                'Disturbed n = ', cohort_disturbed_n(current_cohort)
-          write(fates_log(), *) 'Basal Area = ', pi_const * (current_cohort%dbh / 200.0_r8)**2.0_r8 * current_cohort%n, &
-                                'Disturbed BA = ', disturbed_basal_area, &
-                                'Total EBA = ', total_basal_area
-        endif
+          !write(fates_log(), *) 'current_cohort%dbh = ', current_cohort%dbh
+          !write(fates_log(), *) 'current_cohort%n = ', current_cohort%n, &
+          !                      'Effective n = ', cohort_effective_n(current_cohort), &
+          !                      'Disturbed n = ', cohort_disturbed_n(current_cohort)
+          !write(fates_log(), *) 'Basal Area = ', pi_const * (current_cohort%dbh / 200.0_r8)**2.0_r8 * current_cohort%n, &
+          !                      'Disturbed BA = ', disturbed_basal_area, &
+          !                      'Total EBA = ', total_basal_area
+        !endif
         
         current_cohort => current_cohort%taller
       end do ! Cohort loop.
     
      if (debug) then
-       write(fates_log(), *) 'patch_disturbed_basal_area(): basal area = ', disturbed_basal_area
+       !write(fates_log(), *) 'patch_disturbed_basal_area(): basal area = ', disturbed_basal_area
+       write(fates_log(), *) 'patch_disturbed_basal_area():-----------'
+       write(fates_log(), *) 'Patch BA = ', total_basal_area, 'Disturbed BA = ', disturbed_basal_area
      end if
   end function patch_disturbed_basal_area
   
