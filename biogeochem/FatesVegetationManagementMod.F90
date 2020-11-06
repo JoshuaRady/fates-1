@@ -393,7 +393,7 @@ contains
       do while (associated(current_patch))
         if (thinnable_patch(patch = current_patch, pfts = tree_pfts, goal_basal_area = 20.0_r8)) then
           call thin_row_low(patch = current_patch, pfts = tree_pfts, &
-                            row_fraction = 0.2_r8, final_basal_area = 25.0_r8)
+                            row_fraction = 0.2_r8, final_basal_area = 20.0_r8)
         endif
         current_patch => current_patch%younger
       end do
