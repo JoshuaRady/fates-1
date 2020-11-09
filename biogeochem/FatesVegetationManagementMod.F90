@@ -381,6 +381,8 @@ contains
     ! Perform thinning before harvest since wood for thinning can be used to reduce harvest demand.
     !
     ! As an initial test criteria search for an appropriate aged patch and thin it:
+    ! Note: Thinning may send mass to the harvest pool.  thin_row_low() estimates harvest but we do
+    ! not retrieve it in the code below.
     ! ----------------------------------------------------------------------------------------------
     if (thinning_needed) then
       
@@ -3323,12 +3325,14 @@ contains
               call kill_disturbed(cohort = current_cohort, flux_profile = bole_harvest, &
                                   kill_fraction = cohort_fraction)
               
-            end if
+            end if ! (cohort_ba <= thin_ba_remaining)
+            
+            ! The harvest estimate and BAI only need to updated if we harvested something:
+            ! Accumulate harvest estimate:
+            harvest = harvest + cohort_harvestable_biomass(current_cohort) ! staged = true!!!!
+            patch_bai = disturbed_basal_area(patch, thin_pfts) ! Update the BAI calculation.
           end if ! (any(pfts == current_cohort%pft))
           
-          ! Accumulate harvest estimate:
-          harvest = harvest + cohort_harvestable_biomass(current_cohort) ! staged = true!!!!  Move up into conditional, may harvest 0 to all!
-          patch_bai = disturbed_basal_area(patch, thin_pfts) ! Update the BAI calculation.  Move up, only necissary if this was a valid PFT!
           current_cohort => current_cohort%taller
         end do ! Cohort loop.
         
@@ -3373,11 +3377,13 @@ contains
                         kill_fraction = cohort_fraction)
               
             end if
+            
+            ! The harvest estimate and stem density only need to updated if we harvested something:
+            ! Accumulate harvest estimate:
+            harvest = harvest + cohort_harvestable_biomass(current_cohort) ! staged = true!!!!
+            patch_sd = patch_disturbed_n(patch, thin_pfts) ! disturbed_stem_density(patch, thin_pfts) ! Update the stem density.
           end if ! (any(pfts == current_cohort%pft))
           
-          ! Accumulate harvest estimate:
-          harvest = harvest + cohort_harvestable_biomass(current_cohort) ! staged = true!!!!
-          patch_sd = patch_disturbed_n(patch, thin_pfts) ! disturbed_stem_density(patch, thin_pfts) ! Update the stem density.
           current_cohort => current_cohort%taller
         end do ! Cohort loop.
       endif ! (use_bai)
