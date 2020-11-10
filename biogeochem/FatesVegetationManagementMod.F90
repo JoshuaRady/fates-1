@@ -4125,10 +4125,12 @@ contains
     staged_pfrac = 0.0_r8
     
     ! This is not currently intended to be used along with logging module harvests:
+    ! Note: To allow the use of patch_disturbed_basal_area() in development reporting I have
+    ! temporarily lowered this to a warning.
     if (cohort%lmort_direct /= 0.0_r8) then
       write(fates_log(),*) 'disturbed_n() is not currently intended to be use in conjunction with traditional logging module events.'
       call dump_cohort(cohort)
-      call endrun(msg = errMsg(__FILE__, __LINE__))
+      !call endrun(msg = errMsg(__FILE__, __LINE__))
     endif
     
     if (cohort%vm_mort_bole_harvest > 0.0_r8 .and. cohort%vm_mort_in_place > 0.0_r8) then
