@@ -558,7 +558,10 @@ contains
          if ( hlm_use_cohort_age_tracking .eq. itrue) then
             maxCohortsPerPatch = 300
          else
-            maxCohortsPerPatch = 100
+            ! maxCohortsPerPatch = 100
+            write(fates_log(), *) 'hlm_use_cohort_age_tracking is on.' ! JMR_MOD: Reporting.
+            write(fates_log(), *) 'Changing maxCohortsPerPatch => 250.' ! JMR_MOD: Reporting.
+            maxCohortsPerPatch = 250 ! JMR_MOD
          end if
          
          ! These values are used to define the restart file allocations and general structure
