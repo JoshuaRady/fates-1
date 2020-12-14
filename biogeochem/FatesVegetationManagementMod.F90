@@ -52,6 +52,7 @@ module FatesVegetationManagementMod
   
   private :: kill
   private :: kill_disturbed
+  private :: kill_patch
   
   private :: understory_control
   private :: thin_row_low
@@ -69,7 +70,9 @@ module FatesVegetationManagementMod
   private :: cohort_disturbed_basal_area
   public :: patch_disturbed_basal_area ! Temporarily public
   private :: get_flux_profile
+  private :: validate_size_specifications
   
+  ! JMR_NOTE: These interfaces have given me a bit of trouble and are a work in progress:
   interface effective_basal_area
     module procedure patch_effective_basal_area
     module procedure cohort_effective_basal_area
@@ -2955,7 +2958,7 @@ contains
       prev_pfrac = maxval(prev_area_fractions)
       total_mortality = prev_mortalilty + kill_fraction * (prev_pfrac - prev_mortalilty)
       
-      ! I suspect there is a problem with this calculation:
+      ! I suspect there is a problem with this calculation: [Probably no longer necessary]
       if (debug) then
         write(fates_log(), *) 'prev_mortalilty = ', prev_mortalilty
         write(fates_log(), *) 'prev_pfrac = ', prev_pfrac
@@ -2979,6 +2982,65 @@ contains
   end subroutine kill_disturbed
 
   !=================================================================================================
+  
+  ! Argument order?????
+  subroutine kill_patch(patch, flux_profile, pfts, dbh_min, dbh_max, ht_min, ht_max,
+                        kill_fraction, area_fraction) ! kill_patch_kill_disturbed? cull? harvest_patch
+    ! ----------------------------------------------------------------------------------------------
+    ! Kill plants that match the PFT and size specifications passed across a patch.
+    !
+    ! I need to add a disturbed flag or a disturbed version!
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Uses: None
+    
+    ! Arguments:
+    type(ed_patch_type), intent(inout), target :: patch
+    integer, intent(in) :: flux_profile ! A code specifying where the dead material goes.
+    integer(i4), dimension(:), intent(in) :: pfts ! Optional?
+    
+    ! Size specification:
+    ! Size range of to plants to kill.  Defaults to everything, otherwise some range of sizes, e.g. > 10cm DBH, < 15 m in height, etc.
+    real(r8), intent(in), optional :: dbh_min
+    real(r8), intent(in), optional :: dbh_max
+    real(r8), intent(in), optional :: ht_min
+    real(r8), intent(in), optional :: ht_max
+    
+    real(r8), intent(in) :: kill_fraction ! Fraction of plants to remove from disturbed sub-patch.
+    ! Make optional and default to 1.0 / everything?????
+    
+    ! The fraction of the patch that the mortality is removed from / the size of the disturbance:
+    real(r8), intent(in), optional :: area_fraction ! Works as optional!!!!!
+    
+    ! Locals:
+    real(r8) :: the_dbh_min
+    real(r8) :: the_dbh_max
+    real(r8) :: the_ht_min
+    real(r8) :: the_ht_max
+    
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Check and set the size specifications:
+    call validate_size_specifications(the_dbh_min, the_dbh_min, the_ht_min, the_ht_min, &
+                                      dbh_min, dbh_max, ht_min, ht_max)
+    
+    ! Similar to  of understory_control?????
+    current_cohort => patch%shortest
+    do while(associated(current_cohort))
+    
+      if (any(pfts == current_cohort%pft) .and. &
+          current_cohort%dbh >= dbh_min .and. current_cohort%dbh <= dbh_max .and. &
+          current_cohort%hite >= ht_min .and. current_cohort%hite <= ht_max) then
+        
+        call kill(cohort = current_cohort, flux_profile = flux_profile,
+                  kill_fraction = kill_fraction, & area_fraction = area_fraction)
+        endif
+      current_cohort => current_cohort%taller
+    end do ! Cohort loop.
+    
+  end subroutine kill_patch
+
+  !=================================================================================================
   ! Competition Control Subroutines:
   !=================================================================================================
 
@@ -2992,7 +3054,7 @@ contains
     ! Could add option to remove small trees as well, possibly by PFT.
     ! ----------------------------------------------------------------------------------------------
     
-    ! Uses: NA
+    ! Uses:
     use FatesInterfaceTypesMod, only : numpft
     
     ! Arguments:
@@ -3472,7 +3534,7 @@ contains
   subroutine harvest_mass_min_area(site_in, harvest_c_primary, harvest_c_secondary, & ! REVIEW!
                                    pfts, dbh_min, dbh_max, ht_min, ht_max)
     ! ----------------------------------------------------------------------------------------------
-    ! Harvest the requested harvest amounts from the site while attempting to use the minimal area.
+    ! Harvest the requested harvest amounts from the site while attempting to use the minimum area.
     ! The harvest amounts are specified as product biomass in carbon (g or kg??????).
     !   [I need to confirm that LUH data uses wood product...]
     ! Primary and secondary lands are harvested separately.  A shortfall in one will not be made up
@@ -3494,14 +3556,17 @@ contains
     ! We will use the number of stems / ha that meet the harvest criteria as the metric of stand
     ! quality and rank patches according to this.
     ! 
-    !   While we allow the mix of PFTs that will be harvested to be specified we so not priorize the
+    !   While we allow the mix of PFTs that will be harvested to be specified we do not priorize the
     ! harvest of any listed PFT over another.  We also don't harvest the biggest trees first.  We
     ! assume that any tree meeting the harvest criteria is as good as any other.  Therefore, all
     ! PFTs and sizes will be harvested proportionally according to abundance.  This is consist with
     ! the idea of a patch representing a heterogeneous and well mixed population.
     !
     !   Also, in a departure from the historic logging module, we don't assume that harvest can only
-    ! come from the top layer of the canopy.
+    ! come from the top layer of the canopy.  We change this assumption because the top canopy layer
+    ! is not magic in FATES.  If a patch is mostly trees there may be many cohorts of appropriate
+    ! sizer for harvest in the second layer.  While FATES terms these plants 'understory' they might
+    ! they may include codominant or suppressed trees.
     !
     !   While we use a logging metaphor above, this subroutine could also be used for other purposes.
     ! Harvest of fodder would be a good application. To fully realize this a harvest mode parameter
@@ -3535,8 +3600,9 @@ contains
     real(r8) :: the_dbh_max
     real(r8) :: the_ht_min
     real(r8) :: the_ht_max
-    real(r8), parameter :: dbh_massive = 14050.0_r8 ! Arbol del Tule: Taxodium mucronatum, 14.05 m
-    real(r8), parameter :: ht_massive = 115.92_r8 ! Hyperion: Sequoia sempervirens
+    ! Massive upper size limits based on the largest trees known:
+    !real(r8), parameter :: dbh_massive = 14050.0_r8 ! Arbol del Tule: Taxodium mucronatum, 14.05 m
+    !real(r8), parameter :: ht_massive = 115.92_r8 ! Hyperion: Sequoia sempervirens
     
     real(r8) :: patch_harvestable_stems ! Number of plants available for harvest.
     real(r8) :: cohort_harvest ! cohort_harvestable_biomass
@@ -3558,6 +3624,8 @@ contains
     ! An estimate of the harvest flux will be made and stored: ?????????????????
     !site_in%harvest_carbon_flux = 0._r8
     
+    ! Make pfts optional!!!!!
+    
     ! Size specification:
     ! Only allow specification of harvest size by DBH or height:
     ! Note: For a single PFT it would be acceptable to specify a size range using a single DBH value
@@ -3565,50 +3633,55 @@ contains
     ! not be mapped uniquely height and it becomes imposible to perform comparisons.
     ! This is a lot of code but it is tricky to figure out how functionalize it.
     
-    if ((present(dbh_min) .or. present(dbh_min)) .and. (present(ht_min) .or. present(ht_max))) then
-      write(fates_log(),*) 'Cannot specify harvest range as a mix of DBH and height.'
-      call endrun(msg = errMsg(__FILE__, __LINE__))
-    endif
+    ! if ((present(dbh_min) .or. present(dbh_min)) .and. (present(ht_min) .or. present(ht_max))) then
+!       write(fates_log(),*) 'Cannot specify harvest range as a mix of DBH and height.'
+!       call endrun(msg = errMsg(__FILE__, __LINE__))
+!     endif
+!     
+!     if (present(dbh_min)) then
+!       if (dbh_min < 0) then
+!         write(fates_log(),*) 'dbh_min cannot be less than 0.'
+!         call endrun(msg = errMsg(__FILE__, __LINE__))
+!       endif
+!       the_dbh_min = dbh_min
+!     else
+!       the_dbh_min = 0 ! Impossibly small value.
+!     endif
+!     
+!     if (present(dbh_max)) then
+!       if (dbh_max > dbh_massive) then
+!         write(fates_log(),*) 'dbh_max is unrealistically large. Leave blank for no upper limit.'
+!         call endrun(msg = errMsg(__FILE__, __LINE__))
+!       endif
+!       the_dbh_max = dbh_max
+!     else
+!       the_dbh_max = dbh_massive ! Impossibly large value.
+!     endif
+!     
+!     if (present(ht_min)) then
+!       if (ht_min < 0) then
+!         write(fates_log(),*) 'ht_min cannot be less than 0.'
+!         call endrun(msg = errMsg(__FILE__, __LINE__))
+!       endif
+!       the_ht_min = ht_min
+!     else
+!       the_ht_min = 0 ! Impossibly small value.
+!     endif
+!     
+!     if (present(ht_max)) then
+!       if (ht_max > ht_massive) then
+!         write(fates_log(),*) 'ht_max is unrealistically large. Leave blank for no upper limit.'
+!         call endrun(msg = errMsg(__FILE__, __LINE__))
+!       endif
+!       the_ht_max = ht_max
+!     else
+!       the_ht_max = ht_massive ! Impossibly large value.
+!     endif
+    ! The above has been moved to validate_size_specifications().
     
-    if (present(dbh_min)) then
-      if (dbh_min < 0) then
-        write(fates_log(),*) 'dbh_min cannot be less than 0.'
-        call endrun(msg = errMsg(__FILE__, __LINE__))
-      endif
-      the_dbh_min = dbh_min
-    else
-      the_dbh_min = 0 ! Impossibly small value.
-    endif
-    
-    if (present(dbh_max)) then
-      if (dbh_max > dbh_massive) then
-        write(fates_log(),*) 'dbh_max is unrealistically large. Leave blank for no upper limit.'
-        call endrun(msg = errMsg(__FILE__, __LINE__))
-      endif
-      the_dbh_max = dbh_max
-    else
-      the_dbh_max = dbh_massive ! Impossibly large value.
-    endif
-    
-    if (present(ht_min)) then
-      if (ht_min < 0) then
-        write(fates_log(),*) 'ht_min cannot be less than 0.'
-        call endrun(msg = errMsg(__FILE__, __LINE__))
-      endif
-      the_ht_min = ht_min
-    else
-      the_ht_min = 0 ! Impossibly small value.
-    endif
-    
-    if (present(ht_max)) then
-      if (ht_max > ht_massive) then
-        write(fates_log(),*) 'ht_max is unrealistically large. Leave blank for no upper limit.'
-        call endrun(msg = errMsg(__FILE__, __LINE__))
-      endif
-      the_ht_max = ht_max
-    else
-      the_ht_max = ht_massive ! Impossibly large value.
-    endif
+    ! Check and set the size specifications:
+    call validate_size_specifications(the_dbh_min, the_dbh_min, the_ht_min, the_ht_min, &
+                                      dbh_min, dbh_max, ht_min, ht_max)
     
     ! ----------------------------------------------------------------------------------------------
     
@@ -3626,12 +3699,12 @@ contains
       
       harvest_total = 0.0_r8
       
-      ! Count patches:
+      ! Count patches in this land class:
       num_patches = 0
       current_patch => site_in%oldest_patch
       do while (associated(current_patch) .and. &
                 current_patch%anthro_disturbance_label == forest_class)
-        num_patches = num_patches +1
+        num_patches = num_patches + 1
       end do ! Patch loop
       
       ! Find the patch of the highest quality and harvest from it, then find the next best patch,
@@ -3639,10 +3712,12 @@ contains
       
       ! It would be most efficient to discard / skip the previous best patch after each search and
       ! harvest cycle.  However the fact that the patches are organized as a linked list makes this
-      ! difficult.  Since the appropriate trees are removed from patches that are harvested they
-      ! won't match again as the best. 
+      ! difficult.  Since the appropriate trees are removed from patches as they are harvested they
+      ! won't match again as the best (assuming we use the 'effective' accessors).
+      ! A better way to do this would be to make our own list of patches.
+      !
       ! For safety we make sure that we stop after we have done as many cycle as there are patches.
-      ! Hoever, this logic is probably superflous since the loop will stop if we harvest enough or
+      ! However, this logic is probably superflous since the loop will stop if we harvest enough or
       ! run out of patches with appropriate PFTs.
       
       search_cycles = 0
@@ -3675,11 +3750,19 @@ contains
                 ! Accumulated the potentially harvestable biomass:
                 ! Currently this the bole X logging module modifiers
                 !cohort_harvestable_biomass = cohort_harvestable_biomass(current_cohort)
-                cohort_harvest = cohort_harvestable_biomass(current_cohort)
+                !cohort_harvest = cohort_harvestable_biomass(current_cohort)
+                
+                ! Get the harvestable mass for the entire cohort:
+                cohort_harvest = cohort_harvestable_biomass(cohort = current_cohort, &
+                                                            harvest_profile = bole_harvest,
+                                                            staged = .true.)
                 
                 ! This is wrong!!!!! Need to use n not patch_harvestable_stems:
                 !patch_harvestable_biomass = patch_harvestable_biomass + &
                 !                            (cohort_harvestable_biomass * patch_harvestable_stems)
+                
+                ! Don't need to multiply by anything actually!
+                patch_harvestable_biomass = patch_harvestable_biomass + cohort_harvest
                 
               !else
               endif
@@ -3706,9 +3789,16 @@ contains
           if (harvest_remaining >= best_patch_harvestable_biomass) then
             ! If less than the remaining demand harvest all the trees in the patch:
 !             harvest_patch(patch = best_patch, pfts = pfts, dbh_min = the_dbh_min, &    Not implemented!
-!                           dbh_max = the_dbh_max, ht_min = the_ht_min, ht_max = the_ht_max) ! !!!!!!!!!!!!!!!!!!!!!!!! 
+!                           dbh_max = the_dbh_max, ht_min = the_ht_min, ht_max = the_ht_max) ! !!!!!!!!!!!!!!!!!!!!!!!!
+            kill_patch(patch = best_patch, flux_profile = vm_mort_bole_harvest, pfts = pfts, &
+                       dbh_min = the_dbh_min, dbh_max = the_dbh_max, &
+                       ht_min = the_ht_min, ht_max = the_ht_max)!, kill_fraction = 1.0_r8) ! ??????
             
             harvest_total = harvest_total + best_patch_harvestable_biomass ! Record the harvest.
+            
+            harvest_remaining = harvest_remaining - best_patch_harvestable_biomass ! Is this needed with harvest_total?  Move down?
+            ! It might be better to store the requested amount and subtract harvest_total each time?
+            
           else
             ! Otherwise harvest a fraction across all sizes.  This is equivalent to harvesting the
             ! smallest area of a heterogeneous area represented by the patch:
@@ -3717,18 +3807,22 @@ contains
 !             harvest_patch(patch = best_patch, pfts = pfts, dbh_min = the_dbh_min, &
 !                           dbh_max = the_dbh_max, ht_min = the_ht_min, ht_max = the_ht_max, &
 !                           fraction = patch_harvest_fraction)
+            kill_patch(patch = best_patch, flux_profile = vm_mort_bole_harvest, pfts = pfts, &
+                       dbh_min = the_dbh_min, dbh_max = the_dbh_max, &
+                       ht_min = the_ht_min, ht_max = the_ht_max, &
+                       kill_fraction = patch_harvest_fraction) ! ??????
             
             harvest_total = harvest_total + (best_patch_harvestable_biomass * patch_harvest_fraction)
             
             ! We have matched the harvest amount so stop:
             exit
             ! We could include the conditional (harvest_remaining > 0) in the bounding do loop but
-            ! using exit avoids an potential floating point comparison issues.
+            ! using exit avoids any potential floating point comparison issues.
           endif ! (harvest_remaining > 0)
         else
           ! If we have run out of patches that have harvestable trees terminate early:
           exit
-        endif ! (best_patch_harvestable > 0)
+        endif ! (best_patch_harvestable_stems > 0)
         
         search_cycles = search_cycles + 1
       end do ! (search_cycles < num_patches)
@@ -3892,7 +3986,11 @@ contains
 !       harvest = harvest * harvest_fraction
       
       if (harvest_fraction /= 0.0_r8) then
-        harvest = harvest * harvest_fraction
+        !harvest = harvest * harvest_fraction
+        
+        ! The above is wrong I think.
+        ! Reduce the harvest amount to reflect the staged mortally:
+        harvest = harvest * (1.0_r8 - harvest_fraction)
       endif
     endif
     
@@ -4346,6 +4444,119 @@ contains
     !end if
     
   end function get_flux_profile
+
+  !=================================================================================================
+
+  subroutine validate_size_specifications(dbh_min_out, dbh_max_out, ht_min_out, ht_max_outg, &
+                                          dbh_min, dbh_max, ht_min, ht_max)! Name?
+    ! ----------------------------------------------------------------------------------------------
+    ! This routine takes a set of size specifications, performs validity checks on the values and 
+    ! combinations passed, and returns appropriate defaults for any missing arguments.
+    !
+    ! The main purpose of this routine is to reduce code repetition...
+    !
+    ! The arguments and argument order may seem a bit strange due to the optional nature of the
+    ! arguments. It would be most elegant to have the four size specifications as inout but it is
+    ! not possible to return a value if it is optional and having to check the values for presence
+    ! prior to passing them in would defeat one of the main purposes for this routine.
+    !
+    ! All size specifications are returned.  Rather that trying to determine if DBH or height is
+    ! being used the calling code should just compare if a cohort meets all the criteria. Inclusive
+    ! values are given for the unused specifications so only the used specification will actually
+    ! matter.
+    !
+    ! Temporary note: Based on code from harvest_mass_min_area().
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Uses: None
+    
+    ! Arguments:
+    real(r8), intent(out), optional :: dbh_min_out
+    real(r8), intent(out), optional :: dbh_max_out
+    real(r8), intent(out), optional :: ht_min_out
+    real(r8), intent(out), optional :: ht_max_out
+    
+    
+    ! Size range of to trees to harvest.  Defaults to everything, otherwise some range of sizes,
+    ! e.g. > 10cm DBH, < 15 m in height, etc.
+    real(r8), intent(in), optional :: dbh_min
+    real(r8), intent(in), optional :: dbh_max
+    real(r8), intent(in), optional :: ht_min
+    real(r8), intent(in), optional :: ht_max
+    
+    ! Massive upper size limits based on the largest trees known:
+    real(r8), parameter :: dbh_massive = 14050.0_r8 ! Arbol del Tule: Taxodium mucronatum, 14.05 m
+    real(r8), parameter :: ht_massive = 115.92_r8 ! Hyperion: Sequoia sempervirens
+    
+    ! Locals: None
+    
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Size specification:
+    
+    ! Only allow specification of harvest size by DBH or height:
+    ! Note: For a single PFT it would be acceptable to specify a size range using a single DBH value
+    ! and a single height value.  However, for a mix of PFTs differing allometries means a DBH can
+    ! not be mapped uniquely to height and it becomes imposible to perform comparisons safely.
+    if ((present(dbh_min) .or. present(dbh_min)) .and. (present(ht_min) .or. present(ht_max))) then
+      write(fates_log(),*) 'Cannot specify harvest range as a mix of DBH and height.'
+      call endrun(msg = errMsg(__FILE__, __LINE__))
+    endif
+    
+    ! Check validity of values that are present and provide sensibel defaults for the missing ones:
+    if (present(dbh_min)) then
+      if (dbh_min < 0) then
+        write(fates_log(),*) 'dbh_min cannot be less than 0.'
+        call endrun(msg = errMsg(__FILE__, __LINE__))
+      endif
+      dbh_min_out = dbh_min
+    else
+      dbh_min_out = 0 ! Impossibly small value.
+    endif
+    
+    if (present(dbh_max)) then
+      if (dbh_max > dbh_massive) then
+        write(fates_log(),*) 'dbh_max is unrealistically large. Leave blank for no upper limit.'
+        ! We could just warn here as this is unlikely to have any negative effects.
+        call endrun(msg = errMsg(__FILE__, __LINE__))
+      endif
+      dbh_max_out = dbh_max
+    else
+      dbh_max_out = dbh_massive ! Impossibly large value.
+    endif
+    
+    if (present(ht_min)) then
+      if (ht_min < 0) then
+        write(fates_log(),*) 'ht_min cannot be less than 0.'
+        call endrun(msg = errMsg(__FILE__, __LINE__))
+      endif
+      ht_min_out = ht_min
+    else
+      ht_min_out = 0 ! Impossibly small value.
+    endif
+    
+    if (present(ht_max)) then
+      if (ht_max > ht_massive) then
+        write(fates_log(),*) 'ht_max is unrealistically large. Leave blank for no upper limit.'
+        call endrun(msg = errMsg(__FILE__, __LINE__))
+      endif
+      ht_max_out = ht_max
+    else
+      ht_max_out = ht_massive ! Impossibly large value.
+    endif
+    
+    ! Check that values define valid ranges:
+    if (dbh_min_out > dbh_max_out) then
+      write(fates_log(),*) 'The maximum DBH specification is smaller that the minimum.'
+      call endrun(msg = errMsg(__FILE__, __LINE__))
+    endif
+    
+    if (ht_min_out > ht_max_out) then
+      write(fates_log(),*) 'The maximum height specification is smaller that the minimum.'
+      call endrun(msg = errMsg(__FILE__, __LINE__))
+    endif
+    
+  end subroutine validate_size_specifications
 
   !=================================================================================================
   ! Patch and Cohort Search Subroutines:
