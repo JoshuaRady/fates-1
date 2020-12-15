@@ -2986,7 +2986,7 @@ contains
   !=================================================================================================
   
   ! Argument order?????
-  subroutine kill_patch(patch, flux_profile, pfts, dbh_min, dbh_max, ht_min, ht_max,
+  subroutine kill_patch(patch, flux_profile, pfts, dbh_min, dbh_max, ht_min, ht_max, &
                         kill_fraction, area_fraction) ! kill_patch_kill_disturbed? cull? harvest_patch
     ! ----------------------------------------------------------------------------------------------
     ! Kill plants that match the PFT and size specifications passed across a patch.
@@ -3020,13 +3020,15 @@ contains
     real(r8) :: the_ht_min
     real(r8) :: the_ht_max
     
+    type (ed_cohort_type), pointer :: current_cohort
+    
     ! ----------------------------------------------------------------------------------------------
     
     ! Check and set the size specifications:
     call validate_size_specifications(the_dbh_min, the_dbh_min, the_ht_min, the_ht_min, &
                                       dbh_min, dbh_max, ht_min, ht_max)
     
-    ! Similar to  of understory_control?????
+    ! Similar to understory_control?????
     current_cohort => patch%shortest
     do while(associated(current_cohort))
     
@@ -3034,7 +3036,7 @@ contains
           current_cohort%dbh >= dbh_min .and. current_cohort%dbh <= dbh_max .and. &
           current_cohort%hite >= ht_min .and. current_cohort%hite <= ht_max) then
         
-        call kill(cohort = current_cohort, flux_profile = flux_profile,
+        call kill(cohort = current_cohort, flux_profile = flux_profile, &
                   kill_fraction = kill_fraction, & area_fraction = area_fraction)
         endif
       current_cohort => current_cohort%taller
@@ -3756,7 +3758,7 @@ contains
                 
                 ! Get the harvestable mass for the entire cohort:
                 cohort_harvest = cohort_harvestable_biomass(cohort = current_cohort, &
-                                                            harvest_profile = bole_harvest,
+                                                            harvest_profile = bole_harvest, &
                                                             staged = .true.)
                 
                 ! This is wrong!!!!! Need to use n not patch_harvestable_stems:
@@ -3792,9 +3794,9 @@ contains
             ! If less than the remaining demand harvest all the trees in the patch:
 !             harvest_patch(patch = best_patch, pfts = pfts, dbh_min = the_dbh_min, &    Not implemented!
 !                           dbh_max = the_dbh_max, ht_min = the_ht_min, ht_max = the_ht_max) ! !!!!!!!!!!!!!!!!!!!!!!!!
-            kill_patch(patch = best_patch, flux_profile = vm_mort_bole_harvest, pfts = pfts, &
-                       dbh_min = the_dbh_min, dbh_max = the_dbh_max, &
-                       ht_min = the_ht_min, ht_max = the_ht_max)!, kill_fraction = 1.0_r8) ! ??????
+            call kill_patch(patch = best_patch, flux_profile = vm_mort_bole_harvest, pfts = pfts, &
+                            dbh_min = the_dbh_min, dbh_max = the_dbh_max, &
+                            ht_min = the_ht_min, ht_max = the_ht_max)!, kill_fraction = 1.0_r8) ! ??????
             
             harvest_total = harvest_total + best_patch_harvestable_biomass ! Record the harvest.
             
@@ -4449,7 +4451,7 @@ contains
 
   !=================================================================================================
 
-  subroutine validate_size_specifications(dbh_min_out, dbh_max_out, ht_min_out, ht_max_outg, &
+  subroutine validate_size_specifications(dbh_min_out, dbh_max_out, ht_min_out, ht_max_out, &
                                           dbh_min, dbh_max, ht_min, ht_max)! Name?
     ! ----------------------------------------------------------------------------------------------
     ! This routine takes a set of size specifications, performs validity checks on the values and 
