@@ -3718,6 +3718,9 @@ contains
         current_patch => current_patch%younger
       end do ! Patch loop
       
+      if (debug) write(fates_log(), *) 'harvest_mass_min_area(): Through counting.' ! Temp
+      if (debug) write(fates_log(), *) 'harvest_mass_min_area(): num_patches = ', num_patches ! Temp
+      
       ! Find the patch of the highest quality and harvest from it, then find the next best patch,
       ! and so on iteratively until either we harvest enough or we run out of patches:
       
@@ -3737,6 +3740,9 @@ contains
         best_patch_harvestable_stems = 0.0_r8
         best_patch => null()
         
+        if (debug) write(fates_log(), *) 'harvest_mass_min_area(): Search loop.' ! Temp
+        if (debug) write(fates_log(), *) 'harvest_mass_min_area(): search_cycles = ', search_cycles ! Temp
+        
         ! Walk the patches from oldest to youngest, on the assumption that older patches will likely
         ! have larger and more valuable trees:
         current_patch => site_in%oldest_patch
@@ -3744,6 +3750,8 @@ contains
 !                   current_patch%anthro_disturbance_label == forest_class)
         do while (associated(current_patch))
           patch_harvestable_stems = 0.0_r8
+          
+          if (debug) write(fates_log(), *) 'harvest_mass_min_area(): Patch loop.' ! Temp
           
           if (current_patch%anthro_disturbance_label == forest_class) then
             ! Calculate the number of trees that meet the harvest criteria for the patch:
