@@ -3796,7 +3796,8 @@ contains
 !                           dbh_max = the_dbh_max, ht_min = the_ht_min, ht_max = the_ht_max) ! !!!!!!!!!!!!!!!!!!!!!!!!
             call kill_patch(patch = best_patch, flux_profile = vm_mort_bole_harvest, pfts = pfts, &
                             dbh_min = the_dbh_min, dbh_max = the_dbh_max, &
-                            ht_min = the_ht_min, ht_max = the_ht_max)!, kill_fraction = 1.0_r8) ! ??????
+                            ht_min = the_ht_min, ht_max = the_ht_max, &
+                            kill_fraction = 1.0_r8) ! kill_fraction is not currently optional but should be.
             
             harvest_total = harvest_total + best_patch_harvestable_biomass ! Record the harvest.
             
