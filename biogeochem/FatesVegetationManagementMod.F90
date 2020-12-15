@@ -308,7 +308,7 @@ contains
     ! Manually trigger events for initial testing: TEMPORARY!
     if (hlm_current_year == 2050 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
       thinning_needed = .true.
-    else if (hlm_current_year == 2050 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
+    else if (hlm_current_year == 1942 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
       harvest_needed = .true.
     else if (hlm_current_year == 2050 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
       control_needed = .true.
@@ -436,11 +436,13 @@ contains
 !       end do ! Patch loop.
       
       ! Test 2:
-      c_1st = 5000.0_r8
+      c_1st = 2000.0_r8
       c_2nd = 0.0_r8
       call harvest_mass_min_area(site_in = site_in, harvest_c_primary = c_1st, harvest_c_secondary = c_2nd, & ! REVIEW!
                                  pfts = tree_pfts, dbh_min = 10.0_r8)
       
+      ! Report the amount harvested to the log:
+      write(fates_log(), *) 'Amount harvested: ', c_1st
       
       ! Estimate the woodproduct (trunk_product_site) if not done already. !!!!!
       
