@@ -3759,11 +3759,16 @@ contains
             current_cohort => current_patch%shortest
             do while(associated(current_cohort))
               
+              if (debug) write(fates_log(), *) 'harvest_mass_min_area(): Cohort loop.' ! Temp
+              
               ! Note: The DBH and height ranges have be initialized such that those conditions not
               ! actually used will pass the following conditionals:
               if (any(pfts == current_cohort%pft) .and. &
                   current_cohort%dbh >= dbh_min .and. current_cohort%dbh <= dbh_max .and. &
                   current_cohort%hite >= ht_min .and. current_cohort%hite <= ht_max) then
+                
+                if (debug) write(fates_log(), *) 'harvest_mass_min_area(): Valid cohort.' ! Temp
+                
                 patch_harvestable_stems = patch_harvestable_stems + effective_n(current_cohort)
                 
                 ! Accumulated the potentially harvestable biomass:
