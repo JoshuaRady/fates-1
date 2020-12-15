@@ -3715,7 +3715,7 @@ contains
                 current_patch%anthro_disturbance_label == forest_class)
         num_patches = num_patches + 1
         
-        currentPatch => currentPatch%younger
+        current_patch => current_patch%younger
       end do ! Patch loop
       
       ! Find the patch of the highest quality and harvest from it, then find the next best patch,
