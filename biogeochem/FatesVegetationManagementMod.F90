@@ -3714,6 +3714,8 @@ contains
       do while (associated(current_patch) .and. &
                 current_patch%anthro_disturbance_label == forest_class)
         num_patches = num_patches + 1
+        
+        currentPatch => currentPatch%younger
       end do ! Patch loop
       
       ! Find the patch of the highest quality and harvest from it, then find the next best patch,
@@ -3729,7 +3731,7 @@ contains
       ! However, this logic is probably superflous since the loop will stop if we harvest enough or
       ! run out of patches with appropriate PFTs.
       
-      search_cycles = 0
+      search_cycles = 0 ! Change to 1?
       !do while (harvest_remaining > 0 .and. search_cycles < num_patches) !Tiny????
       do while (search_cycles < num_patches)
         best_patch_harvestable_stems = 0.0_r8
