@@ -3692,10 +3692,14 @@ contains
     ! Repeat for primary and secondary land:
     do i = 1, 2
       if (i == 1) then
+        if (debug) write(fates_log(), *) 'harvest_mass_min_area(): Starting primary forest.'
+        
         harvest_remaining = harvest_c_primary
         forest_class = primaryforest
         !harvest_c_primary = 0 ! Repurpose as return value.
       else
+        if (debug) write(fates_log(), *) 'harvest_mass_min_area(): Starting secondary forest.'
+        
         harvest_remaining = harvest_c_secondary
         forest_class = secondaryforest
         !harvest_c_secondary = 0 ! Repurpose as return value.
@@ -3704,6 +3708,7 @@ contains
       harvest_total = 0.0_r8
       
       ! Count patches in this land class:
+      ! This is probably wrong as we increment the counter below for all patches!
       num_patches = 0
       current_patch => site_in%oldest_patch
       do while (associated(current_patch) .and. &
@@ -3775,6 +3780,8 @@ contains
             end do ! Cohort loop.
           endif ! (current_patch%anthro_disturbance_label == forest_class)
           
+          if (debug) write(fates_log(), *) 'harvest_mass_min_area(): patch_harvestable_biomass: ', patch_harvestable_biomass
+          
           ! If this is the best patch yet, store it:
           ! It is possible that no patch will have harvestable trees.
           if (patch_harvestable_stems > best_patch_harvestable_stems) then
@@ -3788,6 +3795,8 @@ contains
         
         ! Harvest from the best available patch:
         if (best_patch_harvestable_stems > 0.0_r8) then ! Tiny?????? Add tolerance....
+          
+          if (debug) write(fates_log(), *) 'harvest_mass_min_area(): Harvesting from best patch.'
           
           ! Note: Similar to logic in thinning:
           if (harvest_remaining >= best_patch_harvestable_biomass) then
@@ -3807,6 +3816,9 @@ contains
           else
             ! Otherwise harvest a fraction across all sizes.  This is equivalent to harvesting the
             ! smallest area of a heterogeneous area represented by the patch:
+            
+            if (debug) write(fates_log(), *) 'harvest_mass_min_area(): Harvesting from best patch (partial).'
+            
             patch_harvest_fraction = harvest_remaining / best_patch_harvestable_biomass
             
 !             harvest_patch(patch = best_patch, pfts = pfts, dbh_min = the_dbh_min, &
@@ -3826,18 +3838,21 @@ contains
           endif ! (harvest_remaining > 0)
         else
           ! If we have run out of patches that have harvestable trees terminate early:
+          if (debug) write(fates_log(), *) 'harvest_mass_min_area(): Out of patches.'
           exit
         endif ! (best_patch_harvestable_stems > 0)
         
         search_cycles = search_cycles + 1
       end do ! (search_cycles < num_patches)
       
-      ! Return the actual amounts harvested to return:
+      ! Return the actual amounts harvested:
       if (i == 1) then
         harvest_c_primary = harvest_total ! Repurpose as return value.
       else
         harvest_c_secondary = harvest_total ! Repurpose as return value.
       endif
+      
+      if (debug) write(fates_log(), *) 'harvest_mass_min_area(): Harvested: ', harvest_total
       
     end do ! Primary and secondary loop.
     
