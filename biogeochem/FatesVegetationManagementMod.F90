@@ -3012,7 +3012,8 @@ contains
     ! Make optional and default to 1.0 / everything?????
     
     ! The fraction of the patch that the mortality is removed from / the size of the disturbance:
-    real(r8), intent(in), optional :: area_fraction ! Works as optional!!!!!
+    !real(r8), intent(in), optional :: area_fraction ! Works as optional!!!!!
+    real(r8), intent(in) :: area_fraction
     
     ! Locals:
     real(r8) :: the_dbh_min
@@ -3834,10 +3835,15 @@ contains
             ! If less than the remaining demand harvest all the trees in the patch:
 !             harvest_patch(patch = best_patch, pfts = pfts, dbh_min = the_dbh_min, &    Not implemented!
 !                           dbh_max = the_dbh_max, ht_min = the_ht_min, ht_max = the_ht_max) ! !!!!!!!!!!!!!!!!!!!!!!!!
+!             call kill_patch(patch = best_patch, flux_profile = bole_harvest, pfts = pfts, &
+!                             dbh_min = the_dbh_min, dbh_max = the_dbh_max, &
+!                             ht_min = the_ht_min, ht_max = the_ht_max, &
+!                             kill_fraction = 1.0_r8) ! kill_fraction is not currently optional but should be.
+            ! Redux:
             call kill_patch(patch = best_patch, flux_profile = bole_harvest, pfts = pfts, &
                             dbh_min = the_dbh_min, dbh_max = the_dbh_max, &
                             ht_min = the_ht_min, ht_max = the_ht_max, &
-                            kill_fraction = 1.0_r8) ! kill_fraction is not currently optional but should be.
+                            kill_fraction = 1.0_r8, area_fraction = 1.0_r8) ! kill_fraction is not currently optional but should be.
             
             harvest_total = harvest_total + best_patch_harvestable_biomass ! Record the harvest.
             
@@ -3862,10 +3868,15 @@ contains
 !             harvest_patch(patch = best_patch, pfts = pfts, dbh_min = the_dbh_min, &
 !                           dbh_max = the_dbh_max, ht_min = the_ht_min, ht_max = the_ht_max, &
 !                           fraction = patch_harvest_fraction)
+!             call kill_patch(patch = best_patch, flux_profile = bole_harvest, pfts = pfts, &
+!                             dbh_min = the_dbh_min, dbh_max = the_dbh_max, &
+!                             ht_min = the_ht_min, ht_max = the_ht_max, &
+!                             kill_fraction = patch_harvest_fraction) ! ??????
+            ! Redux:
             call kill_patch(patch = best_patch, flux_profile = bole_harvest, pfts = pfts, &
                             dbh_min = the_dbh_min, dbh_max = the_dbh_max, &
                             ht_min = the_ht_min, ht_max = the_ht_max, &
-                            kill_fraction = patch_harvest_fraction) ! ??????
+                            kill_fraction = 1.0_r8, area_fraction = patch_harvest_fraction)
             
             harvest_total = harvest_total + (best_patch_harvestable_biomass * patch_harvest_fraction)
             
