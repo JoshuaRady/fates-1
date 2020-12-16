@@ -593,6 +593,11 @@ contains
       enddo ! Patch loop
       
     else
+      ! Note: This block is now being executed whenever logging_time is false, not when other
+      ! vegetation management is occurring.  This is almost certainly wrong.  It doesn't seem to
+      ! be breaking anything.  Consider something like:
+      ! else if (thinning_needed .or. harvest_needed .or. control_needed) then
+      
       ! Other vegetation management activities:
       !   When mortality for other vegetation management activities is calculated the two values are
       ! recorded in a cohort, a mortality fraction specifying the fraction of plants in the cohort
@@ -638,7 +643,7 @@ contains
         current_cohort => current_patch%shortest
         do while(associated(current_cohort))
           
-          ! Checking for more than one morality type was previous checked in ?????
+          ! Checking for more than one mortality type was previous checked in ?????
           cohort_disturbance = max(current_cohort%vm_pfrac_bole_harvest, current_cohort%vm_mort_in_place)
           
           ! Make sure the disturbance is consistant across cohorts:
@@ -658,7 +663,10 @@ contains
           if (cohort_disturbance /= 0.0_r8) then ! 
             if (patch_disturbance == 0.0_r8) then
               patch_disturbance = cohort_disturbance
-            else if (patch_disturbance /= cohort_disturbance) then
+            ! This can give fault positives due to floating point comparison:
+            ! else if (patch_disturbance /= cohort_disturbance) then
+            ! Switch to a constant. nearzero is too small.  rsnbl_math_prec maybe?:
+            else if (abs(patch_disturbance - cohort_disturbance) > 1.0e-13_r8) then
               ! Don't allow multiple (different) management activities to co-occur:
               write(fates_log(),*) 'More than one disturbance rate was detected in this patch.'
               write(fates_log(),*) 'patch_disturbance  = ', patch_disturbance
@@ -1030,7 +1038,7 @@ contains
       case (in_place) !-----------------------------------------------------------------------------
         if (debug) write(fates_log(), *) 'spawn_anthro_disturbed_cohorts() in_place VM event.'
         
-        ! This is almost identical to bole_harvest ans should be combined!
+        ! This is almost identical to bole_harvest and should be combined!
         
         if (abs(parent_patch%disturbance_rate - donor_cohort%vm_pfrac_in_place) > 1.0e-10_r8) then
           write(fates_log(),*) 'parent_patch%disturbance_rate /= donor_cohort%vm_pfrac_in_place'
