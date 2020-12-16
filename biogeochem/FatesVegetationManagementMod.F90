@@ -2808,6 +2808,15 @@ contains
       write(fates_log(),*) 'Invalid value for area_fraction argument.', area_fraction
       call endrun(msg = errMsg(__FILE__, __LINE__))
     endif
+    
+    ! Since kill_fraction and area_fraction are both relative to the cohort/patch kill_fraction
+    ! limits the amount that can be practically removed.
+    ! Note: Currently the flux code will try to execute requests that don't make sense leading to 
+    ! carbon balence errors.
+    if (kill_fraction > area_fraction) then
+      write(fates_log(),*) "The fraction of cohort vegetation being killed can't exceed the area fraction."
+      call endrun(msg = errMsg(__FILE__, __LINE__))
+    endif
         
     ! Only allow for one mortality type that matches that being requested here:
     num_mortalities = count(prev_mortalities /= 0)
@@ -3873,10 +3882,18 @@ contains
 !                             ht_min = the_ht_min, ht_max = the_ht_max, &
 !                             kill_fraction = patch_harvest_fraction) ! ??????
             ! Redux:
+!             call kill_patch(patch = best_patch, flux_profile = bole_harvest, pfts = pfts, &
+!                             dbh_min = the_dbh_min, dbh_max = the_dbh_max, &
+!                             ht_min = the_ht_min, ht_max = the_ht_max, &
+!                             kill_fraction = 1.0_r8, area_fraction = patch_harvest_fraction)
+            ! Redux 2:
+            ! Remove the wood in a clear-cut like fashion. This results in the smallest distubance:
+            ! It could be removed in another manner.  Think about this.
             call kill_patch(patch = best_patch, flux_profile = bole_harvest, pfts = pfts, &
                             dbh_min = the_dbh_min, dbh_max = the_dbh_max, &
                             ht_min = the_ht_min, ht_max = the_ht_max, &
-                            kill_fraction = 1.0_r8, area_fraction = patch_harvest_fraction)
+                            kill_fraction = patch_harvest_fraction, &
+                            area_fraction = patch_harvest_fraction)
             
             harvest_total = harvest_total + (best_patch_harvestable_biomass * patch_harvest_fraction)
             
