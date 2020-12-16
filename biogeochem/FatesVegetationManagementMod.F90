@@ -3852,6 +3852,13 @@ contains
             
             patch_harvest_fraction = harvest_remaining / best_patch_harvestable_biomass
             
+            ! Temporary reporting:
+            if (debug) then
+              write(fates_log(), *) 'harvest_mass_min_area(): harvest_remaining = ', harvest_remaining
+              write(fates_log(), *) 'harvest_mass_min_area(): best_patch_harvestable_biomass = ', best_patch_harvestable_biomass
+              write(fates_log(), *) 'harvest_mass_min_area(): patch_harvest_fraction = ', patch_harvest_fraction
+            end if
+            
 !             harvest_patch(patch = best_patch, pfts = pfts, dbh_min = the_dbh_min, &
 !                           dbh_max = the_dbh_max, ht_min = the_ht_min, ht_max = the_ht_max, &
 !                           fraction = patch_harvest_fraction)
