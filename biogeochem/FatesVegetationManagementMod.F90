@@ -3025,7 +3025,7 @@ contains
     ! ----------------------------------------------------------------------------------------------
     
     ! Check and set the size specifications:
-    call validate_size_specifications(the_dbh_min, the_dbh_min, the_ht_min, the_ht_min, &
+    call validate_size_specifications(the_dbh_min, the_dbh_max, the_ht_min, the_ht_max, &
                                       dbh_min, dbh_max, ht_min, ht_max)
     
     ! Similar to understory_control?????
@@ -3684,8 +3684,16 @@ contains
     ! The above has been moved to validate_size_specifications().
     
     ! Check and set the size specifications:
-    call validate_size_specifications(the_dbh_min, the_dbh_min, the_ht_min, the_ht_min, &
+    call validate_size_specifications(the_dbh_min, the_dbh_max, the_ht_min, the_ht_max, &
                                       dbh_min, dbh_max, ht_min, ht_max)
+    
+    ! Temporary reporting:
+    if (debug) then
+      write(fates_log(), *) 'harvest_mass_min_area(): the_dbh_min = ', the_dbh_min
+      write(fates_log(), *) 'harvest_mass_min_area(): the_dbh_max = ', the_dbh_max
+      write(fates_log(), *) 'harvest_mass_min_area(): the_ht_min = ', the_ht_min
+      write(fates_log(), *) 'harvest_mass_min_area(): the_ht_max = ', the_ht_max
+    end if
     
     ! ----------------------------------------------------------------------------------------------
     
@@ -3760,6 +3768,12 @@ contains
             do while(associated(current_cohort))
               
               if (debug) write(fates_log(), *) 'harvest_mass_min_area(): Cohort loop.' ! Temp
+              
+              ! Temporary reporting:
+              if (debug) then
+                write(fates_log(), *) 'harvest_mass_min_area(): cohort DBH = ', current_cohort%dbh
+                write(fates_log(), *) 'harvest_mass_min_area(): cohort height = ', current_cohort%hite
+              end if
               
               ! Note: The DBH and height ranges have be initialized such that those conditions not
               ! actually used will pass the following conditionals:
