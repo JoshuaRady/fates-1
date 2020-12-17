@@ -210,8 +210,8 @@ contains
     !   (Existing: IsItLoggingTime() & LoggingMortality_frac()
     !
     ! Executes management activities that are due, storing the resulting mortalities in the cohorts.
-    ! This will result in update of an update of:
-    ! - The site level harvest_carbon_flux value member.  [Not sure why is this calculated here!]
+    ! This will result in an update of:
+    ! - The site level harvest_carbon_flux value member.  [Not sure why is this calculated here! Not fully implemented?]
     ! - The patch level disturbance_rates(dtype_ilog) member.
     ! - The cohort level lmort_direct, lmort_collateral, lmort_infra, and l_degrad members.
     ! - The cohort level vegetation management members. [more!!!!!]
@@ -337,6 +337,8 @@ contains
     ! This segment is based on code extracted from EDPatchDynamicsMod.F90: disturbance_rates().
     ! ----------------------------------------------------------------------------------------------
     if (logging_time) then
+      if (debug) write(fates_log(), *) 'Logging module event beginning.'
+      
       current_patch => site_in%oldest_patch
       do while (associated(current_patch))
         current_cohort => current_patch%shortest
@@ -388,6 +390,7 @@ contains
     ! not retrieve it in the code below.
     ! ----------------------------------------------------------------------------------------------
     if (thinning_needed) then
+      if (debug) write(fates_log(), *) 'VM thinning event beginning.'
       
       ! Making the following work would be a bit of a pain since it returns an variable length array
       ! of pointers, which is not simple in Fortran:
@@ -415,6 +418,7 @@ contains
     ! For testing do prioritized harvest across both primary and secondary patches:
     ! ----------------------------------------------------------------------------------------------
     if (harvest_needed) then
+      if (debug) write(fates_log(), *) 'VM harvest event beginning.'
       
       !call harvest_by_mass(site_in, ...) !...
             
@@ -455,6 +459,7 @@ contains
     ! to do site prep in the same time step. (One multiple events are enabled.)
     ! ----------------------------------------------------------------------------------------------
     if (control_needed) then
+      if (debug) write(fates_log(), *) 'VM understory control event beginning.'
       
       !postharvest_control()
       ! Find the patch that was most recently cleared and perform understory control on it:
@@ -529,7 +534,7 @@ contains
       ! Traditional logging module events:
       ! This segment is based on code extracted from EDPatchDynamicsMod.F90: disturbance_rates().
       !
-      ! The complexity of the following code is deceptive.  They end result is that area logged
+      ! The complexity of the following code is deceptive.  The end result is that the area logged
       ! is always completely disturbed.  LoggingMortality_frac() calculates direct and indirect
       ! mortality rates and labels any remaining canopy area as degraded.  The following code
       ! add any tree free ground.  The result is that %disturbance_rates(dtype_ilog) = 1 (or very
@@ -707,7 +712,7 @@ contains
           current_patch%fract_ldist_not_harvested = (patch_disturbance - patch_mort) / &
                                                    patch_disturbance
           
-          ! Checking that resulting value:
+          ! Checking the resulting value:
           if (current_patch%fract_ldist_not_harvested > 1.0_r8 + nearzero) then
           ! %fract_ldist_not_harvested is not currently in dump_patch():
             write(fates_log(),*) 'patch%fract_ldist_not_harvested is > 1, = ', &
@@ -720,6 +725,13 @@ contains
         else
           current_patch%fract_ldist_not_harvested = 0.0_r8
         endif ! (current_patch%disturbance_rates(dtype_ilog) > nearzero)
+        
+        if (debug) then ! Temp reporting:
+          write(fates_log(), *) 'managed_mortality(): %disturbance_rates(dtype_ilog) = ', &
+                                 current_patch%disturbance_rates(dtype_ilog)
+          write(fates_log(), *) 'managed_mortality(): %fract_ldist_not_harvested) = ', &
+                                 current_patch%fract_ldist_not_harvested
+        end if
         
         current_patch => current_patch%younger
       end do ! Patch loop.
@@ -840,7 +852,7 @@ contains
     ! routine that handled logging disturbance.
     ! The former code in spawn_patches() contained a lot of logging assumptions.  The addition of
     ! more vegetation management activities with differing assumptions would make an already
-    ! complicated piece of code even more so.  To reduce the need of other modules to know the
+    ! complicated piece of code even more so.  To reduce the need for other modules to know the
     ! internal assumptions of this module and to make the code more maintainable this routine was
     ! created.
     !
@@ -1121,7 +1133,7 @@ contains
         new_cohort%dmort            = donor_cohort%dmort
 
         ! This follows the example of the traditional logging module events:
-        ! I'm not exactly why we set the new patch to 0.  It may be that being new it has no history.
+        ! I'm not exactly sure why we set the new patch to 0.  It may be that being new it has no history.
         new_cohort%lmort_direct     = 0._r8
         new_cohort%lmort_collateral = 0._r8
         new_cohort%lmort_infra      = 0._r8
@@ -3601,6 +3613,8 @@ contains
     ! Arguments:
     type(ed_site_type), intent(inout), target :: site_in
     ! Amounts to harvest in product carbon by land class, the actual amount harvested is returned:
+    ! Note: The internal units of the model are kgC/site and these are currently in kg.  These
+    ! inputs however should probably be in g/m^2.  Need to convert.
     real(r8), intent(inout) :: harvest_c_primary
     real(r8), intent(inout) :: harvest_c_secondary
     ! An array of PFT IDs to include in the basal area calculation: Make optional?
