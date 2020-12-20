@@ -649,7 +649,9 @@ contains
         do while(associated(current_cohort))
           
           ! Checking for more than one mortality type was previous checked in ?????
-          cohort_disturbance = max(current_cohort%vm_pfrac_bole_harvest, current_cohort%vm_mort_in_place)
+          !cohort_disturbance = max(current_cohort%vm_pfrac_bole_harvest, current_cohort%vm_mort_in_place)
+          ! That wasn't quite right!
+          cohort_disturbance = max(current_cohort%vm_pfrac_in_place, current_cohort%vm_pfrac_bole_harvest)
           
           ! Make sure the disturbance is consistant across cohorts:
           ! This has a logic hole:
@@ -731,6 +733,7 @@ contains
                                  current_patch%disturbance_rates(dtype_ilog)
           write(fates_log(), *) 'managed_mortality(): %fract_ldist_not_harvested) = ', &
                                  current_patch%fract_ldist_not_harvested
+         call dump_patch(current_patch)
         end if
         
         current_patch => current_patch%younger
