@@ -1123,7 +1123,7 @@ contains
         ! Then apply all the mortality to it.
         new_cohort%n = new_cohort%n - (donor_cohort%n * donor_cohort%vm_mort_bole_harvest)
         
-        ! The old patch has no management mortality, its just smaller:
+        ! The old patch has no management mortality, it's just smaller:
         donor_cohort%n = donor_cohort%n * (1.0_r8 - patch_site_areadis / parent_patch%area)
         
         ! Copy the mortality data members to the new cohort:
@@ -1145,6 +1145,18 @@ contains
         new_cohort%vm_mort_bole_harvest  = 0._r8
         new_cohort%vm_pfrac_in_place     = 0._r8
         new_cohort%vm_pfrac_bole_harvest = 0._r8
+        
+        ! Following the creation of the new cohort reset the disturbance values in the old cohort:
+        ! Note: I'm not positive this is the right place to do this but failing to do so results in
+        ! the cohort retaining the values into the next time step where it will be harvested again.
+        donor_cohort%lmort_direct     = 0.0_r8
+        donor_cohort%lmort_collateral = 0.0_r8
+        donor_cohort%lmort_infra      = 0.0_r8
+        
+        donor_cohort%vm_mort_in_place      = 0.0_r8
+        donor_cohort%vm_mort_bole_harvest  = 0.0_r8
+        donor_cohort%vm_pfrac_in_place     = 0.0_r8
+        donor_cohort%vm_pfrac_bole_harvest = 0.0_r8
         
         if (debug) then
           !write(fates_log(), *) 'Ending conditions:'
