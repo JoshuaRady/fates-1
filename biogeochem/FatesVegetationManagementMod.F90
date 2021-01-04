@@ -440,7 +440,7 @@ contains
 !       end do ! Patch loop.
       
       ! Test 2:
-      c_1st = 2000.0_r8
+      c_1st = 10000.0_r8 ! 2000.0_r8
       c_2nd = 0.0_r8
       call harvest_mass_min_area(site_in = site_in, harvest_c_primary = c_1st, harvest_c_secondary = c_2nd, & ! REVIEW!
                                  pfts = tree_pfts, dbh_min = 10.0_r8)
@@ -1019,6 +1019,8 @@ contains
               new_cohort%vm_pfrac_bole_harvest = donor_cohort%vm_pfrac_bole_harvest
               ! JMR_MOD_END.
               
+              ! JMR_NOTE: The disturbance for the old cohort should be reset here.  See below!!!!!
+              
            else
               
               ! Grass is not killed by mortality disturbance events. 
@@ -1090,6 +1092,17 @@ contains
         new_cohort%vm_mort_bole_harvest  = 0._r8
         new_cohort%vm_pfrac_in_place     = 0._r8
         new_cohort%vm_pfrac_bole_harvest = 0._r8
+        
+        ! Following the creation of the new cohort reset the disturbance values in the old cohort:
+        ! Note: Repeated below!!!!!
+        donor_cohort%lmort_direct     = 0.0_r8
+        donor_cohort%lmort_collateral = 0.0_r8
+        donor_cohort%lmort_infra      = 0.0_r8
+        
+        donor_cohort%vm_mort_in_place      = 0.0_r8
+        donor_cohort%vm_mort_bole_harvest  = 0.0_r8
+        donor_cohort%vm_pfrac_in_place     = 0.0_r8
+        donor_cohort%vm_pfrac_bole_harvest = 0.0_r8
         
       case (bole_harvest) !-------------------------------------------------------------------------
         if (debug) write(fates_log(), *) 'spawn_anthro_disturbed_cohorts() bole_harvest VM event.'
