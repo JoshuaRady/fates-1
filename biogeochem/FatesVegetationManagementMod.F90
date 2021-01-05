@@ -629,7 +629,7 @@ contains
       ! Calculating disturbance:
       !   While the mortality fractions are essentially rates (dead plants / total plants / event,
       ! with the per event implied) and are therefore additive, patch fractions are not. To get the
-      ! patch level disturbance rate we combine them in a manner discussed in detail int the Managed
+      ! patch level disturbance rate we combine them in a manner discussed in detail in the Managed
       ! Mortality Primitives section.  In short, with one management mode / flux profile we expect
       ! that some cohorts may be unaffected (patch fraction = 0) while others are (0 < patch
       ! fraction <= 1).  The effected cohorts should all have the same patch fraction.  More than
@@ -644,6 +644,7 @@ contains
         
         current_patch%disturbance_rates(dtype_ilog) = 0.0_r8
         patch_disturbance = 0.0_r8
+        patch_mort = 0.0_r8
         
         current_cohort => current_patch%shortest
         do while(associated(current_cohort))
@@ -670,7 +671,7 @@ contains
           if (cohort_disturbance /= 0.0_r8) then ! 
             if (patch_disturbance == 0.0_r8) then
               patch_disturbance = cohort_disturbance
-            ! This can give fault positives due to floating point comparison:
+            ! This can give false positives due to floating point comparison:
             ! else if (patch_disturbance /= cohort_disturbance) then
             ! Switch to a constant. nearzero is too small.  rsnbl_math_prec maybe?:
             else if (abs(patch_disturbance - cohort_disturbance) > 1.0e-13_r8) then
@@ -692,10 +693,28 @@ contains
                         current_cohort%c_area / current_patch%area
           ! Normalizing by area should be redundant since the cohort area should = the patch area.
           
-          patch_mort = patch_mort + cohort_mort
+          !patch_mort = patch_mort + cohort_mort ! Wrong.  Can lead to values over 1.
+          ! Calculate the patch wide mortality disturbance by weighing the mortality of each cohort
+          ! by its canopy area:
+          ! Consider changing name of patch_mort to since it is a simple number rate anymore?????
+          patch_mort = patch_mort + (cohort_mort * current_cohort%c_area / current_patch%area)
           
           current_cohort => current_cohort%taller
         end do ! Cohort loop.
+        
+        ! Error checking:
+        if (patch_mort > patch_disturbance) then ! Add a tolerance and adjust?????
+          write(fates_log(),*) 'Patch level mortality is > patch disturbance:'
+          write(fates_log(),*) 'Patch level mortality = ', & patch_mort
+          write(fates_log(),*) 'Patch disturbance = ', & patch_disturbance
+          call endrun(msg = errMsg(__FILE__, __LINE__))
+        else if (patch_mort > 1.0_r8 + nearzero) then
+          write(fates_log(),*) 'Patch level mortality is > 1, = ', & patch_mort
+          call endrun(msg = errMsg(__FILE__, __LINE__))
+        else if (patch_mort > 1.0_r8) then
+          patch_mort = 1.0_r8 ! Correct for floating point math.
+        endif
+        ! Move patch_disturbance error checking up?
         
         ! Store the accumulated disturbance:
         current_patch%disturbance_rates(dtype_ilog) = patch_disturbance
@@ -1946,7 +1965,7 @@ contains
     ! If understory
     
     
-  end subroutine anthro_disturbance_rate
+  end subroutine anthro_disturbance_rate ! Legacy, functionality replaced by managed_mortality().
 
   !=================================================================================================
   
