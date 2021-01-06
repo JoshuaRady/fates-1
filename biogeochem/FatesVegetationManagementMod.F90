@@ -982,7 +982,8 @@ contains
            ! WHat to do with cohorts in the understory of a logging generated disturbance patch?
            
            !if (EDPftvarcon_inst%woody(donor_cohort%pft) == 1) then
-           if (int(prt_params%woody(currentCohort%pft)) == itrue) then
+           !if (int(prt_params%woody(currentCohort%pft)) == itrue) then
+           if (int(prt_params%woody(donor_cohort%pft)) == itrue) then
               
               ! Survivorship of undestory woody plants.  Two step process.
               ! Step 1:  Reduce current number of plants to reflect the 
@@ -1272,8 +1273,8 @@ contains
     !use EDTypesMod.F90, only : ed_patch_type
     use EDCohortDynamicsMod, only : create_cohort, zero_cohort, InitPRTObject
     !use EDPftvarcon, only : EDPftvarcon_inst
-    use EDTypesMod, only : num_elements, site_massbal_type, element_list
-    use PRTGenericMod, only : num_organ_types
+    use EDTypesMod, only : site_massbal_type
+    use PRTGenericMod, only : num_elements, num_organ_types, element_list
     
     ! Arguments:
     type(ed_site_type), intent(inout), target :: site
@@ -1448,7 +1449,7 @@ contains
     
     !use EDCohortDynamicsMod, only : zero_cohort, InitPRTObject  [Moved to calling subroutine.]
     !use EDPftvarcon, only : EDPftvarcon_inst
-    use EDTypesMod, only : num_elements, element_list ! site_massbal_type
+    !use EDTypesMod, only : num_elements, element_list ! site_massbal_type ! PRT
     
     use EDTypesMod, only : leaves_on, leaves_off
     use EDTypesMod, only : phen_cstat_nevercold, phen_cstat_iscold
@@ -1468,6 +1469,7 @@ contains
     use PRTGenericMod, only : struct_organ, leaf_organ, fnrt_organ, sapw_organ, store_organ
     use PRTGenericMod, only : repro_organ
     use PRTGenericMod, only : prt_carbon_allom_hyp, prt_cnp_flex_allom_hyp
+    use PRTGenericMod, only : num_elements, element_list
     
     ! Arguments:
     ! The site is only used to check the leaf status tags cstatus and dstatus.  It might be better
@@ -1684,11 +1686,11 @@ contains
 !         m_fnrt   = b_fnrt * EDPftvarcon_inst%prt_nitr_stoich_p1(cohort_obj%pft, fnrt_organ)
 !         m_sapw   = b_sapw * EDPftvarcon_inst%prt_nitr_stoich_p1(cohort_obj%pft, sapw_organ)
 !         m_store  = b_store * EDPftvarcon_inst%prt_nitr_stoich_p1(cohort_obj%pft, store_organ)
-        m_struct = b_struct * prt_params%prt_nitr_stoich_p1(cohort_obj%pft, struct_organ)
-        m_leaf   = b_leaf * prt_params%prt_nitr_stoich_p1(cohort_obj%pft, leaf_organ)
-        m_fnrt   = b_fnrt * prt_params%prt_nitr_stoich_p1(cohort_obj%pft, fnrt_organ)
-        m_sapw   = b_sapw * prt_params%prt_nitr_stoich_p1(cohort_obj%pft, sapw_organ)
-        m_store  = b_store * prt_params%prt_nitr_stoich_p1(cohort_obj%pft, store_organ)
+        m_struct = b_struct * prt_params%nitr_stoich_p1(cohort_obj%pft, struct_organ)
+        m_leaf   = b_leaf * prt_params%nitr_stoich_p1(cohort_obj%pft, leaf_organ)
+        m_fnrt   = b_fnrt * prt_params%nitr_stoich_p1(cohort_obj%pft, fnrt_organ)
+        m_sapw   = b_sapw * prt_params%nitr_stoich_p1(cohort_obj%pft, sapw_organ)
+        m_store  = b_store * prt_params%nitr_stoich_p1(cohort_obj%pft, store_organ)
         m_repro  = 0._r8
 
       case(phosphorus_element)
@@ -1698,11 +1700,11 @@ contains
 !         m_fnrt   = b_fnrt * EDPftvarcon_inst%prt_phos_stoich_p1(cohort_obj%pft, fnrt_organ)
 !         m_sapw   = b_sapw * EDPftvarcon_inst%prt_phos_stoich_p1(cohort_obj%pft, sapw_organ)
 !         m_store  = b_store * EDPftvarcon_inst%prt_phos_stoich_p1(cohort_obj%pft, store_organ)
-        m_struct = b_struct * prt_params%prt_phos_stoich_p1(cohort_obj%pft, struct_organ)
-        m_leaf   = b_leaf * prt_params%prt_phos_stoich_p1(cohort_obj%pft, leaf_organ)
-        m_fnrt   = b_fnrt * prt_params%prt_phos_stoich_p1(cohort_obj%pft, fnrt_organ)
-        m_sapw   = b_sapw * prt_params%prt_phos_stoich_p1(cohort_obj%pft, sapw_organ)
-        m_store  = b_store * prt_params%prt_phos_stoich_p1(cohort_obj%pft, store_organ)
+        m_struct = b_struct * prt_params%phos_stoich_p1(cohort_obj%pft, struct_organ)
+        m_leaf   = b_leaf * prt_params%phos_stoich_p1(cohort_obj%pft, leaf_organ)
+        m_fnrt   = b_fnrt * prt_params%phos_stoich_p1(cohort_obj%pft, fnrt_organ)
+        m_sapw   = b_sapw * prt_params%phos_stoich_p1(cohort_obj%pft, sapw_organ)
+        m_store  = b_store * prt_params%phos_stoich_p1(cohort_obj%pft, store_organ)
         m_repro  = 0._r8
       end select
 
@@ -2137,11 +2139,12 @@ contains
     use FatesPlantHydraulicsMod, only : AccumulateMortalityWaterStorage
     use SFParamsMod, only : SF_val_cwd_frac
     use EDParamsMod, only : logging_export_frac
-    use EDTypesMod, only : num_elements, element_list
+    !use EDTypesMod, only : num_elements, element_list ! PRT
     use EDTypesMod, only : site_massbal_type
     use EDTypesMod, only : site_fluxdiags_type
     use PRTGenericMod, only : struct_organ, leaf_organ, fnrt_organ, sapw_organ, store_organ, repro_organ
     use PRTGenericMod, only : carbon12_element!, nitrogen_element,  phosphorus_element
+    use PRTGenericMod, only : num_elements, element_list
     
     ! Arguments:
     ! Possibly unnecessary, we could get the site from the current_patch:
@@ -2319,7 +2322,8 @@ contains
             ! generating mortality are those cohorts in the top canopy layer, or those plants that
             ! were impacted. Thus, no direct dead can occur here, and indirect = collateral impacts.
             !if (EDPftvarcon_inst%woody(current_cohort%pft) == 1) then ! PRT
-            if (prt_params%woody(current_cohort%pft) == 1) then
+            !if (prt_params%woody(current_cohort%pft) == 1) then
+            if (int(prt_params%woody(currentCohort%pft)) == itrue) then
               direct_dead  = 0.0_r8
               indirect_dead = logging_coll_under_frac * &
                               (1.0_r8 - current_patch%fract_ldist_not_harvested) * &
