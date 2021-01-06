@@ -27,6 +27,7 @@ module FatesVegetationManagementMod
   use FatesGlobals, only : endrun => fates_endrun 
   use FatesInterfaceTypesMod, only : bc_in_type
   use PRTGenericMod, only : prt_vartypes
+  use PRTParametersMod, only : prt_params
   
   ! Log and error reporting:
   use shr_log_mod, only : errMsg => shr_log_errMsg
@@ -980,7 +981,8 @@ contains
            
            ! WHat to do with cohorts in the understory of a logging generated disturbance patch?
            
-           if (EDPftvarcon_inst%woody(donor_cohort%pft) == 1) then
+           !if (EDPftvarcon_inst%woody(donor_cohort%pft) == 1) then
+           if (int(prt_params%woody(currentCohort%pft)) == itrue) then
               
               ! Survivorship of undestory woody plants.  Two step process.
               ! Step 1:  Reduce current number of plants to reflect the 
@@ -1599,14 +1601,15 @@ contains
     ! The default assumption is that leaves are on:
     cohort_obj%laimemory = 0._r8
     cohort_obj%sapwmemory = 0._r8
-    cohort_obj%structmemory = 0._r8	 
+    cohort_obj%structmemory = 0._r8
     !cstatus = leaves_on
     cohort_obj%status_coh = leaves_on
 
     stem_drop_fraction = EDPftvarcon_inst%phen_stem_drop_fraction(cohort_obj%pft)
 
-     if (EDPftvarcon_inst%season_decid(cohort_obj%pft) == itrue .and. &
-         any(site%cstatus == [phen_cstat_nevercold, phen_cstat_iscold])) then
+     !if (EDPftvarcon_inst%season_decid(cohort_obj%pft) == itrue .and. & ! PRT
+    if (prt_params%season_decid(cohort_obj%pft) == itrue .and. &
+        any(site%cstatus == [phen_cstat_nevercold, phen_cstat_iscold])) then
       cohort_obj%laimemory = b_leaf
       cohort_obj%sapwmemory = b_sapw * stem_drop_fraction
       cohort_obj%structmemory = b_struct * stem_drop_fraction	    
@@ -1617,7 +1620,8 @@ contains
       cohort_obj%status_coh = leaves_off
     endif
 
-    if (EDPftvarcon_inst%stress_decid(cohort_obj%pft) == itrue .and. &
+    !if (EDPftvarcon_inst%stress_decid(cohort_obj%pft) == itrue .and. & ! PRT
+    if (prt_params%stress_decid(cohort_obj%pft) == itrue .and. &
         any(site%dstatus == [phen_dstat_timeoff, phen_dstat_moistoff])) then
       cohort_obj%laimemory = b_leaf
       cohort_obj%sapwmemory = b_sapw * stem_drop_fraction
@@ -1675,20 +1679,30 @@ contains
 
       case(nitrogen_element)
 
-        m_struct = b_struct * EDPftvarcon_inst%prt_nitr_stoich_p1(cohort_obj%pft, struct_organ)
-        m_leaf   = b_leaf * EDPftvarcon_inst%prt_nitr_stoich_p1(cohort_obj%pft, leaf_organ)
-        m_fnrt   = b_fnrt * EDPftvarcon_inst%prt_nitr_stoich_p1(cohort_obj%pft, fnrt_organ)
-        m_sapw   = b_sapw * EDPftvarcon_inst%prt_nitr_stoich_p1(cohort_obj%pft, sapw_organ)
-        m_store  = b_store * EDPftvarcon_inst%prt_nitr_stoich_p1(cohort_obj%pft, store_organ)
+!         m_struct = b_struct * EDPftvarcon_inst%prt_nitr_stoich_p1(cohort_obj%pft, struct_organ)
+!         m_leaf   = b_leaf * EDPftvarcon_inst%prt_nitr_stoich_p1(cohort_obj%pft, leaf_organ)
+!         m_fnrt   = b_fnrt * EDPftvarcon_inst%prt_nitr_stoich_p1(cohort_obj%pft, fnrt_organ)
+!         m_sapw   = b_sapw * EDPftvarcon_inst%prt_nitr_stoich_p1(cohort_obj%pft, sapw_organ)
+!         m_store  = b_store * EDPftvarcon_inst%prt_nitr_stoich_p1(cohort_obj%pft, store_organ)
+        m_struct = b_struct * prt_params%prt_nitr_stoich_p1(cohort_obj%pft, struct_organ)
+        m_leaf   = b_leaf * prt_params%prt_nitr_stoich_p1(cohort_obj%pft, leaf_organ)
+        m_fnrt   = b_fnrt * prt_params%prt_nitr_stoich_p1(cohort_obj%pft, fnrt_organ)
+        m_sapw   = b_sapw * prt_params%prt_nitr_stoich_p1(cohort_obj%pft, sapw_organ)
+        m_store  = b_store * prt_params%prt_nitr_stoich_p1(cohort_obj%pft, store_organ)
         m_repro  = 0._r8
 
       case(phosphorus_element)
 
-        m_struct = b_struct * EDPftvarcon_inst%prt_phos_stoich_p1(cohort_obj%pft, struct_organ)
-        m_leaf   = b_leaf * EDPftvarcon_inst%prt_phos_stoich_p1(cohort_obj%pft, leaf_organ)
-        m_fnrt   = b_fnrt * EDPftvarcon_inst%prt_phos_stoich_p1(cohort_obj%pft, fnrt_organ)
-        m_sapw   = b_sapw * EDPftvarcon_inst%prt_phos_stoich_p1(cohort_obj%pft, sapw_organ)
-        m_store  = b_store * EDPftvarcon_inst%prt_phos_stoich_p1(cohort_obj%pft, store_organ)
+!         m_struct = b_struct * EDPftvarcon_inst%prt_phos_stoich_p1(cohort_obj%pft, struct_organ)
+!         m_leaf   = b_leaf * EDPftvarcon_inst%prt_phos_stoich_p1(cohort_obj%pft, leaf_organ)
+!         m_fnrt   = b_fnrt * EDPftvarcon_inst%prt_phos_stoich_p1(cohort_obj%pft, fnrt_organ)
+!         m_sapw   = b_sapw * EDPftvarcon_inst%prt_phos_stoich_p1(cohort_obj%pft, sapw_organ)
+!         m_store  = b_store * EDPftvarcon_inst%prt_phos_stoich_p1(cohort_obj%pft, store_organ)
+        m_struct = b_struct * prt_params%prt_phos_stoich_p1(cohort_obj%pft, struct_organ)
+        m_leaf   = b_leaf * prt_params%prt_phos_stoich_p1(cohort_obj%pft, leaf_organ)
+        m_fnrt   = b_fnrt * prt_params%prt_phos_stoich_p1(cohort_obj%pft, fnrt_organ)
+        m_sapw   = b_sapw * prt_params%prt_phos_stoich_p1(cohort_obj%pft, sapw_organ)
+        m_store  = b_store * prt_params%prt_phos_stoich_p1(cohort_obj%pft, store_organ)
         m_repro  = 0._r8
       end select
 
@@ -1858,7 +1872,8 @@ contains
           site_in%harvest_carbon_flux = site_in%harvest_carbon_flux + currentCohort%lmort_direct * &
           currentCohort%n * (currentCohort%prt%GetState(sapw_organ, all_carbon_elements) + &
           currentCohort%prt%GetState(struct_organ, all_carbon_elements)) * &
-          EDPftvarcon_inst%allom_agb_frac(currentCohort%pft) * SF_val_CWD_frac(ncwd) * &
+          !EDPftvarcon_inst%allom_agb_frac(currentCohort%pft) * SF_val_CWD_frac(ncwd) * &
+          prt_params%allom_agb_frac(currentCohort%pft) * SF_val_CWD_frac(ncwd) * & ! PRT
           logging_export_frac
         endif
 
@@ -2303,7 +2318,8 @@ contains
             ! non-disturbance generating mortality are handled in EDPhysiology.  Disturbance
             ! generating mortality are those cohorts in the top canopy layer, or those plants that
             ! were impacted. Thus, no direct dead can occur here, and indirect = collateral impacts.
-            if (EDPftvarcon_inst%woody(current_cohort%pft) == 1) then
+            !if (EDPftvarcon_inst%woody(current_cohort%pft) == 1) then ! PRT
+            if (prt_params%woody(current_cohort%pft) == 1) then
               direct_dead  = 0.0_r8
               indirect_dead = logging_coll_under_frac * &
                               (1.0_r8 - current_patch%fract_ldist_not_harvested) * &
@@ -2362,8 +2378,10 @@ contains
         call set_root_fraction(current_site%rootfrac_scr, pft, current_site%zi_soil)
         
         ! Calculate total, above and below ground, structural and sapwood, stem biomass:
-        ag_wood = all_dead * (struct_m + sapw_m) * EDPftvarcon_inst%allom_agb_frac(pft)
-        bg_wood = all_dead * (struct_m + sapw_m) * (1.0_r8 - EDPftvarcon_inst%allom_agb_frac(pft))
+        !ag_wood = all_dead * (struct_m + sapw_m) * EDPftvarcon_inst%allom_agb_frac(pft) ! PRT
+        !bg_wood = all_dead * (struct_m + sapw_m) * (1.0_r8 - EDPftvarcon_inst%allom_agb_frac(pft)) ! PRT
+        ag_wood = all_dead * (struct_m + sapw_m) * prt_params%allom_agb_frac(pft)
+        bg_wood = all_dead * (struct_m + sapw_m) * (1.0_r8 - prt_params%allom_agb_frac(pft))
         
         ! Transfer (most to all) woody necromass to debris pools:
         ! This is exactly what is done in natural mortality as well.
@@ -2408,7 +2426,8 @@ contains
           ! This recalculation is done in the logging module code but is currently not necessary for
           ! other management activities (but it is not harmful either):
           bg_wood = direct_dead * (struct_m + sapw_m ) * SF_val_CWD_frac(ncwd) * &
-                    (1._r8 - EDPftvarcon_inst%allom_agb_frac(current_cohort%pft))
+                    !(1._r8 - EDPftvarcon_inst%allom_agb_frac(current_cohort%pft)) ! PRT
+                    (1._r8 - prt_params%allom_agb_frac(current_cohort%pft))
           
           ! ----------------------------------------------------------------------------------------
           ! Harvest: The below-ground portion of the stem goes to soil:
@@ -2444,7 +2463,8 @@ contains
           ! This recalculation is done in the logging module code but is currently not necessary for
           ! other management activities (but it is not harmful either):
           ag_wood = direct_dead * (struct_m + sapw_m) * &
-                    EDPftvarcon_inst%allom_agb_frac(current_cohort%pft) * SF_val_CWD_frac(ncwd)
+                    ! EDPftvarcon_inst%allom_agb_frac(current_cohort%pft) * SF_val_CWD_frac(ncwd) ! PRT
+                    prt_params%allom_agb_frac(current_cohort%pft) * SF_val_CWD_frac(ncwd)
           
           trunk_product_site = trunk_product_site + ag_wood * logging_export_frac
           
@@ -2471,9 +2491,11 @@ contains
         ! ------------------------------------------------------------------------------------------
         
         ag_wood = indirect_dead * (struct_m + sapw_m) * &
-                  EDPftvarcon_inst%allom_agb_frac(current_cohort%pft)
+                  !EDPftvarcon_inst%allom_agb_frac(current_cohort%pft) ! PRT
+                  prt_params%allom_agb_frac(current_cohort%pft)
         bg_wood = indirect_dead * (struct_m + sapw_m) * &
-                  (1._r8 - EDPftvarcon_inst%allom_agb_frac(current_cohort%pft))
+                  !(1._r8 - EDPftvarcon_inst%allom_agb_frac(current_cohort%pft)) ! PRT
+                  (1.0_r8 - prt_params%allom_agb_frac(current_cohort%pft))
         
         ! Aboveground wood:
         new_litt%ag_cwd(ncwd) = new_litt%ag_cwd(ncwd) + &
@@ -3259,7 +3281,7 @@ contains
     
     ! Uses:
     use FatesInterfaceTypesMod, only : numpft
-    use EDPftvarcon, only : EDPftvarcon_inst ! Will change to prt_params soon when merged to master.
+    !use EDPftvarcon, only : EDPftvarcon_inst ! Will change to prt_params soon when merged to master.
     
     ! Arguments:
     type(ed_patch_type), intent(inout), target :: patch ! Or pointer?????
@@ -4069,7 +4091,8 @@ contains
        ! SF_val_CWD_frac = Talk to Jakie about this spitfire parameter!
        harvest = (cohort%prt%GetState(sapw_organ, all_carbon_elements) + &
                   cohort%prt%GetState(struct_organ, all_carbon_elements)) * &
-                 EDPftvarcon_inst%allom_agb_frac(cohort%pft) * &
+                 !EDPftvarcon_inst%allom_agb_frac(cohort%pft) * & ! PRT
+                 prt_params%allom_agb_frac(cohort%pft) * &
                  SF_val_CWD_frac(ncwd) * &
                  logging_export_frac
       
