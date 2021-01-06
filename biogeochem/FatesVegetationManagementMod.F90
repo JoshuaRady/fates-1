@@ -2323,7 +2323,7 @@ contains
             ! were impacted. Thus, no direct dead can occur here, and indirect = collateral impacts.
             !if (EDPftvarcon_inst%woody(current_cohort%pft) == 1) then ! PRT
             !if (prt_params%woody(current_cohort%pft) == 1) then
-            if (int(prt_params%woody(currentCohort%pft)) == itrue) then
+            if (int(prt_params%woody(current_cohort%pft)) == itrue) then
               direct_dead  = 0.0_r8
               indirect_dead = logging_coll_under_frac * &
                               (1.0_r8 - current_patch%fract_ldist_not_harvested) * &
