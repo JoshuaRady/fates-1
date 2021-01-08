@@ -37,22 +37,24 @@ module FatesVegetationManagementMod
   implicit none
   private
   
+  ! Entry Points:
   public :: vegetation_management_init
   public :: managed_mortality
+  public :: anthro_mortality_rate
   public :: managed_fecundity
+  public :: management_fluxes
   public :: spawn_anthro_disturbed_cohorts
   ! Destructor!!!!!
   
+  ! Primitives:
   public :: plant
-  public :: init_temporary_cohort ! Currently doen't need to be public.
-  
-  public :: anthro_mortality_rate
-  public :: management_fluxes
+  public :: init_temporary_cohort ! Currently doesn't need to be public.
   
   private :: kill
   private :: kill_disturbed
   private :: kill_patch
   
+  ! Management Operations:
   private :: understory_control
   private :: thin_row_low
   private :: thinnable_patch
@@ -60,10 +62,11 @@ module FatesVegetationManagementMod
   private :: plant_harvestable_biomass
   private :: cohort_harvestable_biomass
   
-  private :: patch_effective_basal_area
+  ! Utilities:
   private :: cohort_effective_basal_area
-  private :: patch_effective_n
+  private :: patch_effective_basal_area
   private :: cohort_effective_n
+  private :: patch_effective_n
   private :: cohort_disturbed_n
   private :: patch_disturbed_n
   private :: cohort_disturbed_basal_area
@@ -71,6 +74,7 @@ module FatesVegetationManagementMod
   private :: get_flux_profile
   private :: validate_size_specifications
   
+  ! Interfaces:
   ! JMR_NOTE: These interfaces have given me a bit of trouble and are a work in progress:
   interface effective_basal_area
     module procedure patch_effective_basal_area
@@ -140,6 +144,24 @@ contains
   
   !=================================================================================================
   ! Main module event loop entry points:
+  !
+  ! Event loop entry points:
+  ! ed_ecosystem_dynamics() [EDMainMod]
+  ! |--> vegetation_management_init()
+  ! |
+  ! |-->  EDPatchDynamicsMod: disturbance_rates()
+  ! |     |--> managed_mortality()
+  ! |
+  ! |-->  ed_integrate_state_variables()
+  ! |     |--> EDMortalityFunctionsMod: Mortality_Derivative()
+  ! |          |--> anthro_mortality_rate()
+  ! |
+  ! |--> managed_fecundity()
+  ! |--> EDPatchDynamicsMod: spawn_patches()
+  !      |--> management_fluxes()
+  !      |--> spawn_anthro_disturbed_cohorts()
+  !
+  ! |--> [Destructor to be added!!!!!]
   !=================================================================================================
 
 ! Template:
@@ -724,9 +746,84 @@ contains
     
     if (debug) write(fates_log(), *) 'managed_mortality() exiting.'
   end subroutine managed_mortality
-  
+
   !=================================================================================================
-  
+
+  function anthro_mortality_rate(cohort, bc_in, frac_site_primary) result(dndt_logging)
+    ! ----------------------------------------------------------------------------------------------
+    ! Calculate mortality resulting from human vegetation management at the cohort level.
+    ! Mortality is returned as a change in number (density?) per unit time (year).
+    ! This routine is called from EDMortalityFunctionsMod: Mortality_Derivative().
+    !
+    ! This subroutine is designed to encapsulate the management specific logic so the calling code
+    ! does not have to be aware of it.
+    ! This code currently extracts the logging specific code from EDMortalityFunctionsMod.F90:
+    ! Mortality_Derivative() with only formating and name changes.
+    !
+    ! Human induced mortality includes logging but other actives as well such as thinning,
+    ! understory clearing, agricultural harvest, etc.
+    ! This function only returns non-disturbing mortality, and should perhaps be renamed.
+    ! The logging module code excludes disturbance inducing mortality resulting from logging of trees in
+    ! in the top canopy layer.  We have not made that distinction.  As a result in
+    ! managed_mortality() we classify all harvest mortality as disturbing and none of it is returned
+    ! here.  This is may be problematic philosophically and mathematically and may change.
+    !
+    ! I think the call to LoggingMortality_frac() here is incorrect because it was called earlier
+    ! but for some patches the staged mortality may be overridden. I will consult with the community
+    ! to see if they agree.
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Uses:
+    use EDLoggingMortalityMod, only : LoggingMortality_frac
+    use FatesInterfaceTypesMod, only : hlm_freq_day
+    
+    ! Arguments:
+    ! Similar functions take the site as well but we can get that from the cohort.
+    type(ed_cohort_type), intent(inout), target :: cohort
+    type(bc_in_type), intent(in) :: bc_in
+    ! Would like to get this with get_frac_site_primary() but that creates a circular dependency:
+    real(r8), intent(in) :: frac_site_primary
+    
+    ! Locals:
+    real(r8) :: dndt_logging      ! Mortality rate (per day) associated with the a logging event
+    ! Name will change to dndt_managment!
+    integer  :: ipft              ! local copy of the pft index
+    
+    ! ----------------------------------------------------------------------------------------------
+    
+    ipft = cohort%pft
+    
+    call LoggingMortality_frac(ipft, cohort%dbh, cohort%canopy_layer, &
+                               cohort%lmort_direct, &
+                               cohort%lmort_collateral, &
+                               cohort%lmort_infra, &
+                               cohort%l_degrad, &
+                               bc_in%hlm_harvest_rates, &
+                               bc_in%hlm_harvest_catnames, &
+                               bc_in%hlm_harvest_units, &
+                               cohort%patchptr%anthro_disturbance_label, &
+                               cohort%patchptr%age_since_anthro_disturbance, &
+                               frac_site_primary)
+    
+    ! The logging mortality rate are expressed as a fractional rate of the cohort / event.  They
+    ! need to be converted to a rate of fraction per year similar to the natural disturbance rates
+    ! using hlm_freq_day.
+    
+    if (cohort%canopy_layer > 1)then 
+       ! Include understory logging mortality rates not associated with disturbance:
+       dndt_logging = (cohort%lmort_direct + cohort%lmort_collateral +  cohort%lmort_infra) / &
+                       hlm_freq_day
+                       ! Consider adding vegetation management moralities here!!!!!
+    else
+       ! Mortality from logging in the canopy is ONLY disturbance generating, don't
+       ! update number densities via non-disturbance inducing death
+       dndt_logging = 0.0_r8
+    endif
+    
+  end function anthro_mortality_rate
+
+  !=================================================================================================
+
   subroutine managed_fecundity(site, bc_in)
     ! ----------------------------------------------------------------------------------------------
     ! This is called during the recruitment phase of the main event loop and executes any human
@@ -819,920 +916,8 @@ contains
     end if ! if (logging_time)
     
     if (debug) write(fates_log(), *) 'managed_fecundity() exiting.'
-  end subroutine
+  end subroutine managed_fecundity
   
-  !=================================================================================================
-
-  ! Move management_fluxes() and related routines here.
-
-  ! This name is rather long!!!!!
-  subroutine spawn_anthro_disturbed_cohorts(parent_site, donor_cohort, new_cohort)
-    ! ----------------------------------------------------------------------------------------------
-    ! For cohorts that have experienced anthropogenic disturbance initialize the new disturbed
-    ! cohort's number density and mortality rates and apply mortalities to adjust the numbers in
-    ! the donor cohort.
-    !
-    ! This routine is called from EDPatchDynamicsMod: spawn_patches() and replaces code from that
-    ! routine that handled logging disturbance.
-    ! The former code in spawn_patches() contained a lot of logging assumptions.  The addition of
-    ! more vegetation management activities with differing assumptions would make an already
-    ! complicated piece of code even more so.  To reduce the need for other modules to know the
-    ! internal assumptions of this module and to make the code more maintainable this routine was
-    ! created.
-    !
-    ! This routine pairs with management_fluxes() performing complementary modifications to plant
-    ! numbers.
-    ! ----------------------------------------------------------------------------------------------
-    
-    ! Uses:
-    use EDParamsMod, only : fates_mortality_disturbance_fraction
-    use EDParamsMod, only : ED_val_understorey_death, logging_coll_under_frac
-    use FatesInterfaceTypesMod, only : hlm_freq_day
-    use FatesConstantsMod, only : days_per_sec, g_per_kg, ha_per_m2, years_per_day
-    use PRTGenericMod, only : struct_organ, leaf_organ, fnrt_organ, sapw_organ, store_organ
-    use PRTGenericMod, only : all_carbon_elements
-    
-    ! Arguments:
-    type(ed_site_type), intent(inout), target :: parent_site ! The parent site of the cohorts.
-    type(ed_cohort_type), intent(inout), target :: donor_cohort ! The donor cohort to copy & update.
-    type(ed_cohort_type), intent(inout), target :: new_cohort ! The new cohort to initialize.
-    
-    ! Locals:
-    integer :: flux_profile ! Vegetation management flux profile.
-    real(r8) :: patch_site_areadis ! Total area disturbed in m2 per patch per day
-    type (ed_patch_type), pointer :: parent_patch
-    real(r8) :: plant_c ! Total plant carbon [kg]
-    
-    ! ----------------------------------------------------------------------------------------------
-    if (debug) write(fates_log(), *) 'spawn_anthro_disturbed_cohorts() entering.'
-    
-    parent_patch => donor_cohort%patchptr
-    
-    ! From EDPatchDynamicsMod: spawn_patches():
-    ! This is the amount of patch area that is disturbed, and donated by the donor:
-    patch_site_areadis = parent_patch%area * parent_patch%disturbance_rate
-    ! Note: patch_site_areadis / parent_patch%area is used a lot below. Just need %patchptr%disturbance_rate?
-    
-    plant_c = donor_cohort%prt%GetState(sapw_organ, all_carbon_elements) + &
-              donor_cohort%prt%GetState(struct_organ, all_carbon_elements) + &
-              donor_cohort%prt%GetState(leaf_organ, all_carbon_elements) + &
-              donor_cohort%prt%GetState(fnrt_organ, all_carbon_elements) + &
-              donor_cohort%prt%GetState(store_organ, all_carbon_elements)
-    ! plant_c = donor_cohort%prt%GetState(all_organs, all_carbon_elements) ! Would this work?
-    
-    ! Get the management activity / flux profile that is occurring in this cohort:
-    flux_profile = get_flux_profile(donor_cohort)
-    
-    ! Temporarily short circuit the above to make sure that the historic logging code is called:
-    !flux_profile = logging_traditional
-    
-    select case (flux_profile)
-      case (logging_traditional) !------------------------------------------------------------------
-        ! This logging code was exported from EDPatchDynamicsMod: spawn_patches().
-        ! [Original logic intact with formatting changes.]
-        
-        if (debug) write(fates_log(), *) 'spawn_anthro_disturbed_cohorts() traditional logging event.'
-        
-        ! If this cohort is in the upper canopy. It generated 
-        if (donor_cohort%canopy_layer == 1) then
-           
-           ! Calculate the survivorship of disturbed trees because non-harvested
-           new_cohort%n = donor_cohort%n * donor_cohort%l_degrad
-           ! nc%n            = (currentCohort%l_degrad / (currentCohort%l_degrad + &
-           !      currentCohort%lmort_direct + currentCohort%lmort_collateral +
-           !   currentCohort%lmort_infra) ) * &
-           !      currentCohort%n * patch_site_areadis/currentPatch%area
-           
-           ! Reduce counts in the existing/donor patch according to the logging rate
-           donor_cohort%n = donor_cohort%n * & (1.0_r8 - min(1.0_r8, (donor_cohort%lmort_direct + &
-                            donor_cohort%lmort_collateral + & donor_cohort%lmort_infra + &
-                            donor_cohort%l_degrad)))
-
-           new_cohort%cmort            = donor_cohort%cmort
-           new_cohort%hmort            = donor_cohort%hmort
-           new_cohort%bmort            = donor_cohort%bmort
-           new_cohort%frmort           = donor_cohort%frmort
-           new_cohort%smort            = donor_cohort%smort
-           new_cohort%asmort           = donor_cohort%asmort
-           new_cohort%dmort            = donor_cohort%dmort
-
-           ! Since these are the ones that weren't logged, set the logging mortality rates as zero:
-           new_cohort%lmort_direct     = 0._r8
-           new_cohort%lmort_collateral = 0._r8
-           new_cohort%lmort_infra      = 0._r8
-           ! JMR_MOD_START:
-           ! There could be trouble above!!!!!
-           new_cohort%vm_mort_in_place = 0._r8
-           new_cohort%vm_mort_bole_harvest = 0._r8
-           new_cohort%vm_pfrac_in_place = 0._r8
-           new_cohort%vm_pfrac_bole_harvest = 0._r8
-           ! JMR_MOD_END.
-           
-        else
-           
-           ! What to do with cohorts in the understory of a logging generated disturbance patch?
-           
-           if (int(prt_params%woody(donor_cohort%pft)) == itrue) then
-              
-              ! Survivorship of undestory woody plants.  Two step process.
-              ! Step 1:  Reduce current number of plants to reflect the 
-              !          change in area.
-              !          The number density per square are doesn't change,
-              !          but since the patch is smaller
-              !          and cohort counts are absolute, reduce this number.
-              new_cohort%n = donor_cohort%n * patch_site_areadis / parent_patch%area
-              
-              ! because the mortality rate due to impact for the cohorts which had 
-              ! been in the understory and are now in the newly-
-              ! disturbed patch is very high, passing the imort directly to 
-              ! history results in large numerical errors, on account
-              ! of the sharply reduced number densities.  so instead pass this info 
-              ! via a site-level diagnostic variable before reducing 
-              ! the number density.
-              parent_site%imort_rate(donor_cohort%size_class, donor_cohort%pft) = &
-                   parent_site%imort_rate(donor_cohort%size_class, donor_cohort%pft) + &
-                   new_cohort%n * parent_patch%fract_ldist_not_harvested * &
-                   logging_coll_under_frac / hlm_freq_day
-
-              parent_site%imort_carbonflux = parent_site%imort_carbonflux + &
-                   (new_cohort%n * parent_patch%fract_ldist_not_harvested * &
-                   logging_coll_under_frac / hlm_freq_day ) * &
-                   plant_c * g_per_kg * days_per_sec * years_per_day * ha_per_m2
-              
-              ! Step 2:  Apply survivor ship function based on the understory death fraction
-              
-              ! remaining of understory plants of those that are knocked 
-              ! over by the overstorey trees dying...  
-              ! LOGGING SURVIVORSHIP OF UNDERSTORY PLANTS IS SET AS A NEW PARAMETER 
-              ! in the fatesparameter files 
-              new_cohort%n = new_cohort%n * (1.0_r8 - &
-                             (1.0_r8 - parent_patch%fract_ldist_not_harvested) * &
-                             logging_coll_under_frac)
-              
-              ! Step 3: Reduce the number count of cohorts in the 
-              !         original/donor/non-disturbed patch to reflect the area change
-              donor_cohort%n = donor_cohort%n * (1._r8 - patch_site_areadis / parent_patch%area)
-              
-              new_cohort%cmort            = donor_cohort%cmort
-              new_cohort%hmort            = donor_cohort%hmort
-              new_cohort%bmort            = donor_cohort%bmort
-              new_cohort%frmort           = donor_cohort%frmort
-              new_cohort%smort            = donor_cohort%smort
-              new_cohort%asmort           = donor_cohort%asmort
-              new_cohort%dmort            = donor_cohort%dmort
-              new_cohort%lmort_direct     = donor_cohort%lmort_direct
-              new_cohort%lmort_collateral = donor_cohort%lmort_collateral
-              new_cohort%lmort_infra      = donor_cohort%lmort_infra
-              ! JMR_MOD_START:
-              new_cohort%vm_mort_in_place = donor_cohort%vm_mort_in_place
-              new_cohort%vm_mort_bole_harvest = donor_cohort%vm_mort_bole_harvest
-              new_cohort%vm_pfrac_in_place = donor_cohort%vm_pfrac_in_place
-              new_cohort%vm_pfrac_bole_harvest = donor_cohort%vm_pfrac_bole_harvest
-              ! JMR_MOD_END.
-              
-              ! JMR_NOTE: The disturbance for the old cohort should be reset here.  See below!!!!!
-              
-           else
-              
-              ! Grass is not killed by mortality disturbance events. 
-              ! Just move it into the new patch area. 
-              ! Just split the grass into the existing and new patch structures.
-              new_cohort%n = donor_cohort%n * patch_site_areadis / parent_patch%area
-              
-              ! Those remaining in the existing
-              donor_cohort%n = donor_cohort%n * (1.0_r8 - patch_site_areadis / parent_patch%area)
-              
-              ! No grass impact mortality imposed on the newly created patch
-              new_cohort%cmort            = donor_cohort%cmort
-              new_cohort%hmort            = donor_cohort%hmort
-              new_cohort%bmort            = donor_cohort%bmort
-              new_cohort%frmort           = donor_cohort%frmort
-              new_cohort%smort            = donor_cohort%smort
-              new_cohort%asmort           = donor_cohort%asmort
-              new_cohort%dmort            = donor_cohort%dmort
-              new_cohort%lmort_direct     = donor_cohort%lmort_direct
-              new_cohort%lmort_collateral = donor_cohort%lmort_collateral
-              new_cohort%lmort_infra      = donor_cohort%lmort_infra
-              ! JMR_MOD_START:
-              new_cohort%vm_mort_in_place = donor_cohort%vm_mort_in_place
-              new_cohort%vm_mort_bole_harvest = donor_cohort%vm_mort_bole_harvest
-              new_cohort%vm_pfrac_in_place = donor_cohort%vm_pfrac_in_place
-              new_cohort%vm_pfrac_bole_harvest = donor_cohort%vm_pfrac_bole_harvest
-              ! JMR_MOD_END
-              
-           endif ! Is / is-not woody
-        endif ! Select canopy layer
-
-      case (in_place) !-----------------------------------------------------------------------------
-        if (debug) write(fates_log(), *) 'spawn_anthro_disturbed_cohorts() in_place VM event.'
-        
-        ! This is almost identical to bole_harvest and should be combined!
-        
-        if (abs(parent_patch%disturbance_rate - donor_cohort%vm_pfrac_in_place) > 1.0e-10_r8) then
-          write(fates_log(),*) 'parent_patch%disturbance_rate /= donor_cohort%vm_pfrac_in_place'
-          ! call endrun(msg = errMsg(__FILE__, __LINE__))
-        endif
-        
-        ! Update the plant numbers:
-        ! Any floating point magic needed here?????
-        
-        ! Give the new patch the proportional number of trees for its area fraction:
-        new_cohort%n = donor_cohort%n * (patch_site_areadis / parent_patch%area)
-        ! Then apply all the mortality to it.
-        new_cohort%n = new_cohort%n - (donor_cohort%n * donor_cohort%vm_mort_in_place)
-        
-        ! The old patch has no management mortality, its just smaller:
-        donor_cohort%n = donor_cohort%n * (1.0_r8 - patch_site_areadis / parent_patch%area)
-        
-        ! Copy the mortality data members to the new cohort:
-        new_cohort%cmort            = donor_cohort%cmort
-        new_cohort%hmort            = donor_cohort%hmort
-        new_cohort%bmort            = donor_cohort%bmort
-        new_cohort%frmort           = donor_cohort%frmort
-        new_cohort%smort            = donor_cohort%smort
-        new_cohort%asmort           = donor_cohort%asmort
-        new_cohort%dmort            = donor_cohort%dmort
-
-        ! This follows the example of the traditional logging module events:
-        ! I'm not exactly why we set the new patch to 0.  It may be that being new it has no history.
-        new_cohort%lmort_direct     = 0._r8
-        new_cohort%lmort_collateral = 0._r8
-        new_cohort%lmort_infra      = 0._r8
-        
-        new_cohort%vm_mort_in_place      = 0._r8
-        new_cohort%vm_mort_bole_harvest  = 0._r8
-        new_cohort%vm_pfrac_in_place     = 0._r8
-        new_cohort%vm_pfrac_bole_harvest = 0._r8
-        
-        ! Following the creation of the new cohort reset the disturbance values in the old cohort:
-        ! Note: Repeated below!!!!!
-        donor_cohort%lmort_direct     = 0.0_r8
-        donor_cohort%lmort_collateral = 0.0_r8
-        donor_cohort%lmort_infra      = 0.0_r8
-        
-        donor_cohort%vm_mort_in_place      = 0.0_r8
-        donor_cohort%vm_mort_bole_harvest  = 0.0_r8
-        donor_cohort%vm_pfrac_in_place     = 0.0_r8
-        donor_cohort%vm_pfrac_bole_harvest = 0.0_r8
-        
-      case (bole_harvest) !-------------------------------------------------------------------------
-        if (debug) write(fates_log(), *) 'spawn_anthro_disturbed_cohorts() bole_harvest VM event.'
-        
-        if (debug) then
-          !write(fates_log(), *) 'Starting conditions:--------------------'
-          !write(fates_log(), *) 'parent_patch%area =',  parent_patch%area
-          !write(fates_log(), *) 'Patch_site_areadis =', Patch_site_areadis
-          !write(fates_log(), *) 'parent_patch%disturbance_rate =', parent_patch%disturbance_rate
-          !call dump_cohort(donor_cohort)
-          !write(fates_log(), *) 'donor_cohort%n = ', donor_cohort%n
-          !write(fates_log(), *) 'donor_cohort%lmort_direct = ', donor_cohort%lmort_direct
-          !write(fates_log(), *) 'donor_cohort%vm_mort_bole_harvest = ', donor_cohort%vm_mort_bole_harvest
-          !write(fates_log(), *) 'donor_cohort%vm_pfrac_bole_harvest = ', donor_cohort%vm_pfrac_bole_harvest
-          ! Revised:
-          write(fates_log(), *) 'Initial donor_cohort%n = ', donor_cohort%n
-        end if
-        
-        ! Check the area:
-        ! I don't know what a reasonable tolerance is.
-        if (abs(parent_patch%disturbance_rate - donor_cohort%vm_pfrac_bole_harvest) > 1.0e-10_r8) then
-          write(fates_log(),*) 'parent_patch%disturbance_rate /= donor_cohort%vm_pfrac_bole_harvest'
-          ! call endrun(msg = errMsg(__FILE__, __LINE__))
-        endif
-        
-        ! Update the plant numbers:
-        ! Any floating point magic needed here?????
-        
-        ! Give the new patch the proportional number of trees for its area fraction:
-        new_cohort%n = donor_cohort%n * (patch_site_areadis / parent_patch%area)
-        ! Then apply all the mortality to it.
-        new_cohort%n = new_cohort%n - (donor_cohort%n * donor_cohort%vm_mort_bole_harvest)
-        
-        ! The old patch has no management mortality, it's just smaller:
-        donor_cohort%n = donor_cohort%n * (1.0_r8 - patch_site_areadis / parent_patch%area)
-        
-        ! Copy the mortality data members to the new cohort:
-        new_cohort%cmort            = donor_cohort%cmort
-        new_cohort%hmort            = donor_cohort%hmort
-        new_cohort%bmort            = donor_cohort%bmort
-        new_cohort%frmort           = donor_cohort%frmort
-        new_cohort%smort            = donor_cohort%smort
-        new_cohort%asmort           = donor_cohort%asmort
-        new_cohort%dmort            = donor_cohort%dmort
-
-        ! This follows the example of the traditional logging module events:
-        ! I'm not exactly sure why we set the new patch to 0.  It may be that being new it has no history.
-        new_cohort%lmort_direct     = 0._r8
-        new_cohort%lmort_collateral = 0._r8
-        new_cohort%lmort_infra      = 0._r8
-        
-        new_cohort%vm_mort_in_place      = 0._r8
-        new_cohort%vm_mort_bole_harvest  = 0._r8
-        new_cohort%vm_pfrac_in_place     = 0._r8
-        new_cohort%vm_pfrac_bole_harvest = 0._r8
-        
-        ! Following the creation of the new cohort reset the disturbance values in the old cohort:
-        ! Note: I'm not positive this is the right place to do this but failing to do so results in
-        ! the cohort retaining the values into the next time step where it will be harvested again.
-        donor_cohort%lmort_direct     = 0.0_r8
-        donor_cohort%lmort_collateral = 0.0_r8
-        donor_cohort%lmort_infra      = 0.0_r8
-        
-        donor_cohort%vm_mort_in_place      = 0.0_r8
-        donor_cohort%vm_mort_bole_harvest  = 0.0_r8
-        donor_cohort%vm_pfrac_in_place     = 0.0_r8
-        donor_cohort%vm_pfrac_bole_harvest = 0.0_r8
-        
-        if (debug) then
-          !write(fates_log(), *) 'Ending conditions:'
-          !write(fates_log(), *) 'donor_cohort:'
-          !call dump_cohort(donor_cohort)
-          !write(fates_log(), *) 'new_cohort:'
-          !call dump_cohort(new_cohort)
-          !write(fates_log(), *) 'donor_cohort%n = ', donor_cohort%n, 'new_cohort%n = ', new_cohort%n
-          ! Revised:
-          write(fates_log(), *) 'donor_cohort%n         = ', donor_cohort%n
-          write(fates_log(), *) 'new_cohort%n           = ', new_cohort%n
-        end if
-        
-      ! case (burn)
-        ! Placeholder.
-      
-      case (null_profile) !-------------------------------------------------------------------------
-        ! This cohort has experienced no managed mortality (but others in the patch may have).
-        if (debug) write(fates_log(), *) 'spawn_anthro_disturbed_cohorts() cohort has no managed mortality.'
-        ! Note: The following behavior is the same as logging module grass above.
-        
-        ! Split the trees proportionally among the new and old patches:
-        new_cohort%n = donor_cohort%n * patch_site_areadis / parent_patch%area
-        donor_cohort%n = donor_cohort%n * (1.0_r8 - patch_site_areadis / parent_patch%area)
-        
-        ! Copy the mortality data members to the new cohort:
-        new_cohort%cmort            = donor_cohort%cmort
-        new_cohort%hmort            = donor_cohort%hmort
-        new_cohort%bmort            = donor_cohort%bmort
-        new_cohort%frmort           = donor_cohort%frmort
-        new_cohort%smort            = donor_cohort%smort
-        new_cohort%asmort           = donor_cohort%asmort
-        new_cohort%dmort            = donor_cohort%dmort
-        new_cohort%lmort_direct     = donor_cohort%lmort_direct
-        new_cohort%lmort_collateral = donor_cohort%lmort_collateral
-        new_cohort%lmort_infra      = donor_cohort%lmort_infra
-        new_cohort%vm_mort_in_place      = donor_cohort%vm_mort_in_place
-        new_cohort%vm_mort_bole_harvest  = donor_cohort%vm_mort_bole_harvest
-        new_cohort%vm_pfrac_in_place     = donor_cohort%vm_pfrac_in_place
-        new_cohort%vm_pfrac_bole_harvest = donor_cohort%vm_pfrac_bole_harvest
-        
-      case default
-        write(fates_log(),*) 'Unrecognized flux profile.'
-        call endrun(msg = errMsg(__FILE__, __LINE__))
-    end select
-    
-    if (debug) write(fates_log(), *) 'spawn_anthro_disturbed_cohorts() exiting.'
-  end subroutine spawn_anthro_disturbed_cohorts
-
-!   !=================================================================================================
-!
-!   subroutine vegetation_management_close()
-!     ! ----------------------------------------------------------------------------------------------
-!     ! 
-!     ! ----------------------------------------------------------------------------------------------
-!     
-!     ! Uses:
-!     
-!     ! Arguments:
-!     
-!     ! Locals:
-!     
-!     ! ----------------------------------------------------------------------------------------------
-!     
-!   end subroutine kill
-
-  !=================================================================================================
-  ! Planting Subroutines:
-  !=================================================================================================
-  
-  subroutine plant(site, patch, bc_in, pft_index, density, dbh, height) !plant_sapling()?
-    ! ----------------------------------------------------------------------------------------------
-    ! Plant a new cohort with the PFT, density, and size specified into an existing patch.
-    ! Planting differs from recruitment in that the new plants come from somewhere else, currently
-    ! not specified, rather than the seed bank.  There are currently no constrains of the size of
-    ! the plantings, however the expected use will be primarily to add small plants, i.e. seedlings.
-    ! ----------------------------------------------------------------------------------------------
-    
-    use EDCohortDynamicsMod, only : create_cohort, zero_cohort, InitPRTObject
-    use EDTypesMod, only : site_massbal_type
-    use PRTGenericMod, only : num_elements, num_organ_types, element_list
-    
-    ! Arguments:
-    type(ed_site_type), intent(inout), target :: site
-    ! I'm not sure why this must be pointer rather than target?
-    type(ed_patch_type), intent(inout), pointer :: patch
-    type(bc_in_type), intent(in) :: bc_in
-    integer(i4), intent(in) :: pft_index ! PFT index number to plant.
-    
-    ! Providing the planting density, DBH, and height for the seedlings to plant is optional.
-    ! Default behavior is provided but is likely that in most cases a density and dbh or height
-    ! will need to be provided to get the desired behavior.
-    
-    ! If the density is not provided fates_recruit_initd will be used.
-    ! Only DBH or height or should be provided.  If both are provided then height will be ignored.
-    ! Consider adding a warning?????
-    ! If neither DBH nor height is provided then fates_recruit_hgt_min will be used.
-    
-    ! Note: It appears that the compliler on Cheyenne does not support the value keyword / attribute.
-    real(r8), intent(in), optional :: density ! The planting density (plants / m^2)
-    real(r8), intent(in), optional :: dbh ! Sapling diameter at breast height (cm)
-    real(r8), intent(in), optional :: height ! Sapling height (m)
-    
-    ! Locals:
-    real(r8) :: the_density ! The actual planting density (plants / m^2)
-    real(r8) :: the_dbh ! The actual DBH (cm)
-    real(r8) :: the_height ! The actual height (m)
-    real(r8) :: area ! Patch / cohort area (m^2)
-    logical :: use_dbh ! Specify cohort size by DBH, otherwise use height
-    type(ed_cohort_type), pointer :: planting_cohort ! Temporary cohort for calculations
-    class(prt_vartypes), pointer :: planting_parteh ! PARTEH object to hold elemental states
-    type(site_massbal_type), pointer :: site_mass ! Used to access masses for flux accounting
-    real(r8) :: perplant_mass ! The total elemental mass for the cohort
-    integer :: el ! Element number counter
-    integer :: element_id ! Element ID number
-    integer :: organ_id ! Organ ID counter
-    
-    ! ----------------------------------------------------------------------------------------------
-    
-    ! Initialize variables:
-    the_density = 0
-    the_dbh = 0
-    the_height = 0
-    area = patch%area
-    
-    ! If not provided use the default initial plant density:
-    if (present(density)) then
-      the_density = density
-    else
-      the_density = EDPftvarcon_inst%initd(pft_index)
-    end if
-    
-    ! Size:
-    ! If DBH or height if provided (in that order), otherwise use the default height.
-    if (present(dbh)) then
-      the_dbh = dbh
-      use_dbh = .true.
-    else
-      if (present(height)) then
-        the_height = height
-      else
-        ! Get the default from the parameter file:
-        the_height = EDPftvarcon_inst%hgt_min(pft_index)
-      end if
-      
-      use_dbh = .false.
-      
-      ! Calculate the plant diameter from height:
-      call h2d_allom(the_height, pft_index, the_dbh)
-    end if
-    
-    if (debug) then
-      write(fates_log(),*) 'FatesVegetationManagementMod: plant() running with:'
-      write(fates_log(), '(A,F5.3)') 'Density =', the_density
-      write(fates_log(), '(A,F5.3)') 'DBH =', the_dbh
-      write(fates_log(), '(A,F5.3)') 'Height =', the_height
-      write(fates_log(), '(A,F5.3)') 'Patch area =', area
-      write(fates_log(), '(A,L)') 'Use DBH =', use_dbh
-    end if
-    
-    ! Instantiate a cohort object with the desired properties:
-    allocate(planting_cohort)
-    
-    ! Zeroing out the cohort may not be necessary and only EDPhysiologyMod: recruitment() does it
-    ! but it seems like a good idea.
-    call zero_cohort(planting_cohort)
-    
-    ! Create a PARTEH object to hold the rest of the cohorts states:
-    planting_parteh => null()
-    call InitPRTObject(planting_parteh)
-    
-    if (use_dbh) then
-      call init_temporary_cohort(site, planting_cohort, planting_parteh, &
-                                 pft_index, the_density, area, dbh = the_dbh)
-    else
-      call init_temporary_cohort(site, planting_cohort, planting_parteh, &
-                                 pft_index, the_density, area, height = the_height)
-    end if
-    
-    ! Use the cohort's mass quantities to determine the amounts to bring in from the generic fluxes:
-    ! Note: Follows code in EDPhysiologyMod: recruitment().
-    do el = 1,num_elements
-      element_id = element_list(el)
-      
-      if (debug) then
-        write(fates_log(), '(A,I)') 'Element number = ', el
-        write(fates_log(), '(A,I)') 'Element ID = ', element_id
-      end if
-      
-      ! For each element we get the total mass across all organs (& subpools / positions) within it:
-      ! Note: In EDPhysiologyMod: recruitment() this is done manually:
-      ! perplant_mass = (m_struct + m_leaf + m_fnrt + m_sapw + m_store + m_repro)
-      perplant_mass = 0
-      do organ_id = 1,num_organ_types
-        perplant_mass = perplant_mass + planting_parteh%GetState(organ_id, element_id)
-      end do
-      
-      if (debug) then
-        write(fates_log(), '(A,F8.3)') 'Per-plant mass = ', perplant_mass
-      end if
-      
-      site_mass => site%mass_balance(el)
-      site_mass%flux_generic_in = site_mass%flux_generic_in + (planting_cohort%n * perplant_mass)
-    end do
-    
-    ! Add the cohort to the patch:
-    ! clayer:
-    ! Assume we are planting on bareground and are therefore in the top layer. This is fine for now
-    ! but will not be a safe assumption in all cases.  If a canopy is established a value of clayer
-    ! = 2 may be better.
-    ! recruitstatus:
-    ! I'm not sure whether to consider these recruits.
-    ! EDPhysiologyMod: recruitment(): 1.  This is straightforward.
-    ! FatesInventoryInitMod: set_inventory_edcohort_type1() uses a value of 0, which makes sense for
-    ! inventory (note: it has constants rstatus and recruitstatus, the later of which is unused).
-    ! However, the flag is not used much so I will start by treating them as recruits.
-    call create_cohort(site, patch, planting_cohort%pft, planting_cohort%n, planting_cohort%hite, &
-                       planting_cohort%coage, planting_cohort%dbh, planting_parteh, &
-                       planting_cohort%laimemory, planting_cohort%sapwmemory, &
-                       planting_cohort%structmemory, planting_cohort%status_coh, &
-                       1, planting_cohort%canopy_trim, 1, site%spread, bc_in)
-                       ! Can't mix labeled and unlabeled arguments.
-                       ! recruitstatus = 1, planting_cohort%canopy_trim, &
-                       ! clayer = 1, site%spread, bc_in)
-    
-    deallocate(planting_cohort) ! Free the temporary cohort.
-    
-  end subroutine plant
-
-  !=================================================================================================
-  
-  ! Revise name????? InitUnattached cohort?
-  subroutine init_temporary_cohort(site, cohort_obj, cohort_parteh, pft, density, cohort_area, dbh, height) 
-    ! ----------------------------------------------------------------------------------------------
-    ! Populate a cohort based on the the cohort statistics passed in.
-    !
-    ! Code to initialize a cohort occurs in several places including:
-    ! - EDInitMod: init_cohorts()
-    ! - EDPhysiologyMod: recruitment()
-    ! - FatesInventoryInitMod: set_inventory_edcohort_type1()
-    ! I extracted the common code from these subroutines.  The code is modified primarily from 
-    ! FatesInventoryInitMod: set_inventory_edcohort_type1().  I have mainly altered indenting,
-    ! whitespace, some variable names, and added some comments.
-    ! This code is called from a loop over PFTs and in some cases patches in the existing
-    ! subroutines, but for planting it may be only called once.
-    !
-    ! If this subroutine persists it could be modified to replace the duplicated code with a few
-    ! changes. To replace the current code this subroutine should be split into two halves.  I have
-    ! made notes about the differences to facilitate this.
-    ! ----------------------------------------------------------------------------------------------
-    
-    use EDTypesMod, only : leaves_on, leaves_off
-    use EDTypesMod, only : phen_cstat_nevercold, phen_cstat_iscold
-    use EDTypesMod, only : phen_dstat_timeoff, phen_dstat_moistoff
-    use FatesAllometryMod, only : bagw_allom
-    use FatesAllometryMod, only : bbgw_allom
-    use FatesAllometryMod, only : bleaf
-    use FatesAllometryMod, only : bfineroot
-    use FatesAllometryMod, only : bsap_allom
-    use FatesAllometryMod, only : bdead_allom
-    use FatesAllometryMod, only : bstore_allom
-    use FatesGlobals, only : endrun => fates_endrun
-    use FatesInterfaceTypesMod, only : hlm_parteh_mode, nleafage
-    use PRTGenericMod, only : SetState
-    use PRTGenericMod, only : carbon12_element, nitrogen_element,  phosphorus_element
-    use PRTGenericMod, only : struct_organ, leaf_organ, fnrt_organ, sapw_organ, store_organ
-    use PRTGenericMod, only : repro_organ
-    use PRTGenericMod, only : prt_carbon_allom_hyp, prt_cnp_flex_allom_hyp
-    use PRTGenericMod, only : num_elements, element_list
-    
-    ! Arguments:
-    ! The site is only used to check the leaf status tags cstatus and dstatus.  It might be better
-    ! to pass these in or find some other way to avoid dependance on the site information.
-    type(ed_site_type), intent(inout), target :: site
-    !Name: temp_cohort, cohort, the_cohort?????
-    type(ed_cohort_type), intent(inout), target :: cohort_obj ! Pointer to the cohort to initialize.
-    class(prt_vartypes), intent(inout), target :: cohort_parteh ! Pointer to PARTEH object to initialize.
-    integer(i4), intent(in) :: pft ! PFT index number to for cohort
-    real(r8), intent(in) :: density ! The planting density in plants / m^2
-    real(r8), intent(in) :: cohort_area ! The area occupied by the cohort
-    real(r8), intent(in), optional :: dbh ! Plant diameter at breast height in cm
-    real(r8), intent(in), optional :: height ! Plant height in meters
-    
-    ! Locals:
-    ! integer :: cstatus ! Cohort leaf status  [Use object member]
-    integer :: iage ! Leaf age counter
-    integer :: el ! Element number counter
-    integer :: element_id ! Element ID number
-    real(r8) :: b_agw    ! Biomass above ground non-leaf [kgC]
-    real(r8) :: b_bgw    ! Biomass below ground non-leaf [kgC]
-    real(r8) :: b_leaf   ! Biomass in leaves [kgC]
-    real(r8) :: b_fnrt   ! Biomass in fine roots [kgC]
-    real(r8) :: b_sapw   ! Biomass in sapwood [kgC]
-    real(r8) :: b_struct ! Structural biomass [kgC]
-    real(r8) :: b_store  ! Storage pool carbon [kgC]
-    real(r8) :: a_sapw   ! Area of sapwood at reference height [m2]
-    real(r8) :: m_struct ! Generic (any element) mass for structure [kg]
-    real(r8) :: m_leaf   ! Generic mass for leaf  [kg]
-    real(r8) :: m_fnrt   ! Generic mass for fine-root  [kg]
-    real(r8) :: m_sapw   ! Generic mass for sapwood [kg]
-    real(r8) :: m_store  ! Generic mass for storage [kg]
-    real(r8) :: m_repro  ! Generic mass for reproductive tissues [kg]
-    real(r8) :: stem_drop_fraction
-    
-    ! ----------------------------------------------------------------------------------------------
-    ! Part 1:
-    ! Set the central properties.
-    ! ----------------------------------------------------------------------------------------------
-    
-    ! Plant functional type:
-    cohort_obj%pft = pft
-    
-    ! Age: (as cohort age bin, not years)
-    ! EDInitMod: init_cohorts(): 0 (but set later)
-    ! EDPhysiologyMod: recruitment(): 0
-    ! FatesInventoryInitMod: set_inventory_edcohort_type1(): Not set
-    ! There may be cases where a non-zero age is appropriate.  We could for example use the actual
-    ! age of saplings used (~1yr).  If so it likely needs to be passed in because there is
-    ! probably no great way to calculate it.
-    cohort_obj%coage = 0.0_r8
-    
-    ! Number of trees / density:
-    ! This should be straight forward but it is a bit confusing.
-    ! EDTypesMod defines n as the "number of individuals in cohort per 'area' (10000m2 default)"
-    ! If the area is invariant (as onw hectare), this is really a density.  However, both
-    ! EDInitMod: init_cohorts() & FatesInventoryInitMod: set_inventory_edcohort_type1() initialize
-    ! it using the patch area.  Based on previous work I think it is the number of trees per the
-    ! the whole nominal hectare, even though the cohort may not occupy the whole hectare, which is
-    ! not very intuitive.
-    cohort_obj%n = density * cohort_area
-    
-    ! DBH & Height:
-    ! The different functions start with either DBH or height and we allow either:
-    ! EDInitMod: init_cohorts(): height
-    ! EDPhysiologyMod: recruitment(): height
-    ! FatesInventoryInitMod: set_inventory_edcohort_type1(): DBH
-
-    ! If both are present allow height to override DBH:
-    ! Note: It may be better to throw and error here?????
-    if (present(height)) then
-      cohort_obj%hite = height
-      
-      ! Calculate the plant diameter from height:
-      call h2d_allom(height, pft, cohort_obj%dbh)
-    else
-      if (.not. present(dbh)) then
-        ! One should be provided.
-        write(fates_log(),*) 'DBH or height must be provided.'
-        call endrun(msg = errMsg(__FILE__, __LINE__))
-      end if
-      
-      cohort_obj%dbh = dbh
-      
-      ! Calculate the plant height from diameter:
-      call h_allom(dbh, pft, cohort_obj%hite)
-    end if
-    
-    ! The different subroutines make different assumptions for the canopy status.
-    ! EDInitMod: init_cohorts() & FatesInventoryInitMod: set_inventory_edcohort_type1() = 1.0
-    ! EDPhysiologyMod: recruitment() = 0.8.
-    ! For planting an open canopy would be expected so I will use the lower value for now.
-    ! Why not use 0?  I need to confirm that trim is the opposite of spread
-    cohort_obj%canopy_trim = 1.0_r8 ! ?????
-    
-    ! ----------------------------------------------------------------------------------------------
-    ! Part 2:
-    ! Initialize the live pools.
-    !
-    ! The following code is functionally identical in:
-    ! EDInitMod: init_cohorts() & FatesInventoryInitMod: set_inventory_edcohort_type1().
-    ! Only the some variable names are different.
-    ! EDPhysiologyMod: recruitment() also does the same thing in a different order and calls
-    ! zero_cohort() first and only initializes sapwood and structural biomass if the PFT is woody.
-    ! 
-    ! I have only altered indenting & some comments.
-    ! ----------------------------------------------------------------------------------------------
-
-    ! Calculate total above-ground biomass from allometry
-    call bagw_allom(cohort_obj%dbh, cohort_obj%pft, b_agw)
-
-    ! Calculate coarse root biomass from allometry
-    call bbgw_allom(cohort_obj%dbh, cohort_obj%pft, b_bgw)
-
-    ! Calculate the leaf biomass (calculates a maximum first, then applies canopy trim
-    ! and sla scaling factors)
-    call bleaf(cohort_obj%dbh, cohort_obj%pft, cohort_obj%canopy_trim,b_leaf)
-
-    ! Calculate fine root biomass
-    call bfineroot(cohort_obj%dbh, cohort_obj%pft, cohort_obj%canopy_trim,b_fnrt)!...
-
-    ! Calculate sapwood biomass
-    call bsap_allom(cohort_obj%dbh, cohort_obj%pft, cohort_obj%canopy_trim, a_sapw, b_sapw)
-
-    call bdead_allom( b_agw, b_bgw, b_sapw, cohort_obj%pft, b_struct )
-
-    call bstore_allom(cohort_obj%dbh, cohort_obj%pft, cohort_obj%canopy_trim, b_store)
-
-    ! The default assumption is that leaves are on:
-    cohort_obj%laimemory = 0._r8
-    cohort_obj%sapwmemory = 0._r8
-    cohort_obj%structmemory = 0._r8
-    !cstatus = leaves_on
-    cohort_obj%status_coh = leaves_on
-
-    stem_drop_fraction = EDPftvarcon_inst%phen_stem_drop_fraction(cohort_obj%pft)
-
-    if (prt_params%season_decid(cohort_obj%pft) == itrue .and. &
-        any(site%cstatus == [phen_cstat_nevercold, phen_cstat_iscold])) then
-      cohort_obj%laimemory = b_leaf
-      cohort_obj%sapwmemory = b_sapw * stem_drop_fraction
-      cohort_obj%structmemory = b_struct * stem_drop_fraction	    
-      b_leaf  = 0._r8
-      b_sapw = (1._r8 - stem_drop_fraction) * b_sapw
-      b_struct  = (1._r8 - stem_drop_fraction) * b_struct
-      !cstatus = leaves_off
-      cohort_obj%status_coh = leaves_off
-    endif
-
-    if (prt_params%stress_decid(cohort_obj%pft) == itrue .and. &
-        any(site%dstatus == [phen_dstat_timeoff, phen_dstat_moistoff])) then
-      cohort_obj%laimemory = b_leaf
-      cohort_obj%sapwmemory = b_sapw * stem_drop_fraction
-      cohort_obj%structmemory = b_struct * stem_drop_fraction	    
-      b_leaf  = 0._r8
-      b_sapw = (1._r8 - stem_drop_fraction) * b_sapw
-      b_struct  = (1._r8 - stem_drop_fraction) * b_struct	    
-      !cstatus = leaves_off
-      cohort_obj%status_coh = leaves_off
-    endif
-
-    ! End Part 2.
-    
-    ! ----------------------------------------------------------------------------------------------
-    ! Part 3:
-    ! Some of the subroutines do something here:
-    ! EDInitMod: init_cohorts() sets the age and a debug message here.
-    ! EDPhysiologyMod: recruitment(): The limiting element is determined.
-    ! FatesInventoryInitMod: set_inventory_edcohort_type1(): Nothing.
-    ! ----------------------------------------------------------------------------------------------
-    
-    ! ----------------------------------------------------------------------------------------------
-    ! Part 4:
-    ! Initialize the mass of every element in every organ of the plant / cohort and store_organ
-    ! in a PARTEH object.
-    !
-    ! The following code is functionally identical in:
-    ! EDInitMod: init_cohorts(), EDPhysiologyMod: recruitment(),  & FatesInventoryInitMod:
-    ! set_inventory_edcohort_type1(), except init_cohorts() & recruitment() put all the leaf mass
-    ! into the first leaf age bin while set_inventory_edcohort_type1() spread it across all age
-    ! bins.
-    ! Since we are only really trying to do planting currently we will use former approach.
-    ! ----------------------------------------------------------------------------------------------
-    
-    do el = 1, num_elements
-      element_id = element_list(el)
-
-      ! If this is carbon12, then the initialization is straight forward
-      ! otherwise, we use stoichiometric ratios
-      select case(element_id)
-      case(carbon12_element)
-
-        m_struct = b_struct
-        m_leaf   = b_leaf
-        m_fnrt   = b_fnrt
-        m_sapw   = b_sapw
-        m_store  = b_store
-        m_repro  = 0._r8
-
-      case(nitrogen_element)
-
-        m_struct = b_struct * prt_params%nitr_stoich_p1(cohort_obj%pft, struct_organ)
-        m_leaf   = b_leaf * prt_params%nitr_stoich_p1(cohort_obj%pft, leaf_organ)
-        m_fnrt   = b_fnrt * prt_params%nitr_stoich_p1(cohort_obj%pft, fnrt_organ)
-        m_sapw   = b_sapw * prt_params%nitr_stoich_p1(cohort_obj%pft, sapw_organ)
-        m_store  = b_store * prt_params%nitr_stoich_p1(cohort_obj%pft, store_organ)
-        m_repro  = 0._r8
-
-      case(phosphorus_element)
-
-        m_struct = b_struct * prt_params%phos_stoich_p1(cohort_obj%pft, struct_organ)
-        m_leaf   = b_leaf * prt_params%phos_stoich_p1(cohort_obj%pft, leaf_organ)
-        m_fnrt   = b_fnrt * prt_params%phos_stoich_p1(cohort_obj%pft, fnrt_organ)
-        m_sapw   = b_sapw * prt_params%phos_stoich_p1(cohort_obj%pft, sapw_organ)
-        m_store  = b_store * prt_params%phos_stoich_p1(cohort_obj%pft, store_organ)
-        m_repro  = 0._r8
-      end select
-
-      select case(hlm_parteh_mode)
-      case (prt_carbon_allom_hyp,prt_cnp_flex_allom_hyp )
-
-        ! Put all of the leaf mass into the first bin
-        call SetState(cohort_parteh, leaf_organ, element_id, m_leaf,1)
-        do iage = 2, nleafage
-          call SetState(cohort_parteh, leaf_organ, element_id, 0._r8, iage)
-        end do
-
-        call SetState(cohort_parteh, fnrt_organ, element_id, m_fnrt)
-        call SetState(cohort_parteh, sapw_organ, element_id, m_sapw)
-        call SetState(cohort_parteh, store_organ, element_id, m_store)
-        call SetState(cohort_parteh, struct_organ, element_id, m_struct)
-        call SetState(cohort_parteh, repro_organ, element_id, m_repro)
-
-      case default
-        write(fates_log(),*) 'Unspecified PARTEH module during inventory intitialization'
-        call endrun(msg = errMsg(__FILE__, __LINE__))
-      end select
-
-    end do
-
-    call cohort_parteh%CheckInitialConditions()
-    
-    ! End Part 4.
-
-  end subroutine init_temporary_cohort
-
-  !=================================================================================================
-  ! Managed Mortality Subroutines:
-  !=================================================================================================
-
-  function anthro_mortality_rate(cohort, bc_in, frac_site_primary) result(dndt_logging)
-    ! ----------------------------------------------------------------------------------------------
-    ! Calculate mortality resulting from human vegetation management at the cohort level.
-    ! Mortality is returned as a change in number (density?) per unit time (year).
-    ! This routine is called from EDMortalityFunctionsMod: Mortality_Derivative().
-    !
-    ! This subroutine is designed to encapsulate the management specific logic so the calling code
-    ! does not have to be aware of it.
-    ! This code currently extracts the logging specific code from EDMortalityFunctionsMod.F90:
-    ! Mortality_Derivative() with only formating and name changes.
-    !
-    ! Human induced mortality includes logging but other actives as well such as thinning,
-    ! understory clearing, agricultural harvest, etc.
-    ! This function only returns non-disturbing mortality, and should perhaps be renamed.
-    ! The logging module code excludes disturbance inducing mortality resulting from logging of trees in
-    ! in the top canopy layer.  We have not made that distinction.  As a result in
-    ! managed_mortality() we classify all harvest mortality as disturbing and none of it is returned
-    ! here.  This is may be problematic philosophically and mathematically and may change.
-    !
-    ! I think the call to LoggingMortality_frac() here is incorrect because it was called earlier
-    ! but for some patches the staged mortality may be overridden. I will consult with the community
-    ! to see if they agree.
-    ! ----------------------------------------------------------------------------------------------
-    
-    ! Uses:
-    use EDLoggingMortalityMod, only : LoggingMortality_frac
-    use FatesInterfaceTypesMod, only : hlm_freq_day
-    
-    ! Arguments:
-    ! Similar functions take the site as well but we can get that from the cohort.
-    type(ed_cohort_type), intent(inout), target :: cohort
-    type(bc_in_type), intent(in) :: bc_in
-    ! Would like to get this with get_frac_site_primary() but that creates a circular dependency:
-    real(r8), intent(in) :: frac_site_primary
-    
-    ! Locals:
-    real(r8) :: dndt_logging      ! Mortality rate (per day) associated with the a logging event
-    ! Name will change to dndt_managment!
-    integer  :: ipft              ! local copy of the pft index
-    
-    ! ----------------------------------------------------------------------------------------------
-    
-    ipft = cohort%pft
-    
-    call LoggingMortality_frac(ipft, cohort%dbh, cohort%canopy_layer, &
-                               cohort%lmort_direct, &
-                               cohort%lmort_collateral, &
-                               cohort%lmort_infra, &
-                               cohort%l_degrad, &
-                               bc_in%hlm_harvest_rates, &
-                               bc_in%hlm_harvest_catnames, &
-                               bc_in%hlm_harvest_units, &
-                               cohort%patchptr%anthro_disturbance_label, &
-                               cohort%patchptr%age_since_anthro_disturbance, &
-                               frac_site_primary)
-    
-    ! The logging mortality rate are expressed as a fractional rate of the cohort / event.  They
-    ! need to be converted to a rate of fraction per year similar to the natural disturbance rates
-    ! using hlm_freq_day.
-    
-    if (cohort%canopy_layer > 1)then 
-       ! Include understory logging mortality rates not associated with disturbance:
-       dndt_logging = (cohort%lmort_direct + cohort%lmort_collateral +  cohort%lmort_infra) / &
-                       hlm_freq_day
-                       ! Consider adding vegetation management moralities here!!!!!
-    else
-       ! Mortality from logging in the canopy is ONLY disturbance generating, don't
-       ! update number densities via non-disturbance inducing death
-       dndt_logging = 0.0_r8
-    endif
-    
-  end function anthro_mortality_rate
-
   !=================================================================================================
 
   subroutine management_fluxes(current_site, current_patch, new_patch, patch_site_areadis) ! REVIEW!
@@ -2233,13 +1418,851 @@ contains
     
     if (debug) write(fates_log(), *) 'management_fluxes() exiting.'
   end subroutine management_fluxes
+
+  !=================================================================================================
+
+  ! This name is rather long!!!!!
+  subroutine spawn_anthro_disturbed_cohorts(parent_site, donor_cohort, new_cohort)
+    ! ----------------------------------------------------------------------------------------------
+    ! For cohorts that have experienced anthropogenic disturbance initialize the new disturbed
+    ! cohort's number density and mortality rates and apply mortalities to adjust the numbers in
+    ! the donor cohort.
+    !
+    ! This routine is called from EDPatchDynamicsMod: spawn_patches() and replaces code from that
+    ! routine that handled logging disturbance.
+    ! The former code in spawn_patches() contained a lot of logging assumptions.  The addition of
+    ! more vegetation management activities with differing assumptions would make an already
+    ! complicated piece of code even more so.  To reduce the need for other modules to know the
+    ! internal assumptions of this module and to make the code more maintainable this routine was
+    ! created.
+    !
+    ! This routine pairs with management_fluxes() performing complementary modifications to plant
+    ! numbers.
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Uses:
+    use EDParamsMod, only : fates_mortality_disturbance_fraction
+    use EDParamsMod, only : ED_val_understorey_death, logging_coll_under_frac
+    use FatesInterfaceTypesMod, only : hlm_freq_day
+    use FatesConstantsMod, only : days_per_sec, g_per_kg, ha_per_m2, years_per_day
+    use PRTGenericMod, only : struct_organ, leaf_organ, fnrt_organ, sapw_organ, store_organ
+    use PRTGenericMod, only : all_carbon_elements
+    
+    ! Arguments:
+    type(ed_site_type), intent(inout), target :: parent_site ! The parent site of the cohorts.
+    type(ed_cohort_type), intent(inout), target :: donor_cohort ! The donor cohort to copy & update.
+    type(ed_cohort_type), intent(inout), target :: new_cohort ! The new cohort to initialize.
+    
+    ! Locals:
+    integer :: flux_profile ! Vegetation management flux profile.
+    real(r8) :: patch_site_areadis ! Total area disturbed in m2 per patch per day
+    type (ed_patch_type), pointer :: parent_patch
+    real(r8) :: plant_c ! Total plant carbon [kg]
+    
+    ! ----------------------------------------------------------------------------------------------
+    if (debug) write(fates_log(), *) 'spawn_anthro_disturbed_cohorts() entering.'
+    
+    parent_patch => donor_cohort%patchptr
+    
+    ! From EDPatchDynamicsMod: spawn_patches():
+    ! This is the amount of patch area that is disturbed, and donated by the donor:
+    patch_site_areadis = parent_patch%area * parent_patch%disturbance_rate
+    ! Note: patch_site_areadis / parent_patch%area is used a lot below. Just need %patchptr%disturbance_rate?
+    
+    plant_c = donor_cohort%prt%GetState(sapw_organ, all_carbon_elements) + &
+              donor_cohort%prt%GetState(struct_organ, all_carbon_elements) + &
+              donor_cohort%prt%GetState(leaf_organ, all_carbon_elements) + &
+              donor_cohort%prt%GetState(fnrt_organ, all_carbon_elements) + &
+              donor_cohort%prt%GetState(store_organ, all_carbon_elements)
+    ! plant_c = donor_cohort%prt%GetState(all_organs, all_carbon_elements) ! Would this work?
+    
+    ! Get the management activity / flux profile that is occurring in this cohort:
+    flux_profile = get_flux_profile(donor_cohort)
+    
+    ! Temporarily short circuit the above to make sure that the historic logging code is called:
+    !flux_profile = logging_traditional
+    
+    select case (flux_profile)
+      case (logging_traditional) !------------------------------------------------------------------
+        ! This logging code was exported from EDPatchDynamicsMod: spawn_patches().
+        ! [Original logic intact with formatting changes.]
+        
+        if (debug) write(fates_log(), *) 'spawn_anthro_disturbed_cohorts() traditional logging event.'
+        
+        ! If this cohort is in the upper canopy. It generated 
+        if (donor_cohort%canopy_layer == 1) then
+           
+           ! Calculate the survivorship of disturbed trees because non-harvested
+           new_cohort%n = donor_cohort%n * donor_cohort%l_degrad
+           ! nc%n            = (currentCohort%l_degrad / (currentCohort%l_degrad + &
+           !      currentCohort%lmort_direct + currentCohort%lmort_collateral +
+           !   currentCohort%lmort_infra) ) * &
+           !      currentCohort%n * patch_site_areadis/currentPatch%area
+           
+           ! Reduce counts in the existing/donor patch according to the logging rate
+           donor_cohort%n = donor_cohort%n * & (1.0_r8 - min(1.0_r8, (donor_cohort%lmort_direct + &
+                            donor_cohort%lmort_collateral + & donor_cohort%lmort_infra + &
+                            donor_cohort%l_degrad)))
+
+           new_cohort%cmort            = donor_cohort%cmort
+           new_cohort%hmort            = donor_cohort%hmort
+           new_cohort%bmort            = donor_cohort%bmort
+           new_cohort%frmort           = donor_cohort%frmort
+           new_cohort%smort            = donor_cohort%smort
+           new_cohort%asmort           = donor_cohort%asmort
+           new_cohort%dmort            = donor_cohort%dmort
+
+           ! Since these are the ones that weren't logged, set the logging mortality rates as zero:
+           new_cohort%lmort_direct     = 0._r8
+           new_cohort%lmort_collateral = 0._r8
+           new_cohort%lmort_infra      = 0._r8
+           ! JMR_MOD_START:
+           ! There could be trouble above!!!!!
+           new_cohort%vm_mort_in_place = 0._r8
+           new_cohort%vm_mort_bole_harvest = 0._r8
+           new_cohort%vm_pfrac_in_place = 0._r8
+           new_cohort%vm_pfrac_bole_harvest = 0._r8
+           ! JMR_MOD_END.
+           
+        else
+           
+           ! What to do with cohorts in the understory of a logging generated disturbance patch?
+           
+           if (int(prt_params%woody(donor_cohort%pft)) == itrue) then
+              
+              ! Survivorship of undestory woody plants.  Two step process.
+              ! Step 1:  Reduce current number of plants to reflect the 
+              !          change in area.
+              !          The number density per square are doesn't change,
+              !          but since the patch is smaller
+              !          and cohort counts are absolute, reduce this number.
+              new_cohort%n = donor_cohort%n * patch_site_areadis / parent_patch%area
+              
+              ! because the mortality rate due to impact for the cohorts which had 
+              ! been in the understory and are now in the newly-
+              ! disturbed patch is very high, passing the imort directly to 
+              ! history results in large numerical errors, on account
+              ! of the sharply reduced number densities.  so instead pass this info 
+              ! via a site-level diagnostic variable before reducing 
+              ! the number density.
+              parent_site%imort_rate(donor_cohort%size_class, donor_cohort%pft) = &
+                   parent_site%imort_rate(donor_cohort%size_class, donor_cohort%pft) + &
+                   new_cohort%n * parent_patch%fract_ldist_not_harvested * &
+                   logging_coll_under_frac / hlm_freq_day
+
+              parent_site%imort_carbonflux = parent_site%imort_carbonflux + &
+                   (new_cohort%n * parent_patch%fract_ldist_not_harvested * &
+                   logging_coll_under_frac / hlm_freq_day ) * &
+                   plant_c * g_per_kg * days_per_sec * years_per_day * ha_per_m2
+              
+              ! Step 2:  Apply survivor ship function based on the understory death fraction
+              
+              ! remaining of understory plants of those that are knocked 
+              ! over by the overstorey trees dying...  
+              ! LOGGING SURVIVORSHIP OF UNDERSTORY PLANTS IS SET AS A NEW PARAMETER 
+              ! in the fatesparameter files 
+              new_cohort%n = new_cohort%n * (1.0_r8 - &
+                             (1.0_r8 - parent_patch%fract_ldist_not_harvested) * &
+                             logging_coll_under_frac)
+              
+              ! Step 3: Reduce the number count of cohorts in the 
+              !         original/donor/non-disturbed patch to reflect the area change
+              donor_cohort%n = donor_cohort%n * (1._r8 - patch_site_areadis / parent_patch%area)
+              
+              new_cohort%cmort            = donor_cohort%cmort
+              new_cohort%hmort            = donor_cohort%hmort
+              new_cohort%bmort            = donor_cohort%bmort
+              new_cohort%frmort           = donor_cohort%frmort
+              new_cohort%smort            = donor_cohort%smort
+              new_cohort%asmort           = donor_cohort%asmort
+              new_cohort%dmort            = donor_cohort%dmort
+              new_cohort%lmort_direct     = donor_cohort%lmort_direct
+              new_cohort%lmort_collateral = donor_cohort%lmort_collateral
+              new_cohort%lmort_infra      = donor_cohort%lmort_infra
+              ! JMR_MOD_START:
+              new_cohort%vm_mort_in_place = donor_cohort%vm_mort_in_place
+              new_cohort%vm_mort_bole_harvest = donor_cohort%vm_mort_bole_harvest
+              new_cohort%vm_pfrac_in_place = donor_cohort%vm_pfrac_in_place
+              new_cohort%vm_pfrac_bole_harvest = donor_cohort%vm_pfrac_bole_harvest
+              ! JMR_MOD_END.
+              
+              ! JMR_NOTE: The disturbance for the old cohort should be reset here.  See below!!!!!
+              
+           else
+              
+              ! Grass is not killed by mortality disturbance events. 
+              ! Just move it into the new patch area. 
+              ! Just split the grass into the existing and new patch structures.
+              new_cohort%n = donor_cohort%n * patch_site_areadis / parent_patch%area
+              
+              ! Those remaining in the existing
+              donor_cohort%n = donor_cohort%n * (1.0_r8 - patch_site_areadis / parent_patch%area)
+              
+              ! No grass impact mortality imposed on the newly created patch
+              new_cohort%cmort            = donor_cohort%cmort
+              new_cohort%hmort            = donor_cohort%hmort
+              new_cohort%bmort            = donor_cohort%bmort
+              new_cohort%frmort           = donor_cohort%frmort
+              new_cohort%smort            = donor_cohort%smort
+              new_cohort%asmort           = donor_cohort%asmort
+              new_cohort%dmort            = donor_cohort%dmort
+              new_cohort%lmort_direct     = donor_cohort%lmort_direct
+              new_cohort%lmort_collateral = donor_cohort%lmort_collateral
+              new_cohort%lmort_infra      = donor_cohort%lmort_infra
+              ! JMR_MOD_START:
+              new_cohort%vm_mort_in_place = donor_cohort%vm_mort_in_place
+              new_cohort%vm_mort_bole_harvest = donor_cohort%vm_mort_bole_harvest
+              new_cohort%vm_pfrac_in_place = donor_cohort%vm_pfrac_in_place
+              new_cohort%vm_pfrac_bole_harvest = donor_cohort%vm_pfrac_bole_harvest
+              ! JMR_MOD_END
+              
+           endif ! Is / is-not woody
+        endif ! Select canopy layer
+
+      case (in_place) !-----------------------------------------------------------------------------
+        if (debug) write(fates_log(), *) 'spawn_anthro_disturbed_cohorts() in_place VM event.'
+        
+        ! This is almost identical to bole_harvest and should be combined!
+        
+        if (abs(parent_patch%disturbance_rate - donor_cohort%vm_pfrac_in_place) > 1.0e-10_r8) then
+          write(fates_log(),*) 'parent_patch%disturbance_rate /= donor_cohort%vm_pfrac_in_place'
+          ! call endrun(msg = errMsg(__FILE__, __LINE__))
+        endif
+        
+        ! Update the plant numbers:
+        ! Any floating point magic needed here?????
+        
+        ! Give the new patch the proportional number of trees for its area fraction:
+        new_cohort%n = donor_cohort%n * (patch_site_areadis / parent_patch%area)
+        ! Then apply all the mortality to it.
+        new_cohort%n = new_cohort%n - (donor_cohort%n * donor_cohort%vm_mort_in_place)
+        
+        ! The old patch has no management mortality, its just smaller:
+        donor_cohort%n = donor_cohort%n * (1.0_r8 - patch_site_areadis / parent_patch%area)
+        
+        ! Copy the mortality data members to the new cohort:
+        new_cohort%cmort            = donor_cohort%cmort
+        new_cohort%hmort            = donor_cohort%hmort
+        new_cohort%bmort            = donor_cohort%bmort
+        new_cohort%frmort           = donor_cohort%frmort
+        new_cohort%smort            = donor_cohort%smort
+        new_cohort%asmort           = donor_cohort%asmort
+        new_cohort%dmort            = donor_cohort%dmort
+
+        ! This follows the example of the traditional logging module events:
+        ! I'm not exactly why we set the new patch to 0.  It may be that being new it has no history.
+        new_cohort%lmort_direct     = 0._r8
+        new_cohort%lmort_collateral = 0._r8
+        new_cohort%lmort_infra      = 0._r8
+        
+        new_cohort%vm_mort_in_place      = 0._r8
+        new_cohort%vm_mort_bole_harvest  = 0._r8
+        new_cohort%vm_pfrac_in_place     = 0._r8
+        new_cohort%vm_pfrac_bole_harvest = 0._r8
+        
+        ! Following the creation of the new cohort reset the disturbance values in the old cohort:
+        ! Note: Repeated below!!!!!
+        donor_cohort%lmort_direct     = 0.0_r8
+        donor_cohort%lmort_collateral = 0.0_r8
+        donor_cohort%lmort_infra      = 0.0_r8
+        
+        donor_cohort%vm_mort_in_place      = 0.0_r8
+        donor_cohort%vm_mort_bole_harvest  = 0.0_r8
+        donor_cohort%vm_pfrac_in_place     = 0.0_r8
+        donor_cohort%vm_pfrac_bole_harvest = 0.0_r8
+        
+      case (bole_harvest) !-------------------------------------------------------------------------
+        if (debug) write(fates_log(), *) 'spawn_anthro_disturbed_cohorts() bole_harvest VM event.'
+        
+        if (debug) then
+          !write(fates_log(), *) 'Starting conditions:--------------------'
+          !write(fates_log(), *) 'parent_patch%area =',  parent_patch%area
+          !write(fates_log(), *) 'Patch_site_areadis =', Patch_site_areadis
+          !write(fates_log(), *) 'parent_patch%disturbance_rate =', parent_patch%disturbance_rate
+          !call dump_cohort(donor_cohort)
+          !write(fates_log(), *) 'donor_cohort%n = ', donor_cohort%n
+          !write(fates_log(), *) 'donor_cohort%lmort_direct = ', donor_cohort%lmort_direct
+          !write(fates_log(), *) 'donor_cohort%vm_mort_bole_harvest = ', donor_cohort%vm_mort_bole_harvest
+          !write(fates_log(), *) 'donor_cohort%vm_pfrac_bole_harvest = ', donor_cohort%vm_pfrac_bole_harvest
+          ! Revised:
+          write(fates_log(), *) 'Initial donor_cohort%n = ', donor_cohort%n
+        end if
+        
+        ! Check the area:
+        ! I don't know what a reasonable tolerance is.
+        if (abs(parent_patch%disturbance_rate - donor_cohort%vm_pfrac_bole_harvest) > 1.0e-10_r8) then
+          write(fates_log(),*) 'parent_patch%disturbance_rate /= donor_cohort%vm_pfrac_bole_harvest'
+          ! call endrun(msg = errMsg(__FILE__, __LINE__))
+        endif
+        
+        ! Update the plant numbers:
+        ! Any floating point magic needed here?????
+        
+        ! Give the new patch the proportional number of trees for its area fraction:
+        new_cohort%n = donor_cohort%n * (patch_site_areadis / parent_patch%area)
+        ! Then apply all the mortality to it.
+        new_cohort%n = new_cohort%n - (donor_cohort%n * donor_cohort%vm_mort_bole_harvest)
+        
+        ! The old patch has no management mortality, it's just smaller:
+        donor_cohort%n = donor_cohort%n * (1.0_r8 - patch_site_areadis / parent_patch%area)
+        
+        ! Copy the mortality data members to the new cohort:
+        new_cohort%cmort            = donor_cohort%cmort
+        new_cohort%hmort            = donor_cohort%hmort
+        new_cohort%bmort            = donor_cohort%bmort
+        new_cohort%frmort           = donor_cohort%frmort
+        new_cohort%smort            = donor_cohort%smort
+        new_cohort%asmort           = donor_cohort%asmort
+        new_cohort%dmort            = donor_cohort%dmort
+
+        ! This follows the example of the traditional logging module events:
+        ! I'm not exactly sure why we set the new patch to 0.  It may be that being new it has no history.
+        new_cohort%lmort_direct     = 0._r8
+        new_cohort%lmort_collateral = 0._r8
+        new_cohort%lmort_infra      = 0._r8
+        
+        new_cohort%vm_mort_in_place      = 0._r8
+        new_cohort%vm_mort_bole_harvest  = 0._r8
+        new_cohort%vm_pfrac_in_place     = 0._r8
+        new_cohort%vm_pfrac_bole_harvest = 0._r8
+        
+        ! Following the creation of the new cohort reset the disturbance values in the old cohort:
+        ! Note: I'm not positive this is the right place to do this but failing to do so results in
+        ! the cohort retaining the values into the next time step where it will be harvested again.
+        donor_cohort%lmort_direct     = 0.0_r8
+        donor_cohort%lmort_collateral = 0.0_r8
+        donor_cohort%lmort_infra      = 0.0_r8
+        
+        donor_cohort%vm_mort_in_place      = 0.0_r8
+        donor_cohort%vm_mort_bole_harvest  = 0.0_r8
+        donor_cohort%vm_pfrac_in_place     = 0.0_r8
+        donor_cohort%vm_pfrac_bole_harvest = 0.0_r8
+        
+        if (debug) then
+          !write(fates_log(), *) 'Ending conditions:'
+          !write(fates_log(), *) 'donor_cohort:'
+          !call dump_cohort(donor_cohort)
+          !write(fates_log(), *) 'new_cohort:'
+          !call dump_cohort(new_cohort)
+          !write(fates_log(), *) 'donor_cohort%n = ', donor_cohort%n, 'new_cohort%n = ', new_cohort%n
+          ! Revised:
+          write(fates_log(), *) 'donor_cohort%n         = ', donor_cohort%n
+          write(fates_log(), *) 'new_cohort%n           = ', new_cohort%n
+        end if
+        
+      ! case (burn)
+        ! Placeholder.
+      
+      case (null_profile) !-------------------------------------------------------------------------
+        ! This cohort has experienced no managed mortality (but others in the patch may have).
+        if (debug) write(fates_log(), *) 'spawn_anthro_disturbed_cohorts() cohort has no managed mortality.'
+        ! Note: The following behavior is the same as logging module grass above.
+        
+        ! Split the trees proportionally among the new and old patches:
+        new_cohort%n = donor_cohort%n * patch_site_areadis / parent_patch%area
+        donor_cohort%n = donor_cohort%n * (1.0_r8 - patch_site_areadis / parent_patch%area)
+        
+        ! Copy the mortality data members to the new cohort:
+        new_cohort%cmort            = donor_cohort%cmort
+        new_cohort%hmort            = donor_cohort%hmort
+        new_cohort%bmort            = donor_cohort%bmort
+        new_cohort%frmort           = donor_cohort%frmort
+        new_cohort%smort            = donor_cohort%smort
+        new_cohort%asmort           = donor_cohort%asmort
+        new_cohort%dmort            = donor_cohort%dmort
+        new_cohort%lmort_direct     = donor_cohort%lmort_direct
+        new_cohort%lmort_collateral = donor_cohort%lmort_collateral
+        new_cohort%lmort_infra      = donor_cohort%lmort_infra
+        new_cohort%vm_mort_in_place      = donor_cohort%vm_mort_in_place
+        new_cohort%vm_mort_bole_harvest  = donor_cohort%vm_mort_bole_harvest
+        new_cohort%vm_pfrac_in_place     = donor_cohort%vm_pfrac_in_place
+        new_cohort%vm_pfrac_bole_harvest = donor_cohort%vm_pfrac_bole_harvest
+        
+      case default
+        write(fates_log(),*) 'Unrecognized flux profile.'
+        call endrun(msg = errMsg(__FILE__, __LINE__))
+    end select
+    
+    if (debug) write(fates_log(), *) 'spawn_anthro_disturbed_cohorts() exiting.'
+  end subroutine spawn_anthro_disturbed_cohorts
+
+!   !=================================================================================================
+!
+!   subroutine vegetation_management_close()
+!     ! ----------------------------------------------------------------------------------------------
+!     ! 
+!     ! ----------------------------------------------------------------------------------------------
+!     
+!     ! Uses:
+!     
+!     ! Arguments:
+!     
+!     ! Locals:
+!     
+!     ! ----------------------------------------------------------------------------------------------
+!     
+!   end subroutine kill
+
+  !=================================================================================================
+  ! Managed Fecundity (Planting) Primitives:
+  !   Fecundity primitives are low level subroutines used to introduce plants and seeds to patches.
+  ! They provide an interface for higher level functions to build abstractions of human vegetation
+  ! management activities without depending as intimately on the the underlying implementation.
+  !
+  !   Currently only planting is implemented but the addtion of seeds will be added in the future.
+  !=================================================================================================
   
+  subroutine plant(site, patch, bc_in, pft_index, density, dbh, height) !plant_sapling()?
+    ! ----------------------------------------------------------------------------------------------
+    ! Plant a new cohort with the PFT, density, and size specified into an existing patch.
+    ! Planting differs from recruitment in that the new plants come from somewhere else, currently
+    ! not specified, rather than the seed bank.  There are currently no constrains of the size of
+    ! the plantings, however the expected use will be primarily to add small plants, i.e. seedlings.
+    ! ----------------------------------------------------------------------------------------------
+    
+    use EDCohortDynamicsMod, only : create_cohort, zero_cohort, InitPRTObject
+    use EDTypesMod, only : site_massbal_type
+    use PRTGenericMod, only : num_elements, num_organ_types, element_list
+    
+    ! Arguments:
+    type(ed_site_type), intent(inout), target :: site
+    ! I'm not sure why this must be pointer rather than target?
+    type(ed_patch_type), intent(inout), pointer :: patch
+    type(bc_in_type), intent(in) :: bc_in
+    integer(i4), intent(in) :: pft_index ! PFT index number to plant.
+    
+    ! Providing the planting density, DBH, and height for the seedlings to plant is optional.
+    ! Default behavior is provided but is likely that in most cases a density and dbh or height
+    ! will need to be provided to get the desired behavior.
+    
+    ! If the density is not provided fates_recruit_initd will be used.
+    ! Only DBH or height or should be provided.  If both are provided then height will be ignored.
+    ! Consider adding a warning?????
+    ! If neither DBH nor height is provided then fates_recruit_hgt_min will be used.
+    
+    ! Note: It appears that the compliler on Cheyenne does not support the value keyword / attribute.
+    real(r8), intent(in), optional :: density ! The planting density (plants / m^2)
+    real(r8), intent(in), optional :: dbh ! Sapling diameter at breast height (cm)
+    real(r8), intent(in), optional :: height ! Sapling height (m)
+    
+    ! Locals:
+    real(r8) :: the_density ! The actual planting density (plants / m^2)
+    real(r8) :: the_dbh ! The actual DBH (cm)
+    real(r8) :: the_height ! The actual height (m)
+    real(r8) :: area ! Patch / cohort area (m^2)
+    logical :: use_dbh ! Specify cohort size by DBH, otherwise use height
+    type(ed_cohort_type), pointer :: planting_cohort ! Temporary cohort for calculations
+    class(prt_vartypes), pointer :: planting_parteh ! PARTEH object to hold elemental states
+    type(site_massbal_type), pointer :: site_mass ! Used to access masses for flux accounting
+    real(r8) :: perplant_mass ! The total elemental mass for the cohort
+    integer :: el ! Element number counter
+    integer :: element_id ! Element ID number
+    integer :: organ_id ! Organ ID counter
+    
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Initialize variables:
+    the_density = 0
+    the_dbh = 0
+    the_height = 0
+    area = patch%area
+    
+    ! If not provided use the default initial plant density:
+    if (present(density)) then
+      the_density = density
+    else
+      the_density = EDPftvarcon_inst%initd(pft_index)
+    end if
+    
+    ! Size:
+    ! If DBH or height if provided (in that order), otherwise use the default height.
+    if (present(dbh)) then
+      the_dbh = dbh
+      use_dbh = .true.
+    else
+      if (present(height)) then
+        the_height = height
+      else
+        ! Get the default from the parameter file:
+        the_height = EDPftvarcon_inst%hgt_min(pft_index)
+      end if
+      
+      use_dbh = .false.
+      
+      ! Calculate the plant diameter from height:
+      call h2d_allom(the_height, pft_index, the_dbh)
+    end if
+    
+    if (debug) then
+      write(fates_log(),*) 'FatesVegetationManagementMod: plant() running with:'
+      write(fates_log(), '(A,F5.3)') 'Density =', the_density
+      write(fates_log(), '(A,F5.3)') 'DBH =', the_dbh
+      write(fates_log(), '(A,F5.3)') 'Height =', the_height
+      write(fates_log(), '(A,F5.3)') 'Patch area =', area
+      write(fates_log(), '(A,L)') 'Use DBH =', use_dbh
+    end if
+    
+    ! Instantiate a cohort object with the desired properties:
+    allocate(planting_cohort)
+    
+    ! Zeroing out the cohort may not be necessary and only EDPhysiologyMod: recruitment() does it
+    ! but it seems like a good idea.
+    call zero_cohort(planting_cohort)
+    
+    ! Create a PARTEH object to hold the rest of the cohorts states:
+    planting_parteh => null()
+    call InitPRTObject(planting_parteh)
+    
+    if (use_dbh) then
+      call init_temporary_cohort(site, planting_cohort, planting_parteh, &
+                                 pft_index, the_density, area, dbh = the_dbh)
+    else
+      call init_temporary_cohort(site, planting_cohort, planting_parteh, &
+                                 pft_index, the_density, area, height = the_height)
+    end if
+    
+    ! Use the cohort's mass quantities to determine the amounts to bring in from the generic fluxes:
+    ! Note: Follows code in EDPhysiologyMod: recruitment().
+    do el = 1,num_elements
+      element_id = element_list(el)
+      
+      if (debug) then
+        write(fates_log(), '(A,I)') 'Element number = ', el
+        write(fates_log(), '(A,I)') 'Element ID = ', element_id
+      end if
+      
+      ! For each element we get the total mass across all organs (& subpools / positions) within it:
+      ! Note: In EDPhysiologyMod: recruitment() this is done manually:
+      ! perplant_mass = (m_struct + m_leaf + m_fnrt + m_sapw + m_store + m_repro)
+      perplant_mass = 0
+      do organ_id = 1,num_organ_types
+        perplant_mass = perplant_mass + planting_parteh%GetState(organ_id, element_id)
+      end do
+      
+      if (debug) then
+        write(fates_log(), '(A,F8.3)') 'Per-plant mass = ', perplant_mass
+      end if
+      
+      site_mass => site%mass_balance(el)
+      site_mass%flux_generic_in = site_mass%flux_generic_in + (planting_cohort%n * perplant_mass)
+    end do
+    
+    ! Add the cohort to the patch:
+    ! clayer:
+    ! Assume we are planting on bareground and are therefore in the top layer. This is fine for now
+    ! but will not be a safe assumption in all cases.  If a canopy is established a value of clayer
+    ! = 2 may be better.
+    ! recruitstatus:
+    ! I'm not sure whether to consider these recruits.
+    ! EDPhysiologyMod: recruitment(): 1.  This is straightforward.
+    ! FatesInventoryInitMod: set_inventory_edcohort_type1() uses a value of 0, which makes sense for
+    ! inventory (note: it has constants rstatus and recruitstatus, the later of which is unused).
+    ! However, the flag is not used much so I will start by treating them as recruits.
+    call create_cohort(site, patch, planting_cohort%pft, planting_cohort%n, planting_cohort%hite, &
+                       planting_cohort%coage, planting_cohort%dbh, planting_parteh, &
+                       planting_cohort%laimemory, planting_cohort%sapwmemory, &
+                       planting_cohort%structmemory, planting_cohort%status_coh, &
+                       1, planting_cohort%canopy_trim, 1, site%spread, bc_in)
+                       ! Can't mix labeled and unlabeled arguments.
+                       ! recruitstatus = 1, planting_cohort%canopy_trim, &
+                       ! clayer = 1, site%spread, bc_in)
+    
+    deallocate(planting_cohort) ! Free the temporary cohort.
+    
+  end subroutine plant
+
+  !=================================================================================================
+  
+  ! Revise name????? InitUnattached cohort?
+  subroutine init_temporary_cohort(site, cohort_obj, cohort_parteh, pft, density, cohort_area, dbh, height) 
+    ! ----------------------------------------------------------------------------------------------
+    ! Populate a cohort based on the the cohort statistics passed in.
+    !
+    ! Code to initialize a cohort occurs in several places including:
+    ! - EDInitMod: init_cohorts()
+    ! - EDPhysiologyMod: recruitment()
+    ! - FatesInventoryInitMod: set_inventory_edcohort_type1()
+    ! I extracted the common code from these subroutines.  The code is modified primarily from 
+    ! FatesInventoryInitMod: set_inventory_edcohort_type1().  I have mainly altered indenting,
+    ! whitespace, some variable names, and added some comments.
+    ! This code is called from a loop over PFTs and in some cases patches in the existing
+    ! subroutines, but for planting it may be only called once.
+    !
+    ! If this subroutine persists it could be modified to replace the duplicated code with a few
+    ! changes. To replace the current code this subroutine should be split into two halves.  I have
+    ! made notes about the differences to facilitate this.
+    ! ----------------------------------------------------------------------------------------------
+    
+    use EDTypesMod, only : leaves_on, leaves_off
+    use EDTypesMod, only : phen_cstat_nevercold, phen_cstat_iscold
+    use EDTypesMod, only : phen_dstat_timeoff, phen_dstat_moistoff
+    use FatesAllometryMod, only : bagw_allom
+    use FatesAllometryMod, only : bbgw_allom
+    use FatesAllometryMod, only : bleaf
+    use FatesAllometryMod, only : bfineroot
+    use FatesAllometryMod, only : bsap_allom
+    use FatesAllometryMod, only : bdead_allom
+    use FatesAllometryMod, only : bstore_allom
+    use FatesGlobals, only : endrun => fates_endrun
+    use FatesInterfaceTypesMod, only : hlm_parteh_mode, nleafage
+    use PRTGenericMod, only : SetState
+    use PRTGenericMod, only : carbon12_element, nitrogen_element,  phosphorus_element
+    use PRTGenericMod, only : struct_organ, leaf_organ, fnrt_organ, sapw_organ, store_organ
+    use PRTGenericMod, only : repro_organ
+    use PRTGenericMod, only : prt_carbon_allom_hyp, prt_cnp_flex_allom_hyp
+    use PRTGenericMod, only : num_elements, element_list
+    
+    ! Arguments:
+    ! The site is only used to check the leaf status tags cstatus and dstatus.  It might be better
+    ! to pass these in or find some other way to avoid dependance on the site information.
+    type(ed_site_type), intent(inout), target :: site
+    !Name: temp_cohort, cohort, the_cohort?????
+    type(ed_cohort_type), intent(inout), target :: cohort_obj ! Pointer to the cohort to initialize.
+    class(prt_vartypes), intent(inout), target :: cohort_parteh ! Pointer to PARTEH object to initialize.
+    integer(i4), intent(in) :: pft ! PFT index number to for cohort
+    real(r8), intent(in) :: density ! The planting density in plants / m^2
+    real(r8), intent(in) :: cohort_area ! The area occupied by the cohort
+    real(r8), intent(in), optional :: dbh ! Plant diameter at breast height in cm
+    real(r8), intent(in), optional :: height ! Plant height in meters
+    
+    ! Locals:
+    ! integer :: cstatus ! Cohort leaf status  [Use object member]
+    integer :: iage ! Leaf age counter
+    integer :: el ! Element number counter
+    integer :: element_id ! Element ID number
+    real(r8) :: b_agw    ! Biomass above ground non-leaf [kgC]
+    real(r8) :: b_bgw    ! Biomass below ground non-leaf [kgC]
+    real(r8) :: b_leaf   ! Biomass in leaves [kgC]
+    real(r8) :: b_fnrt   ! Biomass in fine roots [kgC]
+    real(r8) :: b_sapw   ! Biomass in sapwood [kgC]
+    real(r8) :: b_struct ! Structural biomass [kgC]
+    real(r8) :: b_store  ! Storage pool carbon [kgC]
+    real(r8) :: a_sapw   ! Area of sapwood at reference height [m2]
+    real(r8) :: m_struct ! Generic (any element) mass for structure [kg]
+    real(r8) :: m_leaf   ! Generic mass for leaf  [kg]
+    real(r8) :: m_fnrt   ! Generic mass for fine-root  [kg]
+    real(r8) :: m_sapw   ! Generic mass for sapwood [kg]
+    real(r8) :: m_store  ! Generic mass for storage [kg]
+    real(r8) :: m_repro  ! Generic mass for reproductive tissues [kg]
+    real(r8) :: stem_drop_fraction
+    
+    ! ----------------------------------------------------------------------------------------------
+    ! Part 1:
+    ! Set the central properties.
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Plant functional type:
+    cohort_obj%pft = pft
+    
+    ! Age: (as cohort age bin, not years)
+    ! EDInitMod: init_cohorts(): 0 (but set later)
+    ! EDPhysiologyMod: recruitment(): 0
+    ! FatesInventoryInitMod: set_inventory_edcohort_type1(): Not set
+    ! There may be cases where a non-zero age is appropriate.  We could for example use the actual
+    ! age of saplings used (~1yr).  If so it likely needs to be passed in because there is
+    ! probably no great way to calculate it.
+    cohort_obj%coage = 0.0_r8
+    
+    ! Number of trees / density:
+    ! This should be straight forward but it is a bit confusing.
+    ! EDTypesMod defines n as the "number of individuals in cohort per 'area' (10000m2 default)"
+    ! If the area is invariant (as onw hectare), this is really a density.  However, both
+    ! EDInitMod: init_cohorts() & FatesInventoryInitMod: set_inventory_edcohort_type1() initialize
+    ! it using the patch area.  Based on previous work I think it is the number of trees per the
+    ! the whole nominal hectare, even though the cohort may not occupy the whole hectare, which is
+    ! not very intuitive.
+    cohort_obj%n = density * cohort_area
+    
+    ! DBH & Height:
+    ! The different functions start with either DBH or height and we allow either:
+    ! EDInitMod: init_cohorts(): height
+    ! EDPhysiologyMod: recruitment(): height
+    ! FatesInventoryInitMod: set_inventory_edcohort_type1(): DBH
+
+    ! If both are present allow height to override DBH:
+    ! Note: It may be better to throw and error here?????
+    if (present(height)) then
+      cohort_obj%hite = height
+      
+      ! Calculate the plant diameter from height:
+      call h2d_allom(height, pft, cohort_obj%dbh)
+    else
+      if (.not. present(dbh)) then
+        ! One should be provided.
+        write(fates_log(),*) 'DBH or height must be provided.'
+        call endrun(msg = errMsg(__FILE__, __LINE__))
+      end if
+      
+      cohort_obj%dbh = dbh
+      
+      ! Calculate the plant height from diameter:
+      call h_allom(dbh, pft, cohort_obj%hite)
+    end if
+    
+    ! The different subroutines make different assumptions for the canopy status.
+    ! EDInitMod: init_cohorts() & FatesInventoryInitMod: set_inventory_edcohort_type1() = 1.0
+    ! EDPhysiologyMod: recruitment() = 0.8.
+    ! For planting an open canopy would be expected so I will use the lower value for now.
+    ! Why not use 0?  I need to confirm that trim is the opposite of spread
+    cohort_obj%canopy_trim = 1.0_r8 ! ?????
+    
+    ! ----------------------------------------------------------------------------------------------
+    ! Part 2:
+    ! Initialize the live pools.
+    !
+    ! The following code is functionally identical in:
+    ! EDInitMod: init_cohorts() & FatesInventoryInitMod: set_inventory_edcohort_type1().
+    ! Only the some variable names are different.
+    ! EDPhysiologyMod: recruitment() also does the same thing in a different order and calls
+    ! zero_cohort() first and only initializes sapwood and structural biomass if the PFT is woody.
+    ! 
+    ! I have only altered indenting & some comments.
+    ! ----------------------------------------------------------------------------------------------
+
+    ! Calculate total above-ground biomass from allometry
+    call bagw_allom(cohort_obj%dbh, cohort_obj%pft, b_agw)
+
+    ! Calculate coarse root biomass from allometry
+    call bbgw_allom(cohort_obj%dbh, cohort_obj%pft, b_bgw)
+
+    ! Calculate the leaf biomass (calculates a maximum first, then applies canopy trim
+    ! and sla scaling factors)
+    call bleaf(cohort_obj%dbh, cohort_obj%pft, cohort_obj%canopy_trim,b_leaf)
+
+    ! Calculate fine root biomass
+    call bfineroot(cohort_obj%dbh, cohort_obj%pft, cohort_obj%canopy_trim,b_fnrt)!...
+
+    ! Calculate sapwood biomass
+    call bsap_allom(cohort_obj%dbh, cohort_obj%pft, cohort_obj%canopy_trim, a_sapw, b_sapw)
+
+    call bdead_allom( b_agw, b_bgw, b_sapw, cohort_obj%pft, b_struct )
+
+    call bstore_allom(cohort_obj%dbh, cohort_obj%pft, cohort_obj%canopy_trim, b_store)
+
+    ! The default assumption is that leaves are on:
+    cohort_obj%laimemory = 0._r8
+    cohort_obj%sapwmemory = 0._r8
+    cohort_obj%structmemory = 0._r8
+    !cstatus = leaves_on
+    cohort_obj%status_coh = leaves_on
+
+    stem_drop_fraction = EDPftvarcon_inst%phen_stem_drop_fraction(cohort_obj%pft)
+
+    if (prt_params%season_decid(cohort_obj%pft) == itrue .and. &
+        any(site%cstatus == [phen_cstat_nevercold, phen_cstat_iscold])) then
+      cohort_obj%laimemory = b_leaf
+      cohort_obj%sapwmemory = b_sapw * stem_drop_fraction
+      cohort_obj%structmemory = b_struct * stem_drop_fraction	    
+      b_leaf  = 0._r8
+      b_sapw = (1._r8 - stem_drop_fraction) * b_sapw
+      b_struct  = (1._r8 - stem_drop_fraction) * b_struct
+      !cstatus = leaves_off
+      cohort_obj%status_coh = leaves_off
+    endif
+
+    if (prt_params%stress_decid(cohort_obj%pft) == itrue .and. &
+        any(site%dstatus == [phen_dstat_timeoff, phen_dstat_moistoff])) then
+      cohort_obj%laimemory = b_leaf
+      cohort_obj%sapwmemory = b_sapw * stem_drop_fraction
+      cohort_obj%structmemory = b_struct * stem_drop_fraction	    
+      b_leaf  = 0._r8
+      b_sapw = (1._r8 - stem_drop_fraction) * b_sapw
+      b_struct  = (1._r8 - stem_drop_fraction) * b_struct	    
+      !cstatus = leaves_off
+      cohort_obj%status_coh = leaves_off
+    endif
+
+    ! End Part 2.
+    
+    ! ----------------------------------------------------------------------------------------------
+    ! Part 3:
+    ! Some of the subroutines do something here:
+    ! EDInitMod: init_cohorts() sets the age and a debug message here.
+    ! EDPhysiologyMod: recruitment(): The limiting element is determined.
+    ! FatesInventoryInitMod: set_inventory_edcohort_type1(): Nothing.
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! ----------------------------------------------------------------------------------------------
+    ! Part 4:
+    ! Initialize the mass of every element in every organ of the plant / cohort and store_organ
+    ! in a PARTEH object.
+    !
+    ! The following code is functionally identical in:
+    ! EDInitMod: init_cohorts(), EDPhysiologyMod: recruitment(),  & FatesInventoryInitMod:
+    ! set_inventory_edcohort_type1(), except init_cohorts() & recruitment() put all the leaf mass
+    ! into the first leaf age bin while set_inventory_edcohort_type1() spread it across all age
+    ! bins.
+    ! Since we are only really trying to do planting currently we will use former approach.
+    ! ----------------------------------------------------------------------------------------------
+    
+    do el = 1, num_elements
+      element_id = element_list(el)
+
+      ! If this is carbon12, then the initialization is straight forward
+      ! otherwise, we use stoichiometric ratios
+      select case(element_id)
+      case(carbon12_element)
+
+        m_struct = b_struct
+        m_leaf   = b_leaf
+        m_fnrt   = b_fnrt
+        m_sapw   = b_sapw
+        m_store  = b_store
+        m_repro  = 0._r8
+
+      case(nitrogen_element)
+
+        m_struct = b_struct * prt_params%nitr_stoich_p1(cohort_obj%pft, struct_organ)
+        m_leaf   = b_leaf * prt_params%nitr_stoich_p1(cohort_obj%pft, leaf_organ)
+        m_fnrt   = b_fnrt * prt_params%nitr_stoich_p1(cohort_obj%pft, fnrt_organ)
+        m_sapw   = b_sapw * prt_params%nitr_stoich_p1(cohort_obj%pft, sapw_organ)
+        m_store  = b_store * prt_params%nitr_stoich_p1(cohort_obj%pft, store_organ)
+        m_repro  = 0._r8
+
+      case(phosphorus_element)
+
+        m_struct = b_struct * prt_params%phos_stoich_p1(cohort_obj%pft, struct_organ)
+        m_leaf   = b_leaf * prt_params%phos_stoich_p1(cohort_obj%pft, leaf_organ)
+        m_fnrt   = b_fnrt * prt_params%phos_stoich_p1(cohort_obj%pft, fnrt_organ)
+        m_sapw   = b_sapw * prt_params%phos_stoich_p1(cohort_obj%pft, sapw_organ)
+        m_store  = b_store * prt_params%phos_stoich_p1(cohort_obj%pft, store_organ)
+        m_repro  = 0._r8
+      end select
+
+      select case(hlm_parteh_mode)
+      case (prt_carbon_allom_hyp,prt_cnp_flex_allom_hyp )
+
+        ! Put all of the leaf mass into the first bin
+        call SetState(cohort_parteh, leaf_organ, element_id, m_leaf,1)
+        do iage = 2, nleafage
+          call SetState(cohort_parteh, leaf_organ, element_id, 0._r8, iage)
+        end do
+
+        call SetState(cohort_parteh, fnrt_organ, element_id, m_fnrt)
+        call SetState(cohort_parteh, sapw_organ, element_id, m_sapw)
+        call SetState(cohort_parteh, store_organ, element_id, m_store)
+        call SetState(cohort_parteh, struct_organ, element_id, m_struct)
+        call SetState(cohort_parteh, repro_organ, element_id, m_repro)
+
+      case default
+        write(fates_log(),*) 'Unspecified PARTEH module during inventory intitialization'
+        call endrun(msg = errMsg(__FILE__, __LINE__))
+      end select
+
+    end do
+
+    call cohort_parteh%CheckInitialConditions()
+    
+    ! End Part 4.
+
+  end subroutine init_temporary_cohort
+
   !=================================================================================================
   ! Managed Mortality Primitives:
   !   Mortality primitives are low level subroutines used to initiate human caused mortality events
   ! at the cohort and patch levels.  They provide an interface for higher level functions to build
   ! abstractions of human vegetation management activities without depending as intimately on the
-  ! the underlying implementation of mortality representation.
+  ! the underlying implementation of managed mortality representation.
   !
   !   The kill() functions provided share arguments and concepts...
   !
@@ -3648,6 +3671,32 @@ contains
   !
   !=================================================================================================
 
+  function cohort_effective_basal_area(cohort) result(effective_basal_area) ! Currently not called.
+    ! ----------------------------------------------------------------------------------------------
+    ! Return the effective basal area for a cohort after applying any existing staged potential
+    ! mortalities.
+    !
+    ! While minimal this fucntion does reduce calling code complexity and readability.  It may be
+    ! inlined anyway.
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Uses: NA
+    
+    ! Arguments:
+    type(ed_cohort_type), intent(in), target :: cohort
+    
+    ! Locals:
+    real(r8) :: effective_basal_area ! Return value
+    
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Only the adjusted stem count is need, the rest of the equation is unchanged: 
+    effective_basal_area = pi_const * (cohort%dbh / 200.0_r8)**2.0_r8 * cohort_effective_n(cohort)! effective_n(cohort)
+    
+  end function cohort_effective_basal_area
+
+  !=================================================================================================
+
   function patch_effective_basal_area(patch, pfts) result(effective_basal_area) ! Currently not called.
     ! ----------------------------------------------------------------------------------------------
     ! Return the effective basal area for a patch after applying any existing staged potential
@@ -3681,66 +3730,6 @@ contains
       end do ! Cohort loop.
     
   end function patch_effective_basal_area
-
-  !=================================================================================================
-
-  function cohort_effective_basal_area(cohort) result(effective_basal_area) ! Currently not called.
-    ! ----------------------------------------------------------------------------------------------
-    ! Return the effective basal area for a cohort after applying any existing staged potential
-    ! mortalities.
-    !
-    ! While minimal this fucntion does reduce calling code complexity and readability.  It may be
-    ! inlined anyway.
-    ! ----------------------------------------------------------------------------------------------
-    
-    ! Uses: NA
-    
-    ! Arguments:
-    type(ed_cohort_type), intent(in), target :: cohort
-    
-    ! Locals:
-    real(r8) :: effective_basal_area ! Return value
-    
-    ! ----------------------------------------------------------------------------------------------
-    
-    ! Only the adjusted stem count is need, the rest of the equation is unchanged: 
-    effective_basal_area = pi_const * (cohort%dbh / 200.0_r8)**2.0_r8 * cohort_effective_n(cohort)! effective_n(cohort)
-    
-  end function cohort_effective_basal_area
-
-  !=================================================================================================
-
-  function patch_effective_n(patch, pfts) ! result(effective_n)
-    ! ----------------------------------------------------------------------------------------------
-    ! Return the effective stem count for a patch after applying any existing staged potential
-    ! mortalities, for only the PFTs passed in.
-    ! ----------------------------------------------------------------------------------------------
-    
-    ! Uses: NA
-    
-    ! Arguments:
-    type(ed_patch_type), intent(in), target :: patch ! The patch to be calculated.
-    integer(i4), dimension(:), intent(in) :: pfts ! Array of PFT IDs to include in the calculation.
-    
-    ! Locals:
-    real(r8) :: patch_effective_n ! Return value
-    type (ed_cohort_type), pointer :: current_cohort
-    
-    ! ----------------------------------------------------------------------------------------------
-    
-    patch_effective_n = 0.0_r8 ! Initialize.
-    
-    current_cohort => patch%shortest
-    do while(associated(current_cohort))
-    
-      if (any(pfts == current_cohort%pft)) then
-        patch_effective_n = patch_effective_n + cohort_effective_n(current_cohort) ! effective_n(current_cohort)
-      endif
-      
-      current_cohort => current_cohort%taller
-    end do ! Cohort loop.
-    
-  end function patch_effective_n
 
   !=================================================================================================
 
@@ -3791,6 +3780,40 @@ contains
     endif
     
   end function cohort_effective_n
+
+  !=================================================================================================
+
+  function patch_effective_n(patch, pfts) ! result(effective_n)
+    ! ----------------------------------------------------------------------------------------------
+    ! Return the effective stem count for a patch after applying any existing staged potential
+    ! mortalities, for only the PFTs passed in.
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Uses: NA
+    
+    ! Arguments:
+    type(ed_patch_type), intent(in), target :: patch ! The patch to be calculated.
+    integer(i4), dimension(:), intent(in) :: pfts ! Array of PFT IDs to include in the calculation.
+    
+    ! Locals:
+    real(r8) :: patch_effective_n ! Return value
+    type (ed_cohort_type), pointer :: current_cohort
+    
+    ! ----------------------------------------------------------------------------------------------
+    
+    patch_effective_n = 0.0_r8 ! Initialize.
+    
+    current_cohort => patch%shortest
+    do while(associated(current_cohort))
+    
+      if (any(pfts == current_cohort%pft)) then
+        patch_effective_n = patch_effective_n + cohort_effective_n(current_cohort) ! effective_n(current_cohort)
+      endif
+      
+      current_cohort => current_cohort%taller
+    end do ! Cohort loop.
+    
+  end function patch_effective_n
 
   !=================================================================================================
 
