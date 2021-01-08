@@ -300,7 +300,7 @@ contains
     if (debug) write(fates_log(), *) 'managed_mortality() entering.'
     
     ! An estimate of the harvest flux will be made and stored subsequently:
-    site_in%harvest_carbon_flux = 0._r8
+    site_in%harvest_carbon_flux = 0.0_r8
     
     ! ----------------------------------------------------------------------------------------------
     ! Determine what vegetation management is due at the current time step.  This includes:
@@ -504,7 +504,7 @@ contains
     
     current_patch => site_in%oldest_patch
     do while (associated(current_patch))
-      current_patch%total_canopy_area = 0._r8
+      current_patch%total_canopy_area = 0.0_r8
       current_cohort => current_patch%shortest
       do while(associated(current_cohort))
         if (current_cohort%canopy_layer == 1) then
@@ -1044,7 +1044,7 @@ contains
       retain_m2 = retain_frac / remainder_area
       donate_m2 = (1.0_r8 - retain_frac) / new_patch%area ! donate_frac / new_patch%area
     else
-       retain_m2 = 0._r8
+       retain_m2 = 0.0_r8
        donate_m2 = 1.0_r8 / new_patch%area
     end if
     
@@ -1224,7 +1224,7 @@ contains
           ! This recalculation is done in the logging module code but is currently not necessary for
           ! other management activities (but it is not harmful either):
           bg_wood = direct_dead * (struct_m + sapw_m ) * SF_val_CWD_frac(ncwd) * &
-                    (1._r8 - prt_params%allom_agb_frac(current_cohort%pft))
+                    (1.0_r8 - prt_params%allom_agb_frac(current_cohort%pft))
           
           ! ----------------------------------------------------------------------------------------
           ! Harvest: The below-ground portion of the stem goes to soil:
@@ -1513,15 +1513,15 @@ contains
            new_cohort%dmort            = donor_cohort%dmort
 
            ! Since these are the ones that weren't logged, set the logging mortality rates as zero:
-           new_cohort%lmort_direct     = 0._r8
-           new_cohort%lmort_collateral = 0._r8
-           new_cohort%lmort_infra      = 0._r8
+           new_cohort%lmort_direct     = 0.0_r8
+           new_cohort%lmort_collateral = 0.0_r8
+           new_cohort%lmort_infra      = 0.0_r8
            ! JMR_MOD_START:
            ! There could be trouble above!!!!!
-           new_cohort%vm_mort_in_place = 0._r8
-           new_cohort%vm_mort_bole_harvest = 0._r8
-           new_cohort%vm_pfrac_in_place = 0._r8
-           new_cohort%vm_pfrac_bole_harvest = 0._r8
+           new_cohort%vm_mort_in_place = 0.0_r8
+           new_cohort%vm_mort_bole_harvest = 0.0_r8
+           new_cohort%vm_pfrac_in_place = 0.0_r8
+           new_cohort%vm_pfrac_bole_harvest = 0.0_r8
            ! JMR_MOD_END.
            
         else
@@ -1567,7 +1567,7 @@ contains
               
               ! Step 3: Reduce the number count of cohorts in the 
               !         original/donor/non-disturbed patch to reflect the area change
-              donor_cohort%n = donor_cohort%n * (1._r8 - patch_site_areadis / parent_patch%area)
+              donor_cohort%n = donor_cohort%n * (1.0_r8 - patch_site_areadis / parent_patch%area)
               
               new_cohort%cmort            = donor_cohort%cmort
               new_cohort%hmort            = donor_cohort%hmort
@@ -1651,14 +1651,14 @@ contains
 
         ! This follows the example of the traditional logging module events:
         ! I'm not exactly why we set the new patch to 0.  It may be that being new it has no history.
-        new_cohort%lmort_direct     = 0._r8
-        new_cohort%lmort_collateral = 0._r8
-        new_cohort%lmort_infra      = 0._r8
+        new_cohort%lmort_direct     = 0.0_r8
+        new_cohort%lmort_collateral = 0.0_r8
+        new_cohort%lmort_infra      = 0.0_r8
         
-        new_cohort%vm_mort_in_place      = 0._r8
-        new_cohort%vm_mort_bole_harvest  = 0._r8
-        new_cohort%vm_pfrac_in_place     = 0._r8
-        new_cohort%vm_pfrac_bole_harvest = 0._r8
+        new_cohort%vm_mort_in_place      = 0.0_r8
+        new_cohort%vm_mort_bole_harvest  = 0.0_r8
+        new_cohort%vm_pfrac_in_place     = 0.0_r8
+        new_cohort%vm_pfrac_bole_harvest = 0.0_r8
         
         ! Following the creation of the new cohort reset the disturbance values in the old cohort:
         ! Note: Repeated below!!!!!
@@ -1717,14 +1717,14 @@ contains
 
         ! This follows the example of the traditional logging module events:
         ! I'm not exactly sure why we set the new patch to 0.  It may be that being new it has no history.
-        new_cohort%lmort_direct     = 0._r8
-        new_cohort%lmort_collateral = 0._r8
-        new_cohort%lmort_infra      = 0._r8
+        new_cohort%lmort_direct     = 0.0_r8
+        new_cohort%lmort_collateral = 0.0_r8
+        new_cohort%lmort_infra      = 0.0_r8
         
-        new_cohort%vm_mort_in_place      = 0._r8
-        new_cohort%vm_mort_bole_harvest  = 0._r8
-        new_cohort%vm_pfrac_in_place     = 0._r8
-        new_cohort%vm_pfrac_bole_harvest = 0._r8
+        new_cohort%vm_mort_in_place      = 0.0_r8
+        new_cohort%vm_mort_bole_harvest  = 0.0_r8
+        new_cohort%vm_pfrac_in_place     = 0.0_r8
+        new_cohort%vm_pfrac_bole_harvest = 0.0_r8
         
         ! Following the creation of the new cohort reset the disturbance values in the old cohort:
         ! Note: I'm not positive this is the right place to do this but failing to do so results in
@@ -2140,9 +2140,9 @@ contains
     call bstore_allom(cohort_obj%dbh, cohort_obj%pft, cohort_obj%canopy_trim, b_store)
 
     ! The default assumption is that leaves are on:
-    cohort_obj%laimemory = 0._r8
-    cohort_obj%sapwmemory = 0._r8
-    cohort_obj%structmemory = 0._r8
+    cohort_obj%laimemory = 0.0_r8
+    cohort_obj%sapwmemory = 0.0_r8
+    cohort_obj%structmemory = 0.0_r8
     !cstatus = leaves_on
     cohort_obj%status_coh = leaves_on
 
@@ -2153,9 +2153,9 @@ contains
       cohort_obj%laimemory = b_leaf
       cohort_obj%sapwmemory = b_sapw * stem_drop_fraction
       cohort_obj%structmemory = b_struct * stem_drop_fraction	    
-      b_leaf  = 0._r8
-      b_sapw = (1._r8 - stem_drop_fraction) * b_sapw
-      b_struct  = (1._r8 - stem_drop_fraction) * b_struct
+      b_leaf  = 0.0_r8
+      b_sapw = (1.0_r8 - stem_drop_fraction) * b_sapw
+      b_struct  = (1.0_r8 - stem_drop_fraction) * b_struct
       !cstatus = leaves_off
       cohort_obj%status_coh = leaves_off
     endif
@@ -2165,9 +2165,9 @@ contains
       cohort_obj%laimemory = b_leaf
       cohort_obj%sapwmemory = b_sapw * stem_drop_fraction
       cohort_obj%structmemory = b_struct * stem_drop_fraction	    
-      b_leaf  = 0._r8
-      b_sapw = (1._r8 - stem_drop_fraction) * b_sapw
-      b_struct  = (1._r8 - stem_drop_fraction) * b_struct	    
+      b_leaf  = 0.0_r8
+      b_sapw = (1.0_r8 - stem_drop_fraction) * b_sapw
+      b_struct  = (1.0_r8 - stem_drop_fraction) * b_struct	    
       !cstatus = leaves_off
       cohort_obj%status_coh = leaves_off
     endif
@@ -2208,7 +2208,7 @@ contains
         m_fnrt   = b_fnrt
         m_sapw   = b_sapw
         m_store  = b_store
-        m_repro  = 0._r8
+        m_repro  = 0.0_r8
 
       case(nitrogen_element)
 
@@ -2217,7 +2217,7 @@ contains
         m_fnrt   = b_fnrt * prt_params%nitr_stoich_p1(cohort_obj%pft, fnrt_organ)
         m_sapw   = b_sapw * prt_params%nitr_stoich_p1(cohort_obj%pft, sapw_organ)
         m_store  = b_store * prt_params%nitr_stoich_p1(cohort_obj%pft, store_organ)
-        m_repro  = 0._r8
+        m_repro  = 0.0_r8
 
       case(phosphorus_element)
 
@@ -2226,7 +2226,7 @@ contains
         m_fnrt   = b_fnrt * prt_params%phos_stoich_p1(cohort_obj%pft, fnrt_organ)
         m_sapw   = b_sapw * prt_params%phos_stoich_p1(cohort_obj%pft, sapw_organ)
         m_store  = b_store * prt_params%phos_stoich_p1(cohort_obj%pft, store_organ)
-        m_repro  = 0._r8
+        m_repro  = 0.0_r8
       end select
 
       select case(hlm_parteh_mode)
@@ -2235,7 +2235,7 @@ contains
         ! Put all of the leaf mass into the first bin
         call SetState(cohort_parteh, leaf_organ, element_id, m_leaf,1)
         do iage = 2, nleafage
-          call SetState(cohort_parteh, leaf_organ, element_id, 0._r8, iage)
+          call SetState(cohort_parteh, leaf_organ, element_id, 0.0_r8, iage)
         end do
 
         call SetState(cohort_parteh, fnrt_organ, element_id, m_fnrt)
@@ -3273,7 +3273,7 @@ contains
     if (debug) write(fates_log(), *) 'harvest_mass_min_area() entering.'
     
     ! An estimate of the harvest flux will be made and stored: ?????????????????
-    !site_in%harvest_carbon_flux = 0._r8
+    !site_in%harvest_carbon_flux = 0.0_r8
     
     ! Check and set the size specifications:
     call validate_size_specifications(the_dbh_min, the_dbh_max, the_ht_min, the_ht_max, &
