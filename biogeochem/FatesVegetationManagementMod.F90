@@ -4543,7 +4543,7 @@ contains
             lon_str = field_pop(line_str)
             
             ! Check if this event matched this timestep and location:
-            if (is_now(date_str) .and. is_now(lat_str, lon_str)) then
+            if (is_now(date_str) .and. is_here(lat_str, lon_str)) then
               
               ! Get the event code:
               !event_code = field_pop_int(line_str)
@@ -4624,7 +4624,7 @@ contains
     
     ! If 0 this could be the last field, make sure something is there:
     if (delim_index == 0) then
-      if (len(line_str > 0)) then
+      if (len(line_str) > 0) then
         field_str = line_str
         line_str = ''
       else
@@ -4722,7 +4722,7 @@ contains
     
     ! Locals:
     logical :: is_now ! Return value
-    character(len = len(event_str)) :: work_string ! Modifiable local copy of date_string
+    character(len = len(date_string)) :: work_string ! Modifiable local copy of date_string
     character(len=*), parameter :: delim_chars = "/-."
     integer :: delim_index
     character(len=10) :: year_str
@@ -4898,7 +4898,9 @@ contains
     
     ! ----------------------------------------------------------------------------------------------
     
-    this = vm_event(code = vm_event_null, params = 0)
+    !this = vm_event(code = vm_event_null, params = 0)
+    this%code = vm_event_null
+    this%params = 0
     
   end subroutine zero
 
