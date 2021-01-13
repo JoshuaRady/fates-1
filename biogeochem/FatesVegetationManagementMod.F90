@@ -363,7 +363,7 @@ contains
 !       
 !       
 !     endif ! driver_file_exists
-    call load_prescribed_events()
+    call load_prescribed_events(site)
     
     ! Make sure that traditional logging events do not co-occur with VM harvest events.
     if (logging_time .and. vm_mortality_event%code /= vm_event_null) then
@@ -562,10 +562,10 @@ contains
       
       current_patch => site_in%oldest_patch
       do while (associated(current_patch))
-!         if (thinnable_patch(patch = current_patch, pfts = tree_pfts, goal_basal_area = 20.0_r8)) then
-!           call thin_row_low(patch = current_patch, pfts = woody_pfts, &
-!                             row_fraction = 0.2_r8, final_basal_area = 25.0_r8)
-!         endif
+        if (thinnable_patch(patch = current_patch, pfts = tree_pfts, goal_basal_area = 20.0_r8)) then
+          call thin_row_low(patch = current_patch, pfts = woody_pfts, &
+                            row_fraction = 0.2_r8, final_basal_area = 25.0_r8)
+        endif
         current_patch => current_patch%younger
       end do
       
@@ -672,15 +672,15 @@ contains
           current_patch => site_in%oldest_patch
           do while (associated(current_patch))
             !if (thinnable_patch(patch = current_patch, pfts = tree_pfts, goal_basal_area = 20.0_r8)) then
-            if (thinnable_patch(patch = current_patch, pfts = int(vm_mortality_event%params(1)), &
-                goal_basal_area = vm_mortality_event%params(3))) then
-              
-              call thin_row_low(patch = current_patch, pfts = int(vm_mortality_event%params(1)), &
-                                row_fraction = vm_mortality_event%params(2), &
-                                final_basal_area = vm_mortality_event%params(3))
-            
-              ! Add accumulation of harvest here????
-            endif
+!             if (thinnable_patch(patch = current_patch, pfts = int(vm_mortality_event%params(1)), &
+!                 goal_basal_area = vm_mortality_event%params(3))) then
+!               
+!               call thin_row_low(patch = current_patch, pfts = int(vm_mortality_event%params(1)), &
+!                                 row_fraction = vm_mortality_event%params(2), &
+!                                 final_basal_area = vm_mortality_event%params(3))
+!             
+!               ! Add accumulation of harvest here????
+!             endif
             current_patch => current_patch%younger
           end do
           
@@ -4421,7 +4421,7 @@ contains
   ! Prescribed Event Driver File Subroutines:
   !=================================================================================================
 
-  subroutine load_prescribed_events()
+  subroutine load_prescribed_events(site)
     ! ----------------------------------------------------------------------------------------------
     ! Check for the presence of an input file that prescribes a series of VM events.  If present
     ! load any events for this timestep and location into memory.
@@ -4448,6 +4448,7 @@ contains
     use shr_file_mod, only : shr_file_getUnit, shr_file_freeUnit
     
     ! Arguments:
+    type(ed_site_type), intent(in), target :: site ! The current site object.
     
     ! Locals:
     ! character(len=*), parameter ::vm_drive_file_path = "/some/file/path" ! Temporary
@@ -4543,7 +4544,7 @@ contains
             lon_str = field_pop(line_str)
             
             ! Check if this event matched this timestep and location:
-            if (is_now(date_str) .and. is_here(lat_str, lon_str)) then
+            if (is_now(date_str) .and. is_here(lat_str, lon_str, site)) then
               
               ! Get the event code:
               !event_code = field_pop_int(line_str)
