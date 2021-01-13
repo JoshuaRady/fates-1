@@ -673,14 +673,20 @@ contains
           do while (associated(current_patch))
             !if (thinnable_patch(patch = current_patch, pfts = tree_pfts, goal_basal_area = 20.0_r8)) then
 !             if (thinnable_patch(patch = current_patch, pfts = int(vm_mortality_event%params(1)), &
-!                 goal_basal_area = vm_mortality_event%params(3))) then
-!               
+
+            ! Have to convert the PFT parameter from scalar real to a integer array. Ugly!
+            if (thinnable_patch(patch = current_patch, &
+                pfts = (/int(vm_mortality_event%params(1))/), &
+                goal_basal_area = vm_mortality_event%params(3))) then
+              
 !               call thin_row_low(patch = current_patch, pfts = int(vm_mortality_event%params(1)), &
-!                                 row_fraction = vm_mortality_event%params(2), &
-!                                 final_basal_area = vm_mortality_event%params(3))
-!             
-!               ! Add accumulation of harvest here????
-!             endif
+              call thin_row_low(patch = current_patch, &
+                                pfts = (/int(vm_mortality_event%params(1))/), &
+                                row_fraction = vm_mortality_event%params(2), &
+                                final_basal_area = vm_mortality_event%params(3))
+            
+              ! Add accumulation of harvest here????
+            endif
             current_patch => current_patch%younger
           end do
           
@@ -4792,7 +4798,7 @@ contains
 
   !=================================================================================================
 
-  function is_here(lat_string, lon_string, site) ! Add current_site
+  function is_here(lat_string, lon_string, site) ! event_is_here()?
     ! ----------------------------------------------------------------------------------------------
     ! Determine is the current site matches the specified coordinates.
     !
@@ -4824,7 +4830,7 @@ contains
     ! Arguments:
     character(len=*), intent(in) :: lat_string
     character(len=*), intent(in) :: lon_string
-    type(ed_site_type), intent(inout), target :: site ! The current site object.
+    type(ed_site_type), intent(in), target :: site ! The current site object.
     
     ! Locals:
     logical :: is_here ! Return value
@@ -4874,6 +4880,7 @@ contains
         if (debug) write(fates_log(), *) 'VM event matches this location.'
       else
         is_here = .false.
+        if (debug) write(fates_log(), *) "VM event doesn't match this location."
       endif
       
     endif
