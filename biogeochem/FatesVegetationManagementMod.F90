@@ -157,8 +157,8 @@ module FatesVegetationManagementMod
   
   ! VM events:
   type, private :: vm_event
-      integer :: code ! The event code.
-      real, dimension(4) :: params ! Event parameters
+      integer(i4) :: code ! The event code.
+      real(r8), dimension(4) :: params ! Event parameters
     contains
       procedure :: zero
       procedure :: load
@@ -228,7 +228,7 @@ contains
     ! Uses:
     use FatesInterfaceTypesMod, only : numpft
     !use FatesInterfaceTypesMod, only : hlm_current_year, hlm_current_month, hlm_current_day
-    use EDLoggingMortalityMod, only : IsItLoggingTime
+    use EDLoggingMortalityMod, only : IsItLoggingTime, logging_time
     !use shr_file_mod, only : shr_file_getUnit, shr_file_freeUnit
     
     ! Arguments:
@@ -671,9 +671,12 @@ contains
           
           current_patch => site_in%oldest_patch
           do while (associated(current_patch))
-            if (thinnable_patch(patch = current_patch, pfts = tree_pfts, goal_basal_area = 20.0_r8)) then
-              call thin_row_low(patch = current_patch, pfts = vm_mortality_event%params(1), &
-                                row_fraction = vm_mortality_event%params(2),
+            !if (thinnable_patch(patch = current_patch, pfts = tree_pfts, goal_basal_area = 20.0_r8)) then
+            if (thinnable_patch(patch = current_patch, pfts = int(vm_mortality_event%params(1)), &
+                goal_basal_area = vm_mortality_event%params(3))) then
+              
+              call thin_row_low(patch = current_patch, pfts = int(vm_mortality_event%params(1)), &
+                                row_fraction = vm_mortality_event%params(2), &
                                 final_basal_area = vm_mortality_event%params(3))
             
               ! Add accumulation of harvest here????
@@ -1352,7 +1355,7 @@ contains
         ! We only need to do this once so we use the carbon element id, which should always be
         ! present.
         ! ------------------------------------------------------------------------------------------
-        if((element_id == carbon12_element) .and. (hlm_use_planthydro == itrue)) then
+        if ((element_id == carbon12_element) .and. (hlm_use_planthydro == itrue)) then
           call AccumulateMortalityWaterStorage(current_site, current_cohort, all_dead)
         end if
         
@@ -3092,7 +3095,7 @@ contains
                                                          ! split into thinned and unthinned patches.
     real(r8), intent(in), optional :: final_basal_area   ! Goal final basal area index (m^2 / ha ?????)
     real(r8), intent(in), optional :: final_stem_density ! Goal final stem density (trees / ha)
-    real(r8), intent(out), optional :: harvest_estimate  ! The wood harvested by this opperation.
+    real(r8), intent(out), optional :: harvest_estimate  ! The wood harvested by this operation.
     
     ! Locals:
     integer(i4), pointer, dimension(:) :: thin_pfts ! Holds the PFTs to thin, computed from arguments.
@@ -4470,12 +4473,12 @@ contains
     !vm_generative_events_present = .false.
     !vm_generative_event = vm_event(code = vm_event_null, params = 0)
     !vm_mortality_event = vm_event(code = vm_event_null, params = 0)
-    vm_generative_event%zero
-    vm_mortality_event%zero
+    call vm_generative_event%zero()
+    call vm_mortality_event%zero()
     
     ! Initialize locals:
     !event_code = 0
-    the_event%zero()
+    call the_event%zero()
     
     ! Check if the driver file exists and is not in use:
     inquire(file = trim(vm_drive_file_path), exists = driver_file_exists, opened = driver_file_open)
@@ -4540,18 +4543,18 @@ contains
             lon_str = field_pop(line_str)
             
             ! Check if this event matched this timestep and location:
-            if (is_now(date_str) .and. is_now(lat_str, lon_str) then
+            if (is_now(date_str) .and. is_now(lat_str, lon_str)) then
               
               ! Get the event code:
               !event_code = field_pop_int(line_str)
               
               ! Load the event:
-              the_event%load(line_str)
+              call the_event%load(line_str)
               
               ! Is it a mortality or fecundity (generative) event?
               ! Only allow one mortality but more than one planting?
               if (the_event%is_generative()) then
-                if (vm_generative_event%code /= vm_event_null)
+                if (vm_generative_event%code /= vm_event_null) then
                   write(fates_log(),*) 'A VM generative event already exits for this time step.'
                   ! Note: In future this multiple generative events will be allowed to co-occur.
                   call endrun(msg = errMsg(__FILE__, __LINE__))
@@ -4559,7 +4562,7 @@ contains
                   vm_generative_event = the_event
                 endif
               else ! Mortality event:
-                if (vm_mortality_event%code /= vm_event_null)
+                if (vm_mortality_event%code /= vm_event_null) then
                   write(fates_log(),*) 'Only one VM mortality event per time step is currently allowed per site.'
                   call endrun(msg = errMsg(__FILE__, __LINE__))
                 else
@@ -4621,7 +4624,7 @@ contains
     
     ! If 0 this could be the last field, make sure something is there:
     if (delim_index == 0) then
-      if (len(line_str > 0)
+      if (len(line_str > 0) then
         field_str = line_str
         line_str = ''
       else
@@ -4675,7 +4678,7 @@ contains
     
     ! Locals:
     character(len=line_strlen) :: field_str ! Intermediate
-    real :: field_real ! Return value
+    real(r8) :: field_real ! Return value
     
     ! ----------------------------------------------------------------------------------------------
     
@@ -4758,12 +4761,13 @@ contains
     read(day_str, *) day
     !print *, day
     
-    if (hlm_current_year == year .and. hlm_current_month == month .and. & hlm_current_day == day)
+    if (hlm_current_year == year .and. hlm_current_month == month .and. &
+        hlm_current_day == day) then
       is_now = .true.
     else
       is_now = .false.
     endif
-  end function validate_coordinates
+  end function is_now
 
   !=================================================================================================
 
@@ -4820,8 +4824,8 @@ contains
     
     ! Locals:
     logical :: is_now ! Return value
-    real :: latitude, longitude_in, longitude_360 ! event_lat?????
-    real, parameter :: degree_tolerance = 0.1_r8 ! Arbitrary degree tolerance for matching.
+    real(r8) :: latitude, longitude_in, longitude_360 ! event_lat?????
+    real(r8), parameter :: degree_tolerance = 0.1_r8 ! Arbitrary degree tolerance for matching.
     
     ! ----------------------------------------------------------------------------------------------
     
@@ -4833,7 +4837,7 @@ contains
     read(lon_string, *) longitude_in
     
     ! Check to see if the location of the event is "everywhere":
-    if (latitude == -999.0_r8 .and. longitude_in == -999.0_r8)
+    if (latitude == -999.0_r8 .and. longitude_in == -999.0_r8) then
       is_here = .true.
       if (debug) write(fates_log(), *) 'VM event specified as occurring everywhere.'
     else
@@ -4885,7 +4889,7 @@ contains
     ! Uses: NA
     
     ! Arguments:
-    type(vm_event), intent(in) :: this ! Self reference
+    class(vm_event), intent(in) :: this ! Self reference
     
     ! Locals: NA
     
@@ -4906,7 +4910,7 @@ contains
     ! Uses: NA
     
     ! Arguments:
-    type(vm_event), intent(in) :: this ! Self reference
+    class(vm_event), intent(in) :: this ! Self reference
     character(len=*), intent(in) :: event_str
     
     ! Locals:
@@ -4926,8 +4930,8 @@ contains
     
     if (debug) then
       write(fates_log(), *) 'Loading VM event from driver file: '
-      write(fates_log(), *) 'Event code: ' this%code
-      write(fates_log(), *) 'Parameters: ' this%code
+      write(fates_log(), *) 'Event code: ', this%code
+      write(fates_log(), *) 'Parameters: ', this%code
     endif
     
   end subroutine load
@@ -4943,7 +4947,7 @@ contains
     ! Uses: NA
     
     ! Arguments:
-    type(vm_event), intent(in) :: this ! Self reference
+    class(vm_event), intent(in) :: this ! Self reference
     logical :: is_generative ! Return value
     
     ! Locals: NA
@@ -4953,7 +4957,7 @@ contains
     ! What to do if this%code  = vm_event_null
     ! Could return a code?
     
-    if (this%code <= vm_event_plant)
+    if (this%code <= vm_event_plant) then
       is_generative = .true.
     else
       is_generative = .false.
