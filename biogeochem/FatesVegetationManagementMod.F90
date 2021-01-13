@@ -4523,7 +4523,7 @@ contains
         else
           
           ! Read through line by line looking for events specified for this timestep and location:
-          do while (io_status /= 0)
+          do while (io_status == 0)
             ! Read a line:
             
             if (debug) write(fates_log(),*) 'Parsing event line.'
