@@ -83,6 +83,11 @@ module FatesVegetationManagementMod
   !private :: validate_coordinates
   private :: is_here
 
+  ! vm_event Type Member Routines: Don't need this right?
+  !private :: zero
+  !private :: load
+  !private :: is_generative
+
   ! Interfaces:
   ! JMR_NOTE: These interfaces have given me a bit of trouble and are a work in progress:
   interface effective_basal_area
@@ -153,7 +158,7 @@ module FatesVegetationManagementMod
   ! VM events:
   type, private :: vm_event
       integer :: code ! The event code.
-      real(4) :: params ! Event parameters
+      real, dimension(4) :: params ! Event parameters
     contains
       procedure :: zero
       procedure :: load
@@ -164,8 +169,10 @@ module FatesVegetationManagementMod
   type(vm_event), private :: vm_generative_event, vm_mortality_event
 
   integer, parameter, private :: vm_event_null = 0 ! No event
-  integer, parameter, private :: vm_event_XXXXX = 1
-  integer, parameter, private :: vm_event_XXXXX = 2
+  !integer, parameter, private :: vm_event_XXXXX = 1
+  !integer, parameter, private :: vm_event_XXXXX = 2
+  integer, parameter, private :: vm_event_plant = 1 ! Not really thought out yet...
+  integer, parameter, private :: vm_event_thin_test1 = 2 ! In progress
     
   !=================================================================================================
   
@@ -359,7 +366,10 @@ contains
     call load_prescribed_events()
     
     ! Make sure that traditional logging events do not co-occur with VM harvest events.
-    
+    if (logging_time .and. vm_mortality_event%code /= vm_event_null) then
+      write(fates_log(),*) 'Traditional logging events can not currently co-occur in the same time step as vegetation management events that induce mortality.' ! Long message!
+      call endrun(msg = errMsg(__FILE__, __LINE__))
+    endif
     
     if (debug) write(fates_log(), *) 'vegetation_management_init() exiting.'
   end subroutine vegetation_management_init
@@ -455,8 +465,8 @@ contains
     !     hlm_harvest_units == hlm_harvest_area_fraction
     !   I plan to add carbon demand based code.
     !
-    ! - Prescribed actives from input file. [Not yet implemented.]
-    ! - Actives that are due, based on patch flag or regime heuristic. [Not yet implemented.]
+    ! - Prescribed actives from input file. [In process, as part of vegetation_management_init()]
+    ! - Activities that are due, based on patch flag or regime heuristic. [Not yet implemented.]
     ! This logic could all be moved to a subroutine.
     ! ----------------------------------------------------------------------------------------------
     
@@ -530,6 +540,9 @@ contains
         current_patch => current_patch%younger
       end do ! Patch loop.
     endif ! (logging_time)
+    
+    ! The following sections of code are being replaced.  The following if() hack turns them off:
+    if (.false.) then ! ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
     
     ! ----------------------------------------------------------------------------------------------
     ! Thinning:
@@ -631,6 +644,49 @@ contains
       end do ! Patch loop.
       
     endif
+    
+    ! End 'comment' if().
+    endif ! (.false.) ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+    
+    ! If a VM event has been prescribed by the driver input execute it:
+    ! Note:  I haven't figured out how heuristic / land use time series events will work yet so this
+    ! logic will likely be revised again.
+    if (vm_mortality_event%code /= vm_event_null) then
+      
+      ! 1st test of 1st draft implementation:
+      ! For testing purposes replicate the manually triggered thinning (all patches) from above.
+      
+      ! I should probably just use this as the master conditional and do nothing for vm_event_null.
+      ! That may not work so well if multiple events are allowed in the future however.
+      select case (vm_mortality_event%code)
+        !case (vm_event_null)
+        case (vm_event_thin_test1)
+          
+          ! Explanation: thin_row_low() takes a number of parameters, some optional.  We will limit
+          ! the options here.
+          ! Not relevant to driver file: patch & harvest_estimate
+          ! Virtual call:
+          !thin_event(pfts, row_fraction, [patch_fraction], final_basal_area, [final_stem_density])?
+          ! Param 1 = pfts, param 2 = row_fraction, param 3 = final_basal_area, param 4 = ignore for now!
+          
+          current_patch => site_in%oldest_patch
+          do while (associated(current_patch))
+            if (thinnable_patch(patch = current_patch, pfts = tree_pfts, goal_basal_area = 20.0_r8)) then
+              call thin_row_low(patch = current_patch, pfts = vm_mortality_event%params(1), &
+                                row_fraction = vm_mortality_event%params(2),
+                                final_basal_area = vm_mortality_event%params(3))
+            
+              ! Add accumulation of harvest here????
+            endif
+            current_patch => current_patch%younger
+          end do
+          
+        case default
+          write(fates_log(),*) 'Unrecognized event code:', vm_mortality_event%code
+          call endrun(msg = errMsg(__FILE__, __LINE__))
+      end select ! (vm_mortality_event%code)
+      
+    end if ! (vm_mortality_event%code /= vm_event_null)
     
     ! ----------------------------------------------------------------------------------------------
     ! Planting will occur later in the event loop.
@@ -4391,7 +4447,8 @@ contains
     ! Arguments:
     
     ! Locals:
-    character(len=*), parameter ::vm_drive_file_path = "/some/file/path" ! Temporary
+    ! character(len=*), parameter ::vm_drive_file_path = "/some/file/path" ! Temporary
+    character(len=*), parameter ::vm_drive_file_path = "/glade/work/jmrady/InputFiles/Proj_7_Exp_57/DriverFile_D1.txt" ! Temporary
     ! In the future this will not be specified via a namelist and will be character(len=256).
     
     logical :: driver_file_exists ! Does the VM driver file exist
@@ -4451,6 +4508,8 @@ contains
           ! Read through line by line looking for events specified for this timestep and location:
           do while (io_status /= 0)
             ! Read a line:
+            
+            ! Add handling for blank lines?  We should at least expect a return at the end.
             
             !There shouldn't be any leading whitespace but allow it. Trailing whitespace could cause
             !parsing issues:
@@ -4865,6 +4924,12 @@ contains
       ! Error check?????
     end do
     
+    if (debug) then
+      write(fates_log(), *) 'Loading VM event from driver file: '
+      write(fates_log(), *) 'Event code: ' this%code
+      write(fates_log(), *) 'Parameters: ' this%code
+    endif
+    
   end subroutine load
 
   !=================================================================================================
@@ -4888,7 +4953,7 @@ contains
     ! What to do if this%code  = vm_event_null
     ! Could return a code?
     
-    if (this%code < XXXXX)
+    if (this%code <= vm_event_plant)
       is_generative = .true.
     else
       is_generative = .false.
