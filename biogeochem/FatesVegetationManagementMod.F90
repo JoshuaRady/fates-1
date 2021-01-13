@@ -4481,7 +4481,7 @@ contains
     call the_event%zero()
     
     ! Check if the driver file exists and is not in use:
-    inquire(file = trim(vm_drive_file_path), exists = driver_file_exists, opened = driver_file_open)
+    inquire(file = trim(vm_drive_file_path), exist = driver_file_exists, opened = driver_file_open)
     
     ! If the file exists proceed otherwise don't. We don't use a flag:
     if (driver_file_exists) then
@@ -4624,7 +4624,7 @@ contains
     
     ! If 0 this could be the last field, make sure something is there:
     if (delim_index == 0) then
-      if (len(line_str > 0) then
+      if (len(line_str > 0)) then
         field_str = line_str
         line_str = ''
       else
@@ -4674,7 +4674,7 @@ contains
     ! Uses: NA
     
     ! Arguments:
-    character(len=*), intent(in) :: line_str
+    character(len=*), intent(inout) :: line_str
     
     ! Locals:
     character(len=line_strlen) :: field_str ! Intermediate
@@ -4721,42 +4721,45 @@ contains
     character(len=*), intent(in) :: date_string
     
     ! Locals:
+    logical :: is_now ! Return value
+    character(len = len(event_str)) :: work_string ! Modifiable local copy of date_string
     character(len=*), parameter :: delim_chars = "/-."
     integer :: delim_index
     character(len=10) :: year_str
     character(len=2) :: month_str, day_str
     integer :: year, month, day ! Event date components
-    logical :: is_now ! Return value
     
     ! ----------------------------------------------------------------------------------------------
     
     !character(len=*), parameter :: date_string = "2001-03-12"
     
+    work_string = date_string ! Subsequent operations modify the string in place so make a copy.
+    
     ! This shouldn't be necessary currently...
-    date_string = trim(date_string)
+    work_string = trim(work_string)
     
     ! Add error checking...
     ! Check for length and invalid characters!!!!!
     
     ! Parse the date string:
-    delim_index = scan(date_string, delim_chars)
+    delim_index = scan(work_string, delim_chars)
     !print *, delim_index
-    year_str = date_string(:delim_index-1)
+    year_str = work_string(:delim_index-1)
     !print *, year_str
     read(year_str, *) year
     !print *, year
     
     ! Month:
-    date_string = date_string(delim_index+1:)
-    delim_index = scan(date_string, delim_chars)
+    work_string = work_string(delim_index+1:)
+    delim_index = scan(work_string, delim_chars)
     !print *, delim_index
-    month_str = date_string(:delim_index-1)
+    month_str = work_string(:delim_index-1)
     !print *, month_str
     read(month_str, *) month
     !print *, month
     
     ! Day:
-    day_str = date_string(delim_index+1:)
+    day_str = work_string(delim_index+1:)
     !print *, day_str
     read(day_str, *) day
     !print *, day
@@ -4823,7 +4826,7 @@ contains
     type(ed_site_type), intent(inout), target :: site ! The current site object.
     
     ! Locals:
-    logical :: is_now ! Return value
+    logical :: is_here ! Return value
     real(r8) :: latitude, longitude_in, longitude_360 ! event_lat?????
     real(r8), parameter :: degree_tolerance = 0.1_r8 ! Arbitrary degree tolerance for matching.
     
@@ -4889,7 +4892,7 @@ contains
     ! Uses: NA
     
     ! Arguments:
-    class(vm_event), intent(in) :: this ! Self reference
+    class(vm_event), intent(inout) :: this ! Self reference.  Routine modifies self.
     
     ! Locals: NA
     
@@ -4904,27 +4907,30 @@ contains
   subroutine load(this, event_str) ! load_from_string(), initialize()
     ! ----------------------------------------------------------------------------------------------
     ! vm_event Type Bound Procedure:
-    !   Initialize the evnet object from a string.
+    !   Initialize the event object from a string.
     ! ----------------------------------------------------------------------------------------------
     
     ! Uses: NA
     
     ! Arguments:
-    class(vm_event), intent(in) :: this ! Self reference
-    character(len=*), intent(in) :: event_str
+    class(vm_event), intent(inout) :: this ! Self reference.  Routine modifies self.
+    character(len = *), intent(in) :: event_str
     
     ! Locals:
     !character(len=line_strlen) :: code_str, param_str ! Field values
+    character(len = len(event_str)) :: work_string ! Modifiable local copy of event_str
     !integer :: event_code
     integer :: i ! Iterator
     
     ! ----------------------------------------------------------------------------------------------
     
-    this%code = field_pop_int(event_str)
+    work_string = event_str ! Subsequent operations modify the string in place so make a copy.
+    
+    this%code = field_pop_int(work_string)
     ! Error check!!!!!
     
     do i = 1, 4 ! Change to constant?
-      this%param(i) = field_pop_real(event_str)
+      this%params(i) = field_pop_real(work_string)
       ! Error check?????
     end do
     
@@ -4963,6 +4969,6 @@ contains
       is_generative = .false.
     endif
     
-  end function zero
+  end function is_generative
 
 end module FatesVegetationManagementMod
