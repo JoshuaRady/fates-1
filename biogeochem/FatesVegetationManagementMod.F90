@@ -4506,6 +4506,13 @@ contains
         
         ! Discard the first header line:
         read(driver_file_unit, fmt='(A)',iostat = io_status) line_str
+        if (debug) then ! Temporary!!!!!
+          if (io_status == 0) then
+            write(fates_log(),*) 'The VM event driver file header is missing.'
+          else
+            write(fates_log(),*) 'The VM event driver header:', line_str
+          endif
+        endif
         
         ! Read the first event line:
         read(driver_file_unit, fmt='(A)',iostat = io_status) line_str
@@ -4518,6 +4525,8 @@ contains
           ! Read through line by line looking for events specified for this timestep and location:
           do while (io_status /= 0)
             ! Read a line:
+            
+            if (debug) write(fates_log(),*) 'Parsing event line.'
             
             ! Add handling for blank lines?  We should at least expect a return at the end.
             
