@@ -4507,7 +4507,7 @@ contains
         ! Discard the first header line:
         read(driver_file_unit, fmt='(A)',iostat = io_status) line_str
         if (debug) then ! Temporary!!!!!
-          if (io_status == 0) then
+          if (io_status /= 0) then
             write(fates_log(),*) 'The VM event driver file header is missing.'
           else
             write(fates_log(),*) 'The VM event driver header:', line_str
@@ -4518,7 +4518,7 @@ contains
         read(driver_file_unit, fmt='(A)',iostat = io_status) line_str
         
         ! An empty file will not cause problems but is likely not expected so warn:
-        if (io_status == 0) then
+        if (io_status /= 0) then
           write(fates_log(),*) 'The vegetation management prescribed event driver file was found but contains no events.'
         else
           
@@ -4592,12 +4592,12 @@ contains
             read(driver_file_unit, fmt='(A)',iostat = io_status) line_str
           end do
           
-        endif ! (io_status == 0)
+        endif ! (io_status /= 0)
         
         ! Close and clean up:
         close(driver_file_unit, iostat = io_status)
         if (io_status /= 0) then
-          write(fates_log(),*) 'The vegetation management driver file is failed to close.'
+          write(fates_log(),*) 'The vegetation management driver file has failed to close.'
           call endrun(msg = errMsg(__FILE__, __LINE__))
         endif
         call shr_file_freeUnit(driver_file_unit)
