@@ -3152,6 +3152,7 @@ contains
       if (.not. any(tree_pfts == pfts)) then
         write(fates_log(),*) 'thin_row_low(): Cannot thin non-tree PFTs.'
         write(fates_log(),*) 'PFTs =', pfts
+        write(fates_log(),*) 'tree_pfts =', tree_pfts
         call endrun(msg = errMsg(__FILE__, __LINE__))
       end if
       
