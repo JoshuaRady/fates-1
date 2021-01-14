@@ -123,7 +123,7 @@ module FatesVegetationManagementMod
   ! Globals:
   ! character(len=*), parameter, private :: sourcefile = __FILE__
   
-  ! String length specifier: (After FatesInventoryInitMod)
+  ! String length specifier: (After FatesInventoryInitMod) Pretty long.  May be overkill.
    integer, parameter :: line_strlen = 512
   
   ! Debugging flag / switch for module:
@@ -4468,7 +4468,7 @@ contains
     
     ! Locals:
     ! character(len=*), parameter ::vm_drive_file_path = "/some/file/path" ! Temporary
-    character(len=*), parameter ::vm_drive_file_path = "/glade/work/jmrady/InputFiles/Proj_7_Exp_57/DriverFile_D1b.txt" ! Temporary
+    character(len=*), parameter ::vm_drive_file_path = "/glade/work/jmrady/InputFiles/Proj_7_Exp_57/DriverFile_D1c.txt" ! Temporary
     ! In the future this will not be specified via a namelist and will be character(len=256).
     
     logical :: driver_file_exists ! Does the VM driver file exist
@@ -4646,7 +4646,7 @@ contains
     ! Add delimiter?
     
     ! Locals:
-    character(len=line_strlen) :: field_str ! Return value
+    character(len=line_strlen) :: field_str ! Return value  Consider shortening!!!!!
     integer :: delim_index
     
     ! ----------------------------------------------------------------------------------------------
@@ -4673,6 +4673,9 @@ contains
       field_str = line_str(:delim_index - 1)
       line_str = adjustl(line_str(delim_index:)) ! Remove the popped field from the line.
     endif
+    
+    ! I think this will have no effect:
+    field_str = trim(field_str)
     
   end function field_pop
 
@@ -4800,10 +4803,10 @@ contains
     !print *, day
     
     if (debug) then
-      write(fates_log(), *) 'Date string: ', work_string
-      write(fates_log(), *) 'Year: ', year
+      write(fates_log(), *) 'Date string: ', trim(date_string)
+      write(fates_log(), *) 'Year:  ', year
       write(fates_log(), *) 'Month: ', month
-      write(fates_log(), *) 'Day: ', day
+      write(fates_log(), *) 'Day:   ', day
     endif
     
     if (hlm_current_year == year .and. hlm_current_month == month .and. &
@@ -4882,8 +4885,8 @@ contains
     read(lon_string, *) longitude_in
     
     if (debug) then
-      write(fates_log(), *) 'Latitude string: ', lat_string
-      write(fates_log(), *) 'Latitude string: ', lon_string
+      write(fates_log(), *) 'Latitude string: ', trim(lat_string)
+      write(fates_log(), *) 'Latitude string: ', lon_string ! Add trim after testing.
       write(fates_log(), *) 'Latitude #: ', latitude
       write(fates_log(), *) 'Longitude #: ', longitude_in
     endif
