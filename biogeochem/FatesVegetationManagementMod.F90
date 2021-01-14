@@ -163,6 +163,7 @@ module FatesVegetationManagementMod
       procedure :: zero
       procedure :: load
       procedure :: is_generative ! or is_mortality()?????
+      procedure :: dump
   end type vm_event
   
   !logical, private :: vm_mortality_event_present, vm_generative_events_present ! Not needed?
@@ -651,7 +652,16 @@ contains
     ! If a VM event has been prescribed by the driver input execute it:
     ! Note:  I haven't figured out how heuristic / land use time series events will work yet so this
     ! logic will likely be revised again.
+    
+    if (debug) then
+      write(fates_log(),*) 'vm_generative_event:'
+      call vm_generative_event%dump()
+      write(fates_log(),*) 'vm_mortality_event:'
+      call vm_mortality_event%dump()
+    end if
+    
     if (vm_mortality_event%code /= vm_event_null) then
+      if (debug) write(fates_log(), *) 'VM mortality event initiating.'
       
       ! 1st test of 1st draft implementation:
       ! For testing purposes replicate the manually triggered thinning (all patches) from above.
@@ -4510,7 +4520,7 @@ contains
           if (io_status /= 0) then
             write(fates_log(),*) 'The VM event driver file header is missing.'
           else
-            write(fates_log(),*) 'The VM event driver header:', line_str
+            write(fates_log(),*) 'The VM event driver header:', trim(line_str)
           endif
         endif
         
@@ -4560,6 +4570,7 @@ contains
             
             ! Check if this event matched this timestep and location:
             if (is_now(date_str) .and. is_here(lat_str, lon_str, site)) then
+              if (debug) write(fates_log(), *) 'VM event matches date and location.'
               
               ! Get the event code:
               !event_code = field_pop_int(line_str)
@@ -4576,6 +4587,10 @@ contains
                   call endrun(msg = errMsg(__FILE__, __LINE__))
                 else
                   vm_generative_event = the_event
+                  if (debug) then
+                    write(fates_log(),*) 'VM generative event loaded.'
+                    call vm_generative_event%dump()
+                  end if
                 endif
               else ! Mortality event:
                 if (vm_mortality_event%code /= vm_event_null) then
@@ -4583,6 +4598,10 @@ contains
                   call endrun(msg = errMsg(__FILE__, __LINE__))
                 else
                   vm_mortality_event = the_event
+                  if (debug) then
+                    write(fates_log(),*) 'VM mortailty event loaded.'
+                    call vm_mortality_event%dump()
+                  end if
                 endif
               endif ! (the_event%is_generative())
               
@@ -4780,6 +4799,13 @@ contains
     read(day_str, *) day
     !print *, day
     
+    if debug then
+      write(fates_log(), *) 'Date string: ', work_string
+      write(fates_log(), *) 'Year: ', year
+      write(fates_log(), *) 'Month: ', month
+      write(fates_log(), *) 'Day: ', day
+    endif
+    
     if (hlm_current_year == year .and. hlm_current_month == month .and. &
         hlm_current_day == day) then
       is_now = .true.
@@ -4854,6 +4880,13 @@ contains
     ! Convert to numbers:
     read(lat_string, *) latitude
     read(lon_string, *) longitude_in
+    
+    if debug then
+      write(fates_log(), *) 'Latitude string: ', lat_string
+      write(fates_log(), *) 'Latitude string: ', lon_string
+      write(fates_log(), *) 'Latitude #: ', latitude
+      write(fates_log(), *) 'Longitude #: ', longitude_in
+    endif
     
     ! Check to see if the location of the event is "everywhere":
     if (latitude == -999.0_r8 .and. longitude_in == -999.0_r8) then
@@ -4955,8 +4988,9 @@ contains
     
     if (debug) then
       write(fates_log(), *) 'Loading VM event from driver file: '
-      write(fates_log(), *) 'Event code: ', this%code
-      write(fates_log(), *) 'Parameters: ', this%code
+      !write(fates_log(), *) 'Event code: ', this%code
+      !write(fates_log(), *) 'Parameters: ', this%params
+      call this%dump()
     endif
     
   end subroutine load
@@ -4989,5 +5023,28 @@ contains
     endif
     
   end function is_generative
+
+  !=================================================================================================
+
+  subroutine dump(this)
+    ! ----------------------------------------------------------------------------------------------
+    ! vm_event Type Bound Procedure:
+    !   Dump the object contents to the log.
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Uses: NA
+    
+    ! Arguments:
+    class(vm_event), intent(in) :: this ! Self reference.
+    
+    ! Locals: NA
+    
+    ! ----------------------------------------------------------------------------------------------
+    
+    write(fates_log(), *) 'Vegetation Management Event: '
+    write(fates_log(), *) 'Event code: ', this%code
+    write(fates_log(), *) 'Parameters: ', this%params
+    
+  end subroutine dump
 
 end module FatesVegetationManagementMod
