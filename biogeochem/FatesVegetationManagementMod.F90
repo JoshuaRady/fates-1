@@ -452,6 +452,8 @@ contains
     
     real(r8) :: c_1st, c_2nd ! Temporary: Used for temporary harvest implementation.
     
+    integer(i4) :: pft_int_temp(1) ! Temporary
+    
     ! ----------------------------------------------------------------------------------------------
     if (debug) write(fates_log(), *) 'managed_mortality() entering.'
     
@@ -689,16 +691,22 @@ contains
             write(fates_log(),*) vm_mortality_event%params(1)
             write(fates_log(),*) int(vm_mortality_event%params(1))
             write(fates_log(),*) (/int(vm_mortality_event%params(1))/)
+            
+            ! See if this explicit casting to an integer(i4) array fixes the comparison.  calling int() may be unneeded:
+            pft_int_temp = vm_mortality_event%params(1) ! int(vm_mortality_event%params(1))
+            write(fates_log(),*) pft_int_temp
             ! End test
             
             ! Have to convert the PFT parameter from scalar real to a integer array. Ugly!
             if (thinnable_patch(patch = current_patch, &
-                pfts = (/int(vm_mortality_event%params(1))/), &
+                !pfts = (/int(vm_mortality_event%params(1))/), &
+                pfts = pft_int_temp, &
                 goal_basal_area = vm_mortality_event%params(3))) then
               
 !               call thin_row_low(patch = current_patch, pfts = int(vm_mortality_event%params(1)), &
               call thin_row_low(patch = current_patch, &
-                                pfts = (/int(vm_mortality_event%params(1))/), &
+                                !pfts = (/int(vm_mortality_event%params(1))/), &
+                                pfts = pft_int_temp, &
                                 row_fraction = vm_mortality_event%params(2), &
                                 final_basal_area = vm_mortality_event%params(3))
             
