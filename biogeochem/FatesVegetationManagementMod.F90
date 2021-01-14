@@ -3180,7 +3180,7 @@ contains
       
       ! Revised and corrected:
       ! Check if PFTs to thin are valid:
-      do i = 1, len(pfts)
+      do i = 1, size(pfts)
         if (.not. any(pfts(i) == tree_pfts)) then
           write(fates_log(),*) 'thin_row_low(): Cannot thin non-tree PFTs.'
           write(fates_log(),*) 'Tree PFTs =    ', tree_pfts
