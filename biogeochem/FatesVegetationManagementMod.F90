@@ -4799,7 +4799,7 @@ contains
     read(day_str, *) day
     !print *, day
     
-    if debug then
+    if (debug) then
       write(fates_log(), *) 'Date string: ', work_string
       write(fates_log(), *) 'Year: ', year
       write(fates_log(), *) 'Month: ', month
@@ -4881,7 +4881,7 @@ contains
     read(lat_string, *) latitude
     read(lon_string, *) longitude_in
     
-    if debug then
+    if (debug) then
       write(fates_log(), *) 'Latitude string: ', lat_string
       write(fates_log(), *) 'Latitude string: ', lon_string
       write(fates_log(), *) 'Latitude #: ', latitude
