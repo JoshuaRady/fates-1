@@ -3162,7 +3162,17 @@ contains
         write(fates_log(),*) 'PFTs =', pfts
         write(fates_log(),*) 'tree_pfts =', tree_pfts
         write(fates_log(),*) '(tree_pfts == pfts) = ', (tree_pfts == pfts)
+        write(fates_log(),*) '(pfts == tree_pfts) = ', (pfts == tree_pfts)
         write(fates_log(),*) 'any(tree_pfts == pfts) = ', any(tree_pfts == pfts)
+        write(fates_log(),*) 'any(pfts == tree_pfts) = ', any(pfts == tree_pfts)
+        
+        write(fates_log(),*) 'any(woody_pfts == tree_pfts) = ', any(woody_pfts == tree_pfts)
+        write(fates_log(),*) '(2 == tree_pfts) = ', (2 == tree_pfts)
+        write(fates_log(),*) 'any(2 == tree_pfts) = ', any(2 == tree_pfts)
+        write(fates_log(),*) '([2,2,2,2,2,2] == tree_pfts) = ', ([2,2,2,2,2,2] == tree_pfts)
+        
+        write(fates_log(),*) '(woody_pfts == tree_pfts) = ', (woody_pfts == tree_pfts)
+        
         call endrun(msg = errMsg(__FILE__, __LINE__))
       end if
       
