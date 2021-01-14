@@ -3153,6 +3153,8 @@ contains
         write(fates_log(),*) 'thin_row_low(): Cannot thin non-tree PFTs.'
         write(fates_log(),*) 'PFTs =', pfts
         write(fates_log(),*) 'tree_pfts =', tree_pfts
+        write(fates_log(),*) '(tree_pfts == pfts) = ', (tree_pfts == pfts)
+        write(fates_log(),*) 'any(tree_pfts == pfts) = ', any(tree_pfts == pfts)
         call endrun(msg = errMsg(__FILE__, __LINE__))
       end if
       
