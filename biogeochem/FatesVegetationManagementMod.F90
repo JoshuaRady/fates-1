@@ -3145,6 +3145,8 @@ contains
     
     type (ed_cohort_type), pointer :: current_cohort
     
+    integer :: i ! Iterator
+    
     ! ----------------------------------------------------------------------------------------------
     if (debug) write(fates_log(), *) 'thin_row_low() entering.'
     
@@ -3157,24 +3159,35 @@ contains
     ! If present check that the PFTs are valid:
     if (present(pfts)) then
       ! Check if PFTs are valid:
-      if (.not. any(tree_pfts == pfts)) then
-        write(fates_log(),*) 'thin_row_low(): Cannot thin non-tree PFTs.'
-        write(fates_log(),*) 'PFTs =', pfts
-        write(fates_log(),*) 'tree_pfts =', tree_pfts
-        write(fates_log(),*) '(tree_pfts == pfts) = ', (tree_pfts == pfts)
-        write(fates_log(),*) '(pfts == tree_pfts) = ', (pfts == tree_pfts)
-        write(fates_log(),*) 'any(tree_pfts == pfts) = ', any(tree_pfts == pfts)
-        write(fates_log(),*) 'any(pfts == tree_pfts) = ', any(pfts == tree_pfts)
-        
-        !write(fates_log(),*) 'any(woody_pfts == tree_pfts) = ', any(woody_pfts == tree_pfts)
-        write(fates_log(),*) '(2 == tree_pfts) = ', (2 == tree_pfts)
-        write(fates_log(),*) 'any(2 == tree_pfts) = ', any(2 == tree_pfts)
-        write(fates_log(),*) '([2,2,2,2,2,2] == tree_pfts) = ', ([2,2,2,2,2,2] == tree_pfts)
-        
-        !write(fates_log(),*) '(woody_pfts == tree_pfts) = ', (woody_pfts == tree_pfts)
-        
-        call endrun(msg = errMsg(__FILE__, __LINE__))
-      end if
+!       if (.not. any(tree_pfts == pfts)) then
+!         write(fates_log(),*) 'thin_row_low(): Cannot thin non-tree PFTs.'
+!         write(fates_log(),*) 'PFTs =', pfts
+!         write(fates_log(),*) 'tree_pfts =', tree_pfts
+!         write(fates_log(),*) '(tree_pfts == pfts) = ', (tree_pfts == pfts)
+!         write(fates_log(),*) '(pfts == tree_pfts) = ', (pfts == tree_pfts)
+!         write(fates_log(),*) 'any(tree_pfts == pfts) = ', any(tree_pfts == pfts)
+!         write(fates_log(),*) 'any(pfts == tree_pfts) = ', any(pfts == tree_pfts)
+!         
+!         !write(fates_log(),*) 'any(woody_pfts == tree_pfts) = ', any(woody_pfts == tree_pfts)
+!         write(fates_log(),*) '(2 == tree_pfts) = ', (2 == tree_pfts)
+!         write(fates_log(),*) 'any(2 == tree_pfts) = ', any(2 == tree_pfts)
+!         write(fates_log(),*) '([2,2,2,2,2,2] == tree_pfts) = ', ([2,2,2,2,2,2] == tree_pfts)
+!         
+!         !write(fates_log(),*) '(woody_pfts == tree_pfts) = ', (woody_pfts == tree_pfts)
+!         
+!         call endrun(msg = errMsg(__FILE__, __LINE__))
+!       end if
+      
+      ! Revised and corrected:
+      ! Check if PFTs to thin are valid:
+      do i = 1, len(pfts)
+        if (.not. any(pfts(i) == tree_pfts)) then
+          write(fates_log(),*) 'thin_row_low(): Cannot thin non-tree PFTs.'
+          write(fates_log(),*) 'Tree PFTs =    ', tree_pfts
+          write(fates_log(),*) 'Selected PFTs =', pfts
+          call endrun(msg = errMsg(__FILE__, __LINE__))
+        endif
+      end do
       
       thin_pfts => pfts
     else ! Otherwise thin all tree PFTs:
