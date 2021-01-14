@@ -683,7 +683,14 @@ contains
           do while (associated(current_patch))
             !if (thinnable_patch(patch = current_patch, pfts = tree_pfts, goal_basal_area = 20.0_r8)) then
 !             if (thinnable_patch(patch = current_patch, pfts = int(vm_mortality_event%params(1)), &
-
+            
+            ! Test:
+            write(fates_log(),*) 'Int test:'
+            write(fates_log(),*) vm_mortality_event%params(1)
+            write(fates_log(),*) int(vm_mortality_event%params(1))
+            write(fates_log(),*) (/int(vm_mortality_event%params(1))/)
+            ! End test
+            
             ! Have to convert the PFT parameter from scalar real to a integer array. Ugly!
             if (thinnable_patch(patch = current_patch, &
                 pfts = (/int(vm_mortality_event%params(1))/), &
@@ -3144,6 +3151,7 @@ contains
       ! Check if PFTs are valid:
       if (.not. any(tree_pfts == pfts)) then
         write(fates_log(),*) 'thin_row_low(): Cannot thin non-tree PFTs.'
+        write(fates_log(),*) 'PFTs =', pfts
         call endrun(msg = errMsg(__FILE__, __LINE__))
       end if
       
@@ -4675,7 +4683,7 @@ contains
     endif
     
     ! I think this will have no effect:
-    field_str = trim(field_str)
+    !field_str = trim(field_str)
     
   end function field_pop
 
@@ -4692,7 +4700,7 @@ contains
     character(len=*), intent(inout) :: line_str
     
     ! Locals:
-    character(len=line_strlen) :: field_str ! Intermediate
+    character(len=line_strlen) :: field_str ! Intermediate  Shorten?????
     integer :: field_int ! Return value
     
     ! ----------------------------------------------------------------------------------------------
@@ -4886,7 +4894,7 @@ contains
     
     if (debug) then
       write(fates_log(), *) 'Latitude string: ', trim(lat_string)
-      write(fates_log(), *) 'Latitude string: ', lon_string ! Add trim after testing.
+      write(fates_log(), *) 'Latitude string: ', trim(lon_string)
       write(fates_log(), *) 'Latitude #: ', latitude
       write(fates_log(), *) 'Longitude #: ', longitude_in
     endif
@@ -5044,7 +5052,7 @@ contains
     
     ! ----------------------------------------------------------------------------------------------
     
-    write(fates_log(), *) 'Vegetation Management Event: '
+    write(fates_log(), *) 'Dumping Vegetation Management Event:--------------'
     write(fates_log(), *) 'Event code: ', this%code
     write(fates_log(), *) 'Parameters: ', this%params
     
