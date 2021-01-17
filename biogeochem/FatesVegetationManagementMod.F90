@@ -80,13 +80,7 @@ module FatesVegetationManagementMod
   private :: field_pop_int
   private :: field_pop_real
   private :: is_now
-  !private :: validate_coordinates
   private :: is_here
-
-  ! vm_event Type Member Routines: Don't need this right?
-  !private :: zero
-  !private :: load
-  !private :: is_generative
 
   ! Interfaces:
   ! JMR_NOTE: These interfaces have given me a bit of trouble and are a work in progress:
@@ -121,10 +115,6 @@ module FatesVegetationManagementMod
   end interface
   
   ! Globals:
-  ! character(len=*), parameter, private :: sourcefile = __FILE__
-  
-  ! String length specifier: (After FatesInventoryInitMod) Pretty long.  May be overkill.
-   integer, parameter :: line_strlen = 512
   
   ! Debugging flag / switch for module:
   logical, parameter, private :: debug = .true.
@@ -155,6 +145,9 @@ module FatesVegetationManagementMod
   integer, parameter, private :: bole_harvest = 2 ! harvest_bole ! better namespacing
   integer, parameter, private :: in_place = 3
   
+  ! String length specifier: (After FatesInventoryInitMod) Pretty long.  May be overkill.
+  integer, parameter :: line_strlen = 512
+  
   ! VM events:
   type, private :: vm_event
       integer(i4) :: code ! The event code.
@@ -166,7 +159,8 @@ module FatesVegetationManagementMod
       procedure :: dump
   end type vm_event
   
-  !logical, private :: vm_mortality_event_present, vm_generative_events_present ! Not needed?
+  ! Used to store events ingested from the the prescribed event driver file:
+  ! May hold events from other sources in the future as well.
   type(vm_event), private :: vm_generative_event, vm_mortality_event
 
   integer, parameter, private :: vm_event_null = 0 ! No event
@@ -221,35 +215,33 @@ contains
 
   subroutine vegetation_management_init(is_master_processor, site) ! REVIEW!
     ! ----------------------------------------------------------------------------------------------
-    ! Perform initialization of module globals and determine what vegetation management is due...
+    ! Perform initialization of module globals and determine what vegetation management is due.
     !
-    ! Requires destructor!!!!!
+    ! Determining what vegetation management is due at the current time step requires integrating
+    ! several sources.  These may include:
+    ! Implemented:
+    ! - Logging module event codes. [IsItLoggingTime()]
+    ! - Activities scheduled via the prescribed event driver input file.
+    ! Not Implemented:
+    ! - Harvest demand from HLM land use input streams. [hlm_use_lu_harvest == itrue]
+    !   Currently only area based harvest is implemented in the main branch:
+    !     hlm_harvest_units == hlm_harvest_area_fraction
+    !   I have started to implement carbon demand based code but it is not yet linked to the HLM
+    ! demand.
+    ! - Activities that are due, based on patch flag or regime heuristic.
+    !
+    ! This routine will likely need a paired destructor!!!!!
     ! ----------------------------------------------------------------------------------------------
     !
     ! Uses:
     use FatesInterfaceTypesMod, only : numpft
-    !use FatesInterfaceTypesMod, only : hlm_current_year, hlm_current_month, hlm_current_day
     use EDLoggingMortalityMod, only : IsItLoggingTime, logging_time
-    !use shr_file_mod, only : shr_file_getUnit, shr_file_freeUnit
     
     ! Arguments:
     integer, intent(in) :: is_master_processor ! Too long?
     type(ed_site_type), intent(inout), target :: site
     
     ! Locals: NA
-    
-!     character(len=*), parameter ::vm_drive_file_path = "/some/file/path"
-!     ! In the future this will not be specified via a namelist and will be character(len=256).
-!     
-!     logical :: driver_file_exists ! Does the VM driver file exist
-!     logical :: driver_file_open ! Is the VM driver open
-!     integer :: driver_file_unit
-!     integer :: io_status
-!     
-!     character(len=line_strlen) :: line_str ! Define line_strlen
-!     character(len=line_strlen) :: date_str, lat_str, lon_str ! Field values
-!     integer :: year, month, day ! Event date components
-    
     
     ! ----------------------------------------------------------------------------------------------
     if (debug) write(fates_log(), *) 'vegetation_management_init() entering.'
@@ -268,102 +260,8 @@ contains
     
     ! Check if a traditional logging module event is due and initialize IsItLoggingTime:
     call IsItLoggingTime(is_master_processor, site)
-!     
-!     ! Check if there are any vegetation management activities specified for this timestep and
-!     ! location by the optional driver file:
-!     
-!     ! Check if the driver file exists and is not in use:
-!     inquire(file = trim(vm_drive_file_path), exists = driver_file_exists, opened = driver_file_open)
-!     
-!     ! If the file exists proceed otherwise don't. We don't used a flag 
-!     if (driver_file_exists) then
-!       
-!       if(driver_file_open) then
-!         write(fates_log(),*) 'The vegetation management driver file is open already.'
-!         call endrun(msg = errMsg(__FILE__, __LINE__))
-!       else
-!         
-!         ! If so, see if there is anything to do:
-!         
-!         ! Open the file:
-!         driver_file_unit = shr_file_getUnit()
-!         open(unit = driver_file_unit, file = trim(vm_drive_file_path), status = 'OLD', &
-!              action = 'READ', form = 'FORMATTED')
-!         rewind(driver_file_unit)
-!         
-!         ! The file is Fortran formatted text with a header line.  There should be at least two lines...
-!         ! For flexibility column widths are not specified... 
-!         
-!         ! Date       Lat Lon Code...
-!         ! YYYY-MM-DD X.X Y.Y 
-!         
-!         ! Read through line by line looking for today...
-!         
-!         ! Discard the first header line:
-!         read(driver_file_unit, fmt='(A)',iostat = io_status) line_str
-!         
-!         read(driver_file_unit, fmt='(A)',iostat = io_status) line_str
-!         ! Check for the first line?  Is an empty file a problem?
-!         
-!         do while (io_status /= 0)
-!           ! Read a line:
-!           
-!           !There shouldn't be any leading whitespace but allow it:
-!           line_str = trim(line_str) ! adjustl()?
-!           
-!           date_str = field_pop(line_str)
-!           !lat_str = field_pop(line_str)
-!           !lon_str = field_pop(line_str)
-!           lat = field_pop_float(line_str)
-!           lon = field_pop_float(line_str)
-!           
-!           ! Lat / lon checking and conversion:
-!           !validate_coordinates(lat, lon)
-!           
-!           ! Get the date, parse and compare...
-!           !year = field_pop(date_str, delimiter = "-", format = "(I)") ! ?????
-!           !month = field_pop(date_str, delimiter = "-")
-!           !day = field_pop(date_str, delimiter = "-")
-!           
-!         
-!         
-!           ! If it matches ...
-!           if (hlm_current_year == year .and.  hlm_current_month == month .and. &
-!               hlm_current_day == day) then ! Add lat & lon
-!             
-!             ! Get the event code:
-!             ! XXXXX = field_pop(line_str)
-!             
-!             ! Is it a mortality or fecundity event?
-!             ! Only allow one mortality but more than one planting?
-!             
-!             ! Record flags...
-!             
-!             ! Store parameters:
-!             
-!             
-!           endif
-!           
-!           ! Read the next line:
-!           read(driver_file_unit, fmt='(A)',iostat = io_status) line_str
-!         end do
-!         
-!         
-!         
-!         
-!         ! Close and clean up:
-!         close(driver_file_unit, iostat = io_status)
-!         if (io_status /= 0) then
-!           write(fates_log(),*) 'The vegetation management driver file is failed to close.'
-!           call endrun(msg = errMsg(__FILE__, __LINE__))
-!         endif
-!         call shr_file_freeUnit(driver_file_unit)
-!         
-!       endif
-!     else
-!       
-!       
-!     endif ! driver_file_exists
+
+    ! Check if there are any vegetation management activities specified and load to globals:
     call load_prescribed_events(site)
     
     ! Make sure that traditional logging events do not co-occur with VM harvest events.
@@ -461,16 +359,8 @@ contains
     site_in%harvest_carbon_flux = 0.0_r8
     
     ! ----------------------------------------------------------------------------------------------
-    ! Determine what vegetation management is due at the current time step.  This includes:
-    ! - Logging module event codes. [IsItLoggingTime()]
-    ! - Harvest demand from HLM land use input streams. [hlm_use_lu_harvest == itrue]
-    !   Currently only area based harvest is implemented:
-    !     hlm_harvest_units == hlm_harvest_area_fraction
-    !   I plan to add carbon demand based code.
-    !
-    ! - Prescribed actives from input file. [In process, as part of vegetation_management_init()]
-    ! - Activities that are due, based on patch flag or regime heuristic. [Not yet implemented.]
-    ! This logic could all be moved to a subroutine.
+    ! Note: This section has been rendered (mostly?) unnecessary beyond testing.  Most functionality
+    ! has been moved into vegetation_management_init().  Review and remove.
     ! ----------------------------------------------------------------------------------------------
     
     thinning_needed = .false.
@@ -651,9 +541,15 @@ contains
     ! End 'comment' if().
     endif ! (.false.) ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
     
+    ! ----------------------------------------------------------------------------------------------
+    ! Vegetation Management Events (Mortality Inducing):
+    !
     ! If a VM event has been prescribed by the driver input execute it:
     ! Note:  I haven't figured out how heuristic / land use time series events will work yet so this
     ! logic will likely be revised again.
+    !
+    ! More notes needed!!!!
+    ! ----------------------------------------------------------------------------------------------
     
     if (debug) then
       write(fates_log(),*) 'vm_generative_event:'
@@ -687,14 +583,14 @@ contains
 !             if (thinnable_patch(patch = current_patch, pfts = int(vm_mortality_event%params(1)), &
             
             ! Test:
-            write(fates_log(),*) 'Int test:'
-            write(fates_log(),*) vm_mortality_event%params(1)
-            write(fates_log(),*) int(vm_mortality_event%params(1))
-            write(fates_log(),*) (/int(vm_mortality_event%params(1))/)
+            !write(fates_log(),*) 'Int test:'
+            !write(fates_log(),*) vm_mortality_event%params(1)
+            !write(fates_log(),*) int(vm_mortality_event%params(1))
+            !write(fates_log(),*) (/int(vm_mortality_event%params(1))/)
             
             ! See if this explicit casting to an integer(i4) array fixes the comparison.  calling int() may be unneeded:
             pft_int_temp = vm_mortality_event%params(1) ! int(vm_mortality_event%params(1))
-            write(fates_log(),*) pft_int_temp
+            !write(fates_log(),*) pft_int_temp
             ! End test
             
             ! Have to convert the PFT parameter from scalar real to a integer array. Ugly!
@@ -718,6 +614,7 @@ contains
         case default
           write(fates_log(),*) 'Unrecognized event code:', vm_mortality_event%code
           call endrun(msg = errMsg(__FILE__, __LINE__))
+          ! Add checking for generative events?
       end select ! (vm_mortality_event%code)
       
     end if ! (vm_mortality_event%code /= vm_event_null)
@@ -4477,66 +4374,87 @@ contains
 
   !=================================================================================================
   ! Prescribed Event Driver File Subroutines:
+  !   Vegetation Management Events may be prescribed using an optional event driver file.
+  !
+  ! Driver File Format Draft 1:
+  !   The driver file is text.  There should be at least two lines.  The first is a header line that
+  ! specifies the field names.  The following lines are event specifications.  The header columns
+  ! and event fields are delimited by one or more spaces.  For flexibility column widths are not
+  ! specified.  While aligning columns for readability is encouraged it is not required. Any number
+  ! of spaces between fields will be accepted.
+  !   The field order is the date of the event, the latitude and longitude (in model grid units)
+  ! where the event should occur, a numeric code for the event, and a series of parameters for the
+  ! event.  The event parameters have no fixed meaning.  They may be used to represent different
+  ! arguments depending on the event type and may be optional.  Currently 4 are read.
+  !
+  ! Example:
+  ! Date        Lat  Lon  Code  Param1 Param2 Param3 Param4
+  ! YYYY-MM-DD  X.X  Y.Y  1     13.0   12     124.63 9
+  !
+  !   The date and lat /lon formats are flexible.  See is_now() and is_here() for more.
+  !   
+  !   The format is designed to be human readable and easily written by hand.  This driver file is
+  ! intended for hands on experimentation at the single point to small regional simulation scale.
+  ! Global gridded input will be accomplished via extension of the existing land use driver file
+  ! behaviors.  (In development, see heuristics.)
+  !   The format as it exists can be easily be written with a script.
+  !
+  !   Events read from the driver file are stored in (module) globals that are then executed along
+  ! with events generated by other means.
+  !
+  ! Notes:------------------------------------------------------------------------------------------
+  ! - Important: This format is a work in progress and will likely change rapidly.
+  !
+  ! - There is currently no flag to activate this behavior.  If the driver file is present it will
+  ! be used and if not nothing bad will happen.
+  ! - The path to the driver file is currently (temporarily) hardwired.  This will change, probably
+  ! being replaced by a namelist item.
+  ! - Currently the header line is not actually inspected in any way and is for readability.  That
+  ! may change.
+  ! - Currently only spaces should be used to separate fields. Tabs or other whitespace will likely
+  ! cause weirdness.
+  ! - The line length should probably be kept to under 100 characters to be compatible will
+  ! different Fortran implementation.  The code does not enforce that though.  In fact it used
+  ! string lengths that are questionably long.
+  ! - The event code and parameters are parsed together in the code.  Future versions will likely
+  ! change this part of the format the most.
+  ! - Adding handling of comma separated and tab delimited formats would be pretty easy.
+  !
   !=================================================================================================
 
   subroutine load_prescribed_events(site)
     ! ----------------------------------------------------------------------------------------------
     ! Check for the presence of an input file that prescribes a series of VM events.  If present
     ! load any events for this timestep and location into memory.
-    !
-    
-    ! The file is optional and 
-    
-            ! The file is text with a header line.  There should be at least two lines...
-        ! For flexibility column widths are not specified... 
-        
-        ! Date       Lat Lon Code...
-        ! YYYY-MM-DD X.X Y.Y 
-        ! ...
-    ! While aligning columns for readability is encouraged it is not required. Any number of spaces
-    ! between fields will be accepted.
-    ! no tabs
-    ! line length under 100
-    !
-    ! Note: Adding handling of comma separated and tab delimited formats would be pretty easy.
     ! ----------------------------------------------------------------------------------------------
     
     ! Uses:
-    !use FatesInterfaceTypesMod, only : hlm_current_year, hlm_current_month, hlm_current_day
     use shr_file_mod, only : shr_file_getUnit, shr_file_freeUnit
     
     ! Arguments:
     type(ed_site_type), intent(in), target :: site ! The current site object.
     
     ! Locals:
-    ! character(len=*), parameter ::vm_drive_file_path = "/some/file/path" ! Temporary
     character(len=*), parameter ::vm_drive_file_path = "/glade/work/jmrady/InputFiles/Proj_7_Exp_57/DriverFile_D1c.txt" ! Temporary
-    ! In the future this will not be specified via a namelist and will be character(len=256).
+    ! In the future this will not be specified via a namelist and may be character(len=256).
     
     logical :: driver_file_exists ! Does the VM driver file exist
     logical :: driver_file_open ! Is the VM driver open
-    integer :: driver_file_unit
-    integer :: io_status
+    integer :: driver_file_unit ! File unit for the VM driver file
+    integer :: io_status ! IO error flag
     
     character(len=line_strlen) :: line_str ! Define line_strlen
     character(len=line_strlen) :: date_str, lat_str, lon_str ! Field values
-    !integer :: year, month, day ! Event date components
-    !integer :: event_code
     type(vm_event) :: the_event
     
     ! ----------------------------------------------------------------------------------------------
     if (debug) write(fates_log(), *) 'load_prescribed_events() entering.'
     
     ! Initialize event flags and globals:
-    !vm_mortality_event_present = .false. ! Or just check vm_generative_event%vm_event /= vm_event_null?????
-    !vm_generative_events_present = .false.
-    !vm_generative_event = vm_event(code = vm_event_null, params = 0)
-    !vm_mortality_event = vm_event(code = vm_event_null, params = 0)
     call vm_generative_event%zero()
     call vm_mortality_event%zero()
     
     ! Initialize locals:
-    !event_code = 0
     call the_event%zero()
     
     ! Check if the driver file exists and is not in use:
@@ -4576,8 +4494,6 @@ contains
           
           ! Read through line by line looking for events specified for this timestep and location:
           do while (io_status == 0)
-            ! Read a line:
-            
             if (debug) write(fates_log(),*) 'Parsing event line.'
             
             ! Add handling for blank lines?  We should at least expect a return at the end.
@@ -4586,46 +4502,24 @@ contains
             !parsing issues:
             line_str = trim(line_str)
             
-            ! Pass one:
-!             date_str = field_pop(line_str)
-!             !lat_str = field_pop(line_str)
-!             !lon_str = field_pop(line_str)
-!             lat = field_pop_float(line_str)
-!             lon = field_pop_float(line_str)
-!             
-!             ! Lat / lon checking and conversion:
-!             !validate_coordinates(lat, lon)
-!             
-!             ! Get the date, parse and compare...
-!             !year = field_pop(date_str, delimiter = "-", format = "(I)") ! ?????
-!             !month = field_pop(date_str, delimiter = "-")
-!             !day = field_pop(date_str, delimiter = "-")
-!             
-!             ! If it matches ...
-!             if (hlm_current_year == year .and.  hlm_current_month == month .and. &
-!                 hlm_current_day == day) then ! Add lat & lon
-            
-            ! Pass two with better abstraction:
+            ! Extract the leading fields:
             date_str = field_pop(line_str)
             lat_str = field_pop(line_str)
             lon_str = field_pop(line_str)
             
-            ! Check if this event matched this timestep and location:
+            ! Check if this event matches this timestep and location:
             if (is_now(date_str) .and. is_here(lat_str, lon_str, site)) then
               if (debug) write(fates_log(), *) 'VM event matches date and location.'
-              
-              ! Get the event code:
-              !event_code = field_pop_int(line_str)
               
               ! Load the event:
               call the_event%load(line_str)
               
-              ! Is it a mortality or fecundity (generative) event?
+              ! Is the event a mortality inducing or generative (fecundity) event?
               ! Only allow one mortality but more than one planting?
               if (the_event%is_generative()) then
                 if (vm_generative_event%code /= vm_event_null) then
                   write(fates_log(),*) 'A VM generative event already exits for this time step.'
-                  ! Note: In future this multiple generative events will be allowed to co-occur.
+                  ! Note: In future multiple generative events will be allowed to co-occur.
                   call endrun(msg = errMsg(__FILE__, __LINE__))
                 else
                   vm_generative_event = the_event
@@ -4666,9 +4560,8 @@ contains
       endif ! (driver_file_open)
       
     else
-      write(fates_log(),*) 'A vegetation management prescribed event driver was not found.'
+      write(fates_log(),*) 'A vegetation management prescribed event driver file was not found.'
     endif ! (driver_file_exists)
-    
     
     if (debug) write(fates_log(), *) 'load_prescribed_events() exiting.'
   end subroutine load_prescribed_events
@@ -4678,7 +4571,7 @@ contains
   function field_pop(line_str) result(field_str) ! field_pop_str()?
     ! ----------------------------------------------------------------------------------------------
     ! Pop the first field off the front (left) of a line of fields encoded as text.
-    ! Returns the field as the return value and modifies the line string.
+    ! Returns the field as the return value and modifies the line string passed in.
     ! ----------------------------------------------------------------------------------------------
     
     ! Uses: NA
@@ -4748,7 +4641,7 @@ contains
 
   function field_pop_real(line_str) result(field_real)
     ! ----------------------------------------------------------------------------------------------
-    ! Pop the first field off the front (left) of a line and return it as an real.
+    ! Pop the first field off the front (left) of a line and return it as a real.
     ! ----------------------------------------------------------------------------------------------
     
     ! Uses: NA
@@ -4771,11 +4664,11 @@ contains
 
   function is_now(date_string)
     ! ----------------------------------------------------------------------------------------------
-    ! Parse the string passed in to a date and determine if it matches the current time step.
+    ! Parse the string passed in as a date and determine if it matches the current time step.
     !
     ! The date string format is somewhat flexible. We expect that the event file may be written
     ! manually is some cases or exported from a spread sheet, etc.  We don't want execution to fail
-    ! because a line is not formated in exactly that specified or doesn't match the across lines.
+    ! because a line is not formated in particular way or doesn't match the across lines.
     !
     ! Rules:----------------------------------------------------------------------------------------
     ! Field Order:
@@ -4784,11 +4677,10 @@ contains
     ! - Currently we handle the slash, dash, and period (/,-,.) but not space, since it is our
     ! parental (data line) field delimiter.
     ! Digits:
-    ! - We allow 1 or 2 digit month and day strings.
+    ! - We allow 1 or 2 digit month and day strings.  Leading 0s Are allow but not required.
     ! - We allow years of up to 10 digits (in case you have a huge allocation).
-    ! - Leading 0s Are allow but not required.
     ! Thousands separator:
-    ! - No commas or periods to separate 1000s in years.
+    ! - No commas or periods to separate 1000s in years are allowed.
     ! Valid examples:
     ! - YYYY-MM-DD, YYYY/MM/DD, 00YY.0M.0D, YY-M-D, YYYYYYYY/MM/DD
     ! - Even this would work: 0000YYYY/M.DD
@@ -4806,43 +4698,31 @@ contains
     character(len=*), parameter :: delim_chars = "/-."
     integer :: delim_index
     character(len=10) :: year_str
-    character(len=2) :: month_str, day_str
+    character(len=2) :: month_str, day_str ! Should we increase this to allow errors like 0DD?
     integer :: year, month, day ! Event date components
     
     ! ----------------------------------------------------------------------------------------------
     
-    !character(len=*), parameter :: date_string = "2001-03-12"
-    
     work_string = date_string ! Subsequent operations modify the string in place so make a copy.
-    
-    ! This shouldn't be necessary currently...
-    work_string = trim(work_string)
+    work_string = trim(work_string)! This shouldn't be necessary currently but doesn't hurt.
     
     ! Add error checking...
     ! Check for length and invalid characters!!!!!
     
     ! Parse the date string:
     delim_index = scan(work_string, delim_chars)
-    !print *, delim_index
     year_str = work_string(:delim_index-1)
-    !print *, year_str
     read(year_str, *) year
-    !print *, year
     
     ! Month:
     work_string = work_string(delim_index+1:)
     delim_index = scan(work_string, delim_chars)
-    !print *, delim_index
     month_str = work_string(:delim_index-1)
-    !print *, month_str
     read(month_str, *) month
-    !print *, month
     
     ! Day:
     day_str = work_string(delim_index+1:)
-    !print *, day_str
     read(day_str, *) day
-    !print *, day
     
     if (debug) then
       write(fates_log(), *) 'Date string: ', trim(date_string)
@@ -4896,12 +4776,12 @@ contains
     ! - No spaces.
     ! Valid value ranges:
     ! - Latitude: -90 to 90
-    ! - Longitude may be specified as -180 - 180 (common) or 0 - 360 (netCDF / model world).
+    ! - Longitude may be specified as -180 to 180 (common) or 0 to 360 (netCDF / model world).
     ! Special values:
     ! - Specifying -999 for both latitude and longitude specifies everywhere.
     ! 
     ! Note: Because of negative degrees ranges would have to be specified in some other way, perhaps
-    ! commas.
+    ! with commas?
     ! ----------------------------------------------------------------------------------------------
     
     ! Uses:
@@ -4914,7 +4794,7 @@ contains
     
     ! Locals:
     logical :: is_here ! Return value
-    real(r8) :: latitude, longitude_in, longitude_360 ! event_lat?????
+    real(r8) :: latitude, longitude_in, longitude_360
     real(r8), parameter :: degree_tolerance = 0.1_r8 ! Arbitrary degree tolerance for matching.
     
     ! ----------------------------------------------------------------------------------------------
@@ -4938,7 +4818,7 @@ contains
       is_here = .true.
       if (debug) write(fates_log(), *) 'VM event specified as occurring everywhere.'
     else
-      !call validate_coordinates(latitude, longitude) ?????
+      ! Validate the coordinates and convert to model coordinates if necessary.
       
       ! Note: Checks are similar to code in FatesInventoryInitMod: assess_inventory_sites():
       if (latitude < -90.0_r8 .or. latitude > 90.0_r8) then
@@ -4953,14 +4833,13 @@ contains
         longitude_360 = longitude_in
       endif
       
-      ! Perhaps return original value?????
+      ! Check that the longitude is valid:
       if (longitude_360 < 0.0_r8 .or. longitude_360 > 360.0_r8) then
         write(fates_log(),*) 'Vegetation management event has invalid longitude (converted): ', longitude_in
         call endrun(msg = errMsg(__FILE__, __LINE__))
       endif
       
       ! Compare the latitude and longitude to that of the site being simulated:
-      !if (latitude == site%lat .and. longitude_360 == site%lon) then ! Exact matching.
       if (abs(site%lat - latitude) < degree_tolerance .and. &
           abs(site%lon - longitude_360) < degree_tolerance) then
         is_here = .true.
@@ -4993,7 +4872,6 @@ contains
     
     ! ----------------------------------------------------------------------------------------------
     
-    !this = vm_event(code = vm_event_null, params = 0)
     this%code = vm_event_null
     this%params = 0
     
@@ -5014,9 +4892,7 @@ contains
     character(len = *), intent(in) :: event_str
     
     ! Locals:
-    !character(len=line_strlen) :: code_str, param_str ! Field values
     character(len = len(event_str)) :: work_string ! Modifiable local copy of event_str
-    !integer :: event_code
     integer :: i ! Iterator
     
     ! ----------------------------------------------------------------------------------------------
@@ -5032,9 +4908,7 @@ contains
     end do
     
     if (debug) then
-      write(fates_log(), *) 'Loading VM event from driver file: '
-      !write(fates_log(), *) 'Event code: ', this%code
-      !write(fates_log(), *) 'Parameters: ', this%params
+      write(fates_log(), *) 'Loaded VM event from driver file:'
       call this%dump()
     endif
     
