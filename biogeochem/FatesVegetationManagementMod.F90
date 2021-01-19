@@ -330,8 +330,8 @@ contains
     ! Locals:
     logical :: thinning_needed, harvest_needed, control_needed
     
-    type (ed_patch_type), pointer :: current_patch
-    type (ed_cohort_type), pointer :: current_cohort
+    type(ed_patch_type), pointer :: current_patch
+    type(ed_cohort_type), pointer :: current_cohort
     
     ! Traditional logging module rates:
     real(r8) :: lmort_direct
@@ -1099,8 +1099,8 @@ contains
     ! Arguments:
     ! Possibly unnecessary, we could get the site from the current_patch:
     type(ed_site_type), intent(inout), target :: current_site
-    type (ed_patch_type), intent(inout), target :: current_patch ! The extising / donor patch.
-    type (ed_patch_type), intent(inout), target :: new_patch ! The new patch from disturbance.
+    type(ed_patch_type), intent(inout), target :: current_patch ! The extising / donor patch.
+    type(ed_patch_type), intent(inout), target :: new_patch ! The new patch from disturbance.
     ! This can be calculated from data in the cohort so may not really need to be passed in:
     real(r8), intent(in) :: patch_site_areadis ! Total area disturbed in m2 per patch per day
     
@@ -1588,7 +1588,7 @@ contains
     ! Locals:
     integer :: flux_profile ! Vegetation management flux profile.
     real(r8) :: patch_site_areadis ! Total area disturbed in m2 per patch per day
-    type (ed_patch_type), pointer :: parent_patch
+    type(ed_patch_type), pointer :: parent_patch
     real(r8) :: plant_c ! Total plant carbon [kg]
     
     ! ----------------------------------------------------------------------------------------------
@@ -2852,7 +2852,7 @@ contains
     real(r8) :: the_ht_min
     real(r8) :: the_ht_max
     
-    type (ed_cohort_type), pointer :: current_cohort
+    type(ed_cohort_type), pointer :: current_cohort
     
     ! ----------------------------------------------------------------------------------------------
     
@@ -2900,7 +2900,7 @@ contains
     integer, intent(in) :: method ! A code value that controls the resulting fluxes.
     
     ! Locals:
-    type (ed_cohort_type), pointer :: current_cohort
+    type(ed_cohort_type), pointer :: current_cohort
     
     ! ----------------------------------------------------------------------------------------------
     
@@ -3040,7 +3040,7 @@ contains
     real(r8) :: cohort_fraction
     real(r8) :: harvest ! Accumulator
     
-    type (ed_cohort_type), pointer :: current_cohort
+    type(ed_cohort_type), pointer :: current_cohort
     
     integer :: i ! Iterator
     
@@ -3282,7 +3282,7 @@ contains
     ! Uses: NA
     
     ! Arguments:
-    type (ed_patch_type), intent(in), target :: patch
+    type(ed_patch_type), intent(in), target :: patch
     ! An array of PFT IDs to include in the basal area calculation:
     integer(i4), dimension(:), intent(in) :: pfts
     real(r8), intent(in) :: goal_basal_area ! The goal basal area that we should thin to (m^2/ha).
@@ -3405,9 +3405,9 @@ contains
     real(r8), intent(in), optional :: ht_max
     
     ! Locals:
-    type (ed_patch_type), pointer :: current_patch
-    type (ed_cohort_type), pointer :: current_cohort
-    type (ed_patch_type), pointer :: best_patch
+    type(ed_patch_type), pointer :: current_patch
+    type(ed_cohort_type), pointer :: current_cohort
+    type(ed_patch_type), pointer :: best_patch
     
     real(r8) :: the_dbh_min
     real(r8) :: the_dbh_max
@@ -3740,7 +3740,7 @@ contains
     
     ! Locals:
     real(r8) :: harvest ! Return value.
-    type (ed_cohort_type), pointer :: current_cohort
+    type(ed_cohort_type), pointer :: current_cohort
     real(r8) :: harvest_fraction
     integer :: the_profile
     
@@ -3872,7 +3872,7 @@ contains
     
     ! Locals:
     real(r8) :: effective_basal_area ! Return value
-    type (ed_cohort_type), pointer :: current_cohort
+    type(ed_cohort_type), pointer :: current_cohort
     
     ! ----------------------------------------------------------------------------------------------
     
@@ -3956,7 +3956,7 @@ contains
     
     ! Locals:
     real(r8) :: patch_effective_n ! Return value
-    type (ed_cohort_type), pointer :: current_cohort
+    type(ed_cohort_type), pointer :: current_cohort
     
     ! ----------------------------------------------------------------------------------------------
     
@@ -4040,7 +4040,7 @@ contains
     
     ! Locals:
     real(r8) :: patch_disturbed_n ! Return value
-    type (ed_cohort_type), pointer :: current_cohort
+    type(ed_cohort_type), pointer :: current_cohort
     
     ! ----------------------------------------------------------------------------------------------
     
@@ -4106,7 +4106,7 @@ contains
     ! Locals:
     real(r8) :: disturbed_basal_area ! Return value
     real(r8) :: total_basal_area ! Temporary!
-    type (ed_cohort_type), pointer :: current_cohort
+    type(ed_cohort_type), pointer :: current_cohort
     
     ! ----------------------------------------------------------------------------------------------
     if (debug) write(fates_log(), *) 'patch_disturbed_basal_area():'
@@ -4435,7 +4435,7 @@ contains
     type(ed_site_type), intent(in), target :: site ! The current site object.
     
     ! Locals:
-    character(len=*), parameter ::vm_drive_file_path = "/glade/work/jmrady/InputFiles/Proj_7_Exp_57/DriverFile_D1c.txt" ! Temporary
+    character(len = *), parameter ::vm_drive_file_path = "/glade/work/jmrady/InputFiles/Proj_7_Exp_57/DriverFile_D1c.txt" ! Temporary
     ! In the future this will not be specified via a namelist and may be character(len=256).
     
     logical :: driver_file_exists ! Does the VM driver file exist
@@ -4443,8 +4443,8 @@ contains
     integer :: driver_file_unit ! File unit for the VM driver file
     integer :: io_status ! IO error flag
     
-    character(len=line_strlen) :: line_str ! Define line_strlen
-    character(len=line_strlen) :: date_str, lat_str, lon_str ! Field values
+    character(len = line_strlen) :: line_str ! Define line_strlen
+    character(len = line_strlen) :: date_str, lat_str, lon_str ! Field values
     type(vm_event) :: the_event
     
     ! ----------------------------------------------------------------------------------------------
@@ -4577,11 +4577,11 @@ contains
     ! Uses: NA
     
     ! Arguments:
-    character(len=*), intent(inout) :: line_str ! (len=*)?????
+    character(len = *), intent(inout) :: line_str ! (len=*)?????
     ! Add delimiter?
     
     ! Locals:
-    character(len=line_strlen) :: field_str ! Return value  Consider shortening!!!!!
+    character(len = line_strlen) :: field_str ! Return value  Consider shortening!!!!!
     integer :: delim_index
     
     ! ----------------------------------------------------------------------------------------------
@@ -4624,10 +4624,10 @@ contains
     ! Uses: NA
     
     ! Arguments:
-    character(len=*), intent(inout) :: line_str
+    character(len = *), intent(inout) :: line_str
     
     ! Locals:
-    character(len=line_strlen) :: field_str ! Intermediate  Shorten?????
+    character(len = line_strlen) :: field_str ! Intermediate  Shorten?????
     integer :: field_int ! Return value
     
     ! ----------------------------------------------------------------------------------------------
@@ -4647,10 +4647,10 @@ contains
     ! Uses: NA
     
     ! Arguments:
-    character(len=*), intent(inout) :: line_str
+    character(len = *), intent(inout) :: line_str
     
     ! Locals:
-    character(len=line_strlen) :: field_str ! Intermediate
+    character(len = line_strlen) :: field_str ! Intermediate
     real(r8) :: field_real ! Return value
     
     ! ----------------------------------------------------------------------------------------------
@@ -4690,15 +4690,15 @@ contains
     use FatesInterfaceTypesMod, only : hlm_current_year, hlm_current_month, hlm_current_day
     
     ! Arguments:
-    character(len=*), intent(in) :: date_string
+    character(len = *), intent(in) :: date_string
     
     ! Locals:
     logical :: is_now ! Return value
     character(len = len(date_string)) :: work_string ! Modifiable local copy of date_string
-    character(len=*), parameter :: delim_chars = "/-."
+    character(len = *), parameter :: delim_chars = "/-."
     integer :: delim_index
-    character(len=10) :: year_str
-    character(len=2) :: month_str, day_str ! Should we increase this to allow errors like 0DD?
+    character(len = 10) :: year_str
+    character(len = 2) :: month_str, day_str ! Should we increase this to allow errors like 0DD?
     integer :: year, month, day ! Event date components
     
     ! ----------------------------------------------------------------------------------------------
@@ -4788,8 +4788,8 @@ contains
     use EDTypesMod, only : ed_site_type
     
     ! Arguments:
-    character(len=*), intent(in) :: lat_string
-    character(len=*), intent(in) :: lon_string
+    character(len = *), intent(in) :: lat_string
+    character(len = *), intent(in) :: lon_string
     type(ed_site_type), intent(in), target :: site ! The current site object.
     
     ! Locals:
