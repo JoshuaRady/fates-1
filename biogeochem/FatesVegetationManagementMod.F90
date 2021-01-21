@@ -152,7 +152,8 @@ module FatesVegetationManagementMod
   type, private :: vm_event
       integer(i4) :: code ! The event code.
       !real(r8), dimension(4) :: params ! Event parameters
-      integer :: pfts ! Change to array (16 in length?)
+      !integer :: pfts ! Change to array (16 in length?)
+      integer, dimension(1) :: pfts ! Change to array (16 in length?)
       real(r8) :: row_fraction
       real(r8) :: final_basal_area
     contains
@@ -592,22 +593,37 @@ contains
             !write(fates_log(),*) (/int(vm_mortality_event%params(1))/)
             
             ! See if this explicit casting to an integer(i4) array fixes the comparison.  calling int() may be unneeded:
-            pft_int_temp = vm_mortality_event%params(1) ! int(vm_mortality_event%params(1))
-            !write(fates_log(),*) pft_int_temp
-            ! End test
+!             pft_int_temp = vm_mortality_event%params(1) ! int(vm_mortality_event%params(1))
+!             !write(fates_log(),*) pft_int_temp
+!             ! End test
+!             
+!             ! Have to convert the PFT parameter from scalar real to a integer array. Ugly!
+!             if (thinnable_patch(patch = current_patch, &
+!                 !pfts = (/int(vm_mortality_event%params(1))/), &
+!                 pfts = pft_int_temp, &
+!                 goal_basal_area = vm_mortality_event%params(3))) then
+!               
+! !               call thin_row_low(patch = current_patch, pfts = int(vm_mortality_event%params(1)), &
+!               call thin_row_low(patch = current_patch, &
+!                                 !pfts = (/int(vm_mortality_event%params(1))/), &
+!                                 pfts = pft_int_temp, &
+!                                 row_fraction = vm_mortality_event%params(2), &
+!                                 final_basal_area = vm_mortality_event%params(3))
+!             
+!               ! Add accumulation of harvest here????
+!             endif
+!             current_patch => current_patch%younger
+!           end do
             
-            ! Have to convert the PFT parameter from scalar real to a integer array. Ugly!
+            ! VM event format D2:
             if (thinnable_patch(patch = current_patch, &
-                !pfts = (/int(vm_mortality_event%params(1))/), &
-                pfts = pft_int_temp, &
-                goal_basal_area = vm_mortality_event%params(3))) then
+                pfts = vm_mortality_event%pfts, &
+                goal_basal_area = vm_mortality_event%final_basal_area)) then
               
-!               call thin_row_low(patch = current_patch, pfts = int(vm_mortality_event%params(1)), &
               call thin_row_low(patch = current_patch, &
-                                !pfts = (/int(vm_mortality_event%params(1))/), &
-                                pfts = pft_int_temp, &
-                                row_fraction = vm_mortality_event%params(2), &
-                                final_basal_area = vm_mortality_event%params(3))
+                                pfts = vm_mortality_event%pfts, &
+                                row_fraction = vm_mortality_event%row_fraction, &
+                                final_basal_area = vm_mortality_event%final_basal_area)
             
               ! Add accumulation of harvest here????
             endif
@@ -4439,7 +4455,8 @@ contains
     
     ! Locals:
     !character(len = *), parameter ::vm_drive_file_path = "/glade/work/jmrady/InputFiles/Proj_7_Exp_57/DriverFile_D1c.txt" ! Temporary
-    character(len = *), parameter ::vm_drive_file_path = "/glade/u/home/jmrady/Proj_7_Exp_58_Cases/GarlandCoAR/VMDriver_GarlandCoAR_D1.txt" ! Temporary
+    !character(len = *), parameter ::vm_drive_file_path = "/glade/u/home/jmrady/Proj_7_Exp_58_Cases/GarlandCoAR/VMDriver_GarlandCoAR_D1.txt" ! Temporary
+    character(len = *), parameter ::vm_drive_file_path = "/glade/work/jmrady/InputFiles/Proj_7_Exp_57/DriverFile_D2a.txt" ! Temporary
     ! In the future this will not be specified via a namelist and may be character(len=256).
     
     logical :: driver_file_exists ! Does the VM driver file exist
@@ -4620,7 +4637,7 @@ contains
     
     ! Trim any leading (and trailing) whitespace:
     line_str = adjustl(line_str) ! This pushes whitespace to the end of the line, which we remove.
-    line_str = trim(linestr)
+    line_str = trim(line_str)
     
     ! Find the the following delimiting block of 1 or more spaces:
     delim_index = index(line_str, " ")
@@ -4932,7 +4949,7 @@ contains
     
     ! Locals:
     !character(len = len(event_str)) :: work_string ! Modifiable local copy of event_str
-    character(len = len(event_str)) :: event_type_str, arguments_string, param_string, param_name, param_value
+    character(len = len(event_str)) :: event_type_str, arguments_string, param_string, param_name, param_value, end_string
     integer :: i ! Iterator
     integer :: delim_index
 
@@ -4971,9 +4988,9 @@ contains
     
     select case (event_type_str)
       case ('plant')
-        code = vm_event_plant
+        this%code = vm_event_plant
       case ('thin_row_low') ! Will probably change!
-        code = vm_event_thin_test1
+        this%code = vm_event_thin_test1
       !case ()
       case default
         write(fates_log(),*) 'VM event name is not recognised:', event_type_str
@@ -5037,13 +5054,13 @@ contains
         case ('pfts') ! Many...
           ! This may be a single value or array but for now we assume there only one.
           ! We also should allow group names.
-          read(param_value, *) pfts
+          read(param_value, *) this%pfts
           !pfts = parse_array(param_value)
           
         case ('row_fraction') ! thin_row_low()
-          read(param_value, *) row_fraction
+          read(param_value, *) this%row_fraction
         case ('final_basal_area') ! thin_row_low()
-          read(param_value, *) final_basal_area
+          read(param_value, *) this%final_basal_area
         !More to come:
         !case ('')
         !case ('where')
