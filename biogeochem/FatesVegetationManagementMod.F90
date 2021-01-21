@@ -151,7 +151,10 @@ module FatesVegetationManagementMod
   ! VM events:
   type, private :: vm_event
       integer(i4) :: code ! The event code.
-      real(r8), dimension(4) :: params ! Event parameters
+      !real(r8), dimension(4) :: params ! Event parameters
+      integer :: pfts ! Change to array (16 in length?)
+      real(r8) :: row_fraction
+      real(r8) :: final_basal_area
     contains
       procedure :: zero
       procedure :: load
@@ -4443,6 +4446,7 @@ contains
     logical :: driver_file_open ! Is the VM driver open
     integer :: driver_file_unit ! File unit for the VM driver file
     integer :: io_status ! IO error flag
+    integer :: comment_index
     
     character(len = line_strlen) :: line_str ! Define line_strlen
     character(len = line_strlen) :: date_str, lat_str, lon_str ! Field values
@@ -4497,11 +4501,38 @@ contains
           do while (io_status == 0)
             if (debug) write(fates_log(),*) 'Parsing event line.'
             
-            ! Add handling for blank lines?  We should at least expect a return at the end.
+            if (debug) then ! Temporary!
+              write(fates_log(), *) 'Line length 1:'
+              write(fates_log(), *) 'len(line_str) = ', len(line_str)
+              write(fates_log(), *) 'len_trim(line_str) = ', len_trim(line_str)
+            endif
+            
+            ! Ignore anything following a '!' as a comment:
+            comment_index = index(line_str, '!')
+            if (comment_index /= 0) then
+              line_str = line_str(:comment_index-1)
+            endif
+            
+            if (debug) then ! Temporary!
+              write(fates_log(), *) 'Line length 2:'
+              write(fates_log(), *) 'len(line_str) = ', len(line_str)
+              write(fates_log(), *) 'len_trim(line_str) = ', len_trim(line_str)
+            endif
             
             !There shouldn't be any leading whitespace but allow it. Trailing whitespace could cause
             !parsing issues:
             line_str = trim(line_str)
+            
+            ! Ignore blank lines (whitespace only) and lines that contain only comments:
+            ! Will this handle tabs?
+            if (len_trim(line_str) == 0) then
+              if (debug) then ! Temporary!
+                write(fates_log(), *) 'Line length 3:'
+                write(fates_log(), *) 'len(line_str) = ', len(line_str)
+                write(fates_log(), *) 'len_trim(line_str) = ', len_trim(line_str)
+              endif
+              cycle
+            endif
             
             ! Extract the leading fields:
             date_str = field_pop(line_str)
@@ -4587,8 +4618,9 @@ contains
     
     ! ----------------------------------------------------------------------------------------------
     
-    !Trim any leading whitespace:
-    line_str = adjustl(line_str)
+    ! Trim any leading (and trailing) whitespace:
+    line_str = adjustl(line_str) ! This pushes whitespace to the end of the line, which we remove.
+    line_str = trim(linestr)
     
     ! Find the the following delimiting block of 1 or more spaces:
     delim_index = index(line_str, " ")
@@ -4858,7 +4890,7 @@ contains
   ! vm_event Type Member Routines:
   !=================================================================================================
 
-  subroutine zero(this) ! blank()?
+  subroutine zero(this) ! blank()?  These values are not really all zeros.
     ! ----------------------------------------------------------------------------------------------
     ! vm_event Type Bound Procedure:
     !   Zero out all data members.
@@ -4874,7 +4906,13 @@ contains
     ! ----------------------------------------------------------------------------------------------
     
     this%code = vm_event_null
-    this%params = 0
+    !this%params = 0
+    
+    ! We need sensible defaults for these parameters or a value that indicates the parameter is
+    ! 'missing'.  These value are temporary:
+    this%pfts = -1 ! Change to array (16 in length?)
+    this%row_fraction = -1.0_r8
+    this%final_basal_area = -1.0_r8
     
   end subroutine zero
 
@@ -4893,20 +4931,127 @@ contains
     character(len = *), intent(in) :: event_str
     
     ! Locals:
-    character(len = len(event_str)) :: work_string ! Modifiable local copy of event_str
+    !character(len = len(event_str)) :: work_string ! Modifiable local copy of event_str
+    character(len = len(event_str)) :: event_type_str, arguments_string, param_string, param_name, param_value
     integer :: i ! Iterator
-    
+    integer :: delim_index
+
     ! ----------------------------------------------------------------------------------------------
     
-    work_string = event_str ! Subsequent operations modify the string in place so make a copy.
+    ! Format draft 1:
+    !work_string = event_str ! Subsequent operations modify the string in place so make a copy.
     
-    this%code = field_pop_int(work_string)
+    !this%code = field_pop_int(work_string)
     ! Error check!!!!!
     
-    do i = 1, 4 ! Change to constant?
-      this%params(i) = field_pop_real(work_string)
-      ! Error check?????
-    end do
+    !do i = 1, 4 ! Change to constant?
+    !  this%params(i) = field_pop_real(work_string)
+    !  ! Error check?????
+    !end do
+    
+    ! Format draft 2:
+    ! event_type(paramName1 = paramValue1, paramName2 = [paramValue2.1, paramValue2.2, paramValue2.3], paramName3 = paramValue3)
+    ! event_name(arg1 = val1, arg2 = [val2.1, val2.2, val2.3], arg3 = val3)
+    ! Case sensitive?
+    
+    ! The following could all be simplified with field_pop() if it took a delimiter.
+    
+    ! Parse the event type / name string (i.e the "function name" of the specification string):
+    ! {EVENT_NAME}(arg1 = val1, arg2 = [val2.1, val2.2, val2.3], arg3 = val3)
+    delim_index = index(event_str, '(')
+    if (delim_index == 0) then
+      write(fates_log(),*) 'Improperly formed VM event specification. Missing opening parenthesis: ', event_str
+      call endrun(msg = errMsg(__FILE__, __LINE__))
+    endif
+    
+    event_type_str = event_str(:delim_index-1)
+    ! Remove any surrounding whitespace:
+    event_type_str = adjustl(event_type_str)
+    event_type_str = trim(event_type_str)
+    
+    select case (event_type_str)
+      case ('plant')
+        code = vm_event_plant
+      case ('thin_row_low') ! Will probably change!
+        code = vm_event_thin_test1
+      !case ()
+      case default
+        write(fates_log(),*) 'VM event name is not recognised:', event_type_str
+        call endrun(msg = errMsg(__FILE__, __LINE__))
+    end select
+    
+    ! Get the string segment containing all the arguments (from '(' to ')'):
+    arguments_string = event_str(delim_index+1:)
+    delim_index = index(arguments_string, ')')
+    if (delim_index == 0) then
+      write(fates_log(),*) 'Improperly formed VM event specification. Missing closing parenthesis: ', arguments_string
+      call endrun(msg = errMsg(__FILE__, __LINE__))
+    endif
+    
+    arguments_string = arguments_string(:delim_index-1)
+    ! Remove any whitespace inside the parentheses:
+    arguments_string = adjustl(arguments_string)
+    arguments_string = trim(arguments_string)
+    
+    ! There should be no content after the closing parenthesis (any comments have already been removed):
+    end_string = event_str(delim_index+1:)
+    ! Remove any surrounding whitespace:
+    !end_string = adjustl(end_string)
+    !end_string = trim(end_string)
+    if (len_trim(end_string) > 0) then
+      write(fates_log(),*) 'Improperly formed VM event specification. Text after closing parenthesis: ', end_string
+      call endrun(msg = errMsg(__FILE__, __LINE__))
+    endif
+    
+    ! Parse arguments / parameters:
+    ! The number of parameters is variable and may be zero.  Remove each one in turn:
+    do while (len_trim(arguments_string) /= 0)
+      
+      ! Get the next name value pair:
+      delim_index = index(arguments_string, ',')
+      ! If there is no comma then we are on the last argument:
+      if (delim_index /= 0) then
+        param_string = arguments_string(:delim_index-1)
+        arguments_string = arguments_string(delim_index+1:) ! Remove the processed argument.
+      else
+        param_string = arguments_string
+        arguments_string = ''
+      endif
+      
+      ! Parse:
+      ! The argument name value pairs are separated by equals signs.  A variable amount of
+      ! whitespace may also present between these elements.  Arrays may be passed as values using square brackets.
+      ! name = value or name = [value1, value2]
+      delim_index = index(param_string, '=')
+      param_name = param_string(:delim_index-1)
+      param_name = adjustl(param_name)
+      param_name = trim(param_name)
+      
+      param_value = param_string(delim_index-1:)
+      ! The following may not be needed since Fortran interprets numeric values pretty robustly:
+      param_value = adjustl(param_value)
+      param_value = trim(param_value)
+      
+      ! The meaning of argument names must be consistent (at least in terms of type) across all routines that use them.
+      select case (param_name)
+        case ('pfts') ! Many...
+          ! This may be a single value or array but for now we assume there only one.
+          ! We also should allow group names.
+          read(param_value, *) pfts
+          !pfts = parse_array(param_value)
+          
+        case ('row_fraction') ! thin_row_low()
+          read(param_value, *) row_fraction
+        case ('final_basal_area') ! thin_row_low()
+          read(param_value, *) final_basal_area
+        !More to come:
+        !case ('')
+        !case ('where')
+        case default
+          write(fates_log(),*) 'VM parameter name is not recognised.'
+          call endrun(msg = errMsg(__FILE__, __LINE__))
+      end select
+    enddo ! (len_trim(arguments_string) /= 0)
     
     if (debug) then
       write(fates_log(), *) 'Loaded VM event from driver file:'
@@ -4962,8 +5107,13 @@ contains
     ! ----------------------------------------------------------------------------------------------
     
     write(fates_log(), *) 'Dumping Vegetation Management Event:--------------'
-    write(fates_log(), *) 'Event code: ', this%code
-    write(fates_log(), *) 'Parameters: ', this%params
+    write(fates_log(), *) 'Event code:       ', this%code
+    !write(fates_log(), *) 'Parameters: ', this%params
+    
+    write(fates_log(), *) 'Parameters:'
+    write(fates_log(), *) 'pfts:             ', this%pfts
+    write(fates_log(), *) 'row_fraction:     ', this%row_fraction
+    write(fates_log(), *) 'final_basal_area: ', this%final_basal_area
     
   end subroutine dump
 
