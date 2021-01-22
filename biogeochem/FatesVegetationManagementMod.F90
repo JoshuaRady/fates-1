@@ -4496,15 +4496,16 @@ contains
              action = 'READ', form = 'FORMATTED')
         rewind(driver_file_unit)
         
+        ! Moved down to allow header to occur not on the first line.
         ! Discard the first header line:
-        read(driver_file_unit, fmt='(A)',iostat = io_status) line_str
-        if (debug) then ! Temporary!!!!!
-          if (io_status /= 0) then
-            write(fates_log(),*) 'The VM event driver file header is missing.'
-          else
-            write(fates_log(),*) 'The VM event driver header:', trim(line_str)
-          endif
-        endif
+!         read(driver_file_unit, fmt='(A)',iostat = io_status) line_str
+!         if (debug) then ! Temporary!!!!!
+!           if (io_status /= 0) then
+!             write(fates_log(),*) 'The VM event driver file header is missing.'
+!           else
+!             write(fates_log(),*) 'The VM event driver header:', trim(line_str)
+!           endif
+!         endif
         
         ! Read the first event line:
         read(driver_file_unit, fmt='(A)',iostat = io_status) line_str
@@ -4516,11 +4517,11 @@ contains
           
           ! Read through line by line looking for events specified for this timestep and location:
           do while (io_status == 0)
-            if (debug) write(fates_log(),*) 'Parsing event line.'
+            if (debug) write(fates_log(),*) 'Parsing event line:'
             
             if (debug) then ! Temporary!
               write(fates_log(), *) 'Line length 1:'
-              write(fates_log(), *) 'len(line_str) = ', len(line_str)
+              !write(fates_log(), *) 'len(line_str) = ', len(line_str)
               write(fates_log(), *) 'len_trim(line_str) = ', len_trim(line_str)
             endif
             
@@ -4528,11 +4529,12 @@ contains
             comment_index = index(line_str, '!')
             if (comment_index /= 0) then
               line_str = line_str(:comment_index-1)
+              if (debug) write(fates_log(), *) 'Comment ignored.'
             endif
             
             if (debug) then ! Temporary!
               write(fates_log(), *) 'Line length 2:'
-              write(fates_log(), *) 'len(line_str) = ', len(line_str)
+              !write(fates_log(), *) 'len(line_str) = ', len(line_str)
               write(fates_log(), *) 'len_trim(line_str) = ', len_trim(line_str)
             endif
             
@@ -4545,52 +4547,150 @@ contains
             if (len_trim(line_str) == 0) then
               if (debug) then ! Temporary!
                 write(fates_log(), *) 'Line length 3:'
-                write(fates_log(), *) 'len(line_str) = ', len(line_str)
+                !write(fates_log(), *) 'len(line_str) = ', len(line_str)
                 write(fates_log(), *) 'len_trim(line_str) = ', len_trim(line_str)
+                
+                write(fates_log(), *) 'Skipping blank or commented line.'
               endif
-              cycle
-            endif
+              !cycle
+            else
+              
+              ! Extract the leading fields:
+              date_str = field_pop(line_str)
+              lat_str = field_pop(line_str)
+              lon_str = field_pop(line_str)
+              
+              ! Check if this is the header line:
+              !   The header line is a soft requirement.  It is only used for readability and we do
+              ! minimal checking of it.
+              !   Ideally the the header will occur as the first line of content.  Comment lines
+              ! describing the file (e.g. creator, date, project, etc) may precede it but all events
+              ! should follow it.  This is a style guidline and is not currently enforced.
+              !   The header may be missing (bad style) or may occur more than once (might be useful
+              ! for really long files).
+              !   The column names beyond date are not checked and their values will not change
+              ! anything about how the file will be read in.
+              !   The header must start with 'Date".  It can be be preceded by white space and some
+              ! case variants will be accepted but both are bad style and may be deprecated in the
+              ! future.
+              if (date_str == "Date" .or. date_str == "date" .or. date_str == "DATE") then
+                if (debug) write(fates_log(),*) 'The VM event driver header:', trim(line_str)
+                ! Could add addition error checking here.
+              else
+                
+                ! Check if this event matches this timestep and location:
+                if (is_now(date_str) .and. is_here(lat_str, lon_str, site)) then
+                  if (debug) write(fates_log(), *) 'VM event matches date and location.'
+                  
+                  ! Load the event:
+                  call the_event%load(line_str)
+                  
+                  ! Is the event a mortality inducing or generative (fecundity) event?
+                  ! Only allow one mortality but more than one planting?
+                  if (the_event%is_generative()) then
+                    if (vm_generative_event%code /= vm_event_null) then
+                      write(fates_log(),*) 'A VM generative event already exits for this time step.'
+                      ! Note: In future multiple generative events will be allowed to co-occur.
+                      call endrun(msg = errMsg(__FILE__, __LINE__))
+                    else
+                      vm_generative_event = the_event
+                      if (debug) then
+                        write(fates_log(),*) 'VM generative event loaded.'
+                        call vm_generative_event%dump()
+                      endif
+                    endif
+                  else ! Mortality event:
+                    if (vm_mortality_event%code /= vm_event_null) then
+                      write(fates_log(),*) 'Only one VM mortality event per time step is currently allowed per site.'
+                      call endrun(msg = errMsg(__FILE__, __LINE__))
+                    else
+                      vm_mortality_event = the_event
+                      if (debug) then
+                        write(fates_log(),*) 'VM mortailty event loaded.'
+                        call vm_mortality_event%dump()
+                      endif
+                    endif ! vm_mortality_event%code /= vm_event_null)
+                  endif ! (the_event%is_generative())
+                endif ! (is_now(date_str) ...
+              endif ! (date_str == "Date"...
+              
+              ! Moved up:
+              ! Check if this event matches this timestep and location:
+!               if (is_now(date_str) .and. is_here(lat_str, lon_str, site)) then
+!                 if (debug) write(fates_log(), *) 'VM event matches date and location.'
+!                 
+!                 ! Load the event:
+!                 call the_event%load(line_str)
+!                 
+!                 ! Is the event a mortality inducing or generative (fecundity) event?
+!                 ! Only allow one mortality but more than one planting?
+!                 if (the_event%is_generative()) then
+!                   if (vm_generative_event%code /= vm_event_null) then
+!                     write(fates_log(),*) 'A VM generative event already exits for this time step.'
+!                     ! Note: In future multiple generative events will be allowed to co-occur.
+!                     call endrun(msg = errMsg(__FILE__, __LINE__))
+!                   else
+!                     vm_generative_event = the_event
+!                     if (debug) then
+!                       write(fates_log(),*) 'VM generative event loaded.'
+!                       call vm_generative_event%dump()
+!                     endif
+!                   endif
+!                 else ! Mortality event:
+!                   if (vm_mortality_event%code /= vm_event_null) then
+!                     write(fates_log(),*) 'Only one VM mortality event per time step is currently allowed per site.'
+!                     call endrun(msg = errMsg(__FILE__, __LINE__))
+!                   else
+!                     vm_mortality_event = the_event
+!                     if (debug) then
+!                       write(fates_log(),*) 'VM mortailty event loaded.'
+!                       call vm_mortality_event%dump()
+!                     endif
+!                   endif ! vm_mortality_event%code /= vm_event_null)
+!                 endif ! (the_event%is_generative())
+!               endif ! (is_now(date_str) ...
+            endif ! (len_trim(line_str) == 0)
             
             ! Extract the leading fields:
-            date_str = field_pop(line_str)
-            lat_str = field_pop(line_str)
-            lon_str = field_pop(line_str)
-            
-            ! Check if this event matches this timestep and location:
-            if (is_now(date_str) .and. is_here(lat_str, lon_str, site)) then
-              if (debug) write(fates_log(), *) 'VM event matches date and location.'
-              
-              ! Load the event:
-              call the_event%load(line_str)
-              
-              ! Is the event a mortality inducing or generative (fecundity) event?
-              ! Only allow one mortality but more than one planting?
-              if (the_event%is_generative()) then
-                if (vm_generative_event%code /= vm_event_null) then
-                  write(fates_log(),*) 'A VM generative event already exits for this time step.'
-                  ! Note: In future multiple generative events will be allowed to co-occur.
-                  call endrun(msg = errMsg(__FILE__, __LINE__))
-                else
-                  vm_generative_event = the_event
-                  if (debug) then
-                    write(fates_log(),*) 'VM generative event loaded.'
-                    call vm_generative_event%dump()
-                  end if
-                endif
-              else ! Mortality event:
-                if (vm_mortality_event%code /= vm_event_null) then
-                  write(fates_log(),*) 'Only one VM mortality event per time step is currently allowed per site.'
-                  call endrun(msg = errMsg(__FILE__, __LINE__))
-                else
-                  vm_mortality_event = the_event
-                  if (debug) then
-                    write(fates_log(),*) 'VM mortailty event loaded.'
-                    call vm_mortality_event%dump()
-                  end if
-                endif
-              endif ! (the_event%is_generative())
-              
-            endif ! (is_now(date_str) ...
+            ! date_str = field_pop(line_str)
+!             lat_str = field_pop(line_str)
+!             lon_str = field_pop(line_str)
+!             
+!             ! Check if this event matches this timestep and location:
+!             if (is_now(date_str) .and. is_here(lat_str, lon_str, site)) then
+!               if (debug) write(fates_log(), *) 'VM event matches date and location.'
+!               
+!               ! Load the event:
+!               call the_event%load(line_str)
+!               
+!               ! Is the event a mortality inducing or generative (fecundity) event?
+!               ! Only allow one mortality but more than one planting?
+!               if (the_event%is_generative()) then
+!                 if (vm_generative_event%code /= vm_event_null) then
+!                   write(fates_log(),*) 'A VM generative event already exits for this time step.'
+!                   ! Note: In future multiple generative events will be allowed to co-occur.
+!                   call endrun(msg = errMsg(__FILE__, __LINE__))
+!                 else
+!                   vm_generative_event = the_event
+!                   if (debug) then
+!                     write(fates_log(),*) 'VM generative event loaded.'
+!                     call vm_generative_event%dump()
+!                   end if
+!                 endif
+!               else ! Mortality event:
+!                 if (vm_mortality_event%code /= vm_event_null) then
+!                   write(fates_log(),*) 'Only one VM mortality event per time step is currently allowed per site.'
+!                   call endrun(msg = errMsg(__FILE__, __LINE__))
+!                 else
+!                   vm_mortality_event = the_event
+!                   if (debug) then
+!                     write(fates_log(),*) 'VM mortailty event loaded.'
+!                     call vm_mortality_event%dump()
+!                   end if
+!                 endif
+!               endif ! (the_event%is_generative())
+!               
+!             endif ! (is_now(date_str) ...
             
             ! Read the next line:
             read(driver_file_unit, fmt='(A)',iostat = io_status) line_str
@@ -4986,6 +5086,8 @@ contains
     event_type_str = adjustl(event_type_str)
     event_type_str = trim(event_type_str)
     
+    if (debug) write(fates_log(),*) 'event_type_str: ', event_type_str ! Temporary!!!!!
+    
     select case (event_type_str)
       case ('plant')
         this%code = vm_event_plant
@@ -5009,6 +5111,8 @@ contains
     ! Remove any whitespace inside the parentheses:
     arguments_string = adjustl(arguments_string)
     arguments_string = trim(arguments_string)
+    
+    if (debug) write(fates_log(),*) 'arguments_string: ', arguments_string ! Temporary!!!!!
     
     ! There should be no content after the closing parenthesis (any comments have already been removed):
     end_string = event_str(delim_index+1:)
@@ -5035,6 +5139,8 @@ contains
         arguments_string = ''
       endif
       
+      if (debug) write(fates_log(),*) 'param_string: ', param_string ! Temporary!!!!!
+      
       ! Parse:
       ! The argument name value pairs are separated by equals signs.  A variable amount of
       ! whitespace may also present between these elements.  Arrays may be passed as values using square brackets.
@@ -5044,10 +5150,14 @@ contains
       param_name = adjustl(param_name)
       param_name = trim(param_name)
       
+      if (debug) write(fates_log(),*) 'param_name: ', param_name ! Temporary!!!!!
+      
       param_value = param_string(delim_index-1:)
       ! The following may not be needed since Fortran interprets numeric values pretty robustly:
       param_value = adjustl(param_value)
       param_value = trim(param_value)
+      
+      if (debug) write(fates_log(),*) 'param_value: ', param_value ! Temporary!!!!!
       
       ! The meaning of argument names must be consistent (at least in terms of type) across all routines that use them.
       select case (param_name)
