@@ -4959,8 +4959,8 @@ contains
     if (debug) then
       write(fates_log(), *) 'Latitude string: ', trim(lat_string)
       write(fates_log(), *) 'Latitude string: ', trim(lon_string)
-      write(fates_log(), *) 'Latitude #: ', latitude
-      write(fates_log(), *) 'Longitude #: ', longitude_in
+      write(fates_log(), *) 'Latitude  #:     ', latitude
+      write(fates_log(), *) 'Longitude #:     ', longitude_in
     endif
     
     ! Check to see if the location of the event is "everywhere":
@@ -5086,7 +5086,7 @@ contains
     event_type_str = adjustl(event_type_str)
     event_type_str = trim(event_type_str)
     
-    if (debug) write(fates_log(),*) 'event_type_str: ', event_type_str ! Temporary!!!!!
+    if (debug) write(fates_log(),*) 'event_type_str: ', trim(event_type_str) ! Temporary!!!!!
     
     select case (event_type_str)
       case ('plant')
@@ -5112,10 +5112,11 @@ contains
     arguments_string = adjustl(arguments_string)
     arguments_string = trim(arguments_string)
     
-    if (debug) write(fates_log(),*) 'arguments_string: ', arguments_string ! Temporary!!!!!
+    if (debug) write(fates_log(),*) 'arguments_string: ', trim(arguments_string) ! Temporary!!!!!
     
     ! There should be no content after the closing parenthesis (any comments have already been removed):
-    end_string = event_str(delim_index+1:)
+    !end_string = event_str(delim_index+1:)
+    end_string = arguments_string(delim_index+1:)
     ! Remove any surrounding whitespace:
     !end_string = adjustl(end_string)
     !end_string = trim(end_string)
@@ -5139,7 +5140,7 @@ contains
         arguments_string = ''
       endif
       
-      if (debug) write(fates_log(),*) 'param_string: ', param_string ! Temporary!!!!!
+      if (debug) write(fates_log(),*) 'param_string: ', trim(param_string) ! Temporary!!!!!
       
       ! Parse:
       ! The argument name value pairs are separated by equals signs.  A variable amount of
@@ -5150,19 +5151,19 @@ contains
       param_name = adjustl(param_name)
       param_name = trim(param_name)
       
-      if (debug) write(fates_log(),*) 'param_name: ', param_name ! Temporary!!!!!
+      if (debug) write(fates_log(),*) 'param_name: ', trim(param_name) ! Temporary!!!!!
       
       param_value = param_string(delim_index-1:)
       ! The following may not be needed since Fortran interprets numeric values pretty robustly:
       param_value = adjustl(param_value)
       param_value = trim(param_value)
       
-      if (debug) write(fates_log(),*) 'param_value: ', param_value ! Temporary!!!!!
+      if (debug) write(fates_log(),*) 'param_value: ', trim(param_value) ! Temporary!!!!!
       
       ! The meaning of argument names must be consistent (at least in terms of type) across all routines that use them.
       select case (param_name)
         case ('pfts') ! Many...
-          ! This may be a single value or array but for now we assume there only one.
+          ! This may be a single value or array but for now we assume there is only one (array of 1).
           ! We also should allow group names.
           read(param_value, *) this%pfts
           !pfts = parse_array(param_value)
