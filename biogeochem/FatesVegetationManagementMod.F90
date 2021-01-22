@@ -4496,17 +4496,6 @@ contains
              action = 'READ', form = 'FORMATTED')
         rewind(driver_file_unit)
         
-        ! Moved down to allow header to occur not on the first line.
-        ! Discard the first header line:
-!         read(driver_file_unit, fmt='(A)',iostat = io_status) line_str
-!         if (debug) then ! Temporary!!!!!
-!           if (io_status /= 0) then
-!             write(fates_log(),*) 'The VM event driver file header is missing.'
-!           else
-!             write(fates_log(),*) 'The VM event driver header:', trim(line_str)
-!           endif
-!         endif
-        
         ! Read the first event line:
         read(driver_file_unit, fmt='(A)',iostat = io_status) line_str
         
@@ -4519,23 +4508,11 @@ contains
           do while (io_status == 0)
             if (debug) write(fates_log(),*) 'Parsing event line:'
             
-            if (debug) then ! Temporary!
-              write(fates_log(), *) 'Line length 1:'
-              !write(fates_log(), *) 'len(line_str) = ', len(line_str)
-              write(fates_log(), *) 'len_trim(line_str) = ', len_trim(line_str)
-            endif
-            
             ! Ignore anything following a '!' as a comment:
             comment_index = index(line_str, '!')
             if (comment_index /= 0) then
               line_str = line_str(:comment_index-1)
               if (debug) write(fates_log(), *) 'Comment ignored.'
-            endif
-            
-            if (debug) then ! Temporary!
-              write(fates_log(), *) 'Line length 2:'
-              !write(fates_log(), *) 'len(line_str) = ', len(line_str)
-              write(fates_log(), *) 'len_trim(line_str) = ', len_trim(line_str)
             endif
             
             !There shouldn't be any leading whitespace but allow it. Trailing whitespace could cause
@@ -4545,14 +4522,7 @@ contains
             ! Ignore blank lines (whitespace only) and lines that contain only comments:
             ! Will this handle tabs?
             if (len_trim(line_str) == 0) then
-              if (debug) then ! Temporary!
-                write(fates_log(), *) 'Line length 3:'
-                !write(fates_log(), *) 'len(line_str) = ', len(line_str)
-                write(fates_log(), *) 'len_trim(line_str) = ', len_trim(line_str)
-                
-                write(fates_log(), *) 'Skipping blank or commented line.'
-              endif
-              !cycle
+              if (debug) write(fates_log(), *) 'Skipping blank or commented line.' ! Temporary!
             else
               
               ! Extract the leading fields:
@@ -4561,6 +4531,7 @@ contains
               lon_str = field_pop(line_str)
               
               ! Check if this is the header line:
+              ! Move these notes?????
               !   The header line is a soft requirement.  It is only used for readability and we do
               ! minimal checking of it.
               !   Ideally the the header will occur as the first line of content.  Comment lines
@@ -4575,7 +4546,7 @@ contains
               ! future.
               if (date_str == "Date" .or. date_str == "date" .or. date_str == "DATE") then
                 if (debug) write(fates_log(),*) 'The VM event driver header:', trim(line_str)
-                ! Could add addition error checking here.
+                ! Could add additional error checking here.
               else
                 
                 ! Check if this event matches this timestep and location:
@@ -4613,88 +4584,11 @@ contains
                   endif ! (the_event%is_generative())
                 endif ! (is_now(date_str) ...
               endif ! (date_str == "Date"...
-              
-              ! Moved up:
-              ! Check if this event matches this timestep and location:
-!               if (is_now(date_str) .and. is_here(lat_str, lon_str, site)) then
-!                 if (debug) write(fates_log(), *) 'VM event matches date and location.'
-!                 
-!                 ! Load the event:
-!                 call the_event%load(line_str)
-!                 
-!                 ! Is the event a mortality inducing or generative (fecundity) event?
-!                 ! Only allow one mortality but more than one planting?
-!                 if (the_event%is_generative()) then
-!                   if (vm_generative_event%code /= vm_event_null) then
-!                     write(fates_log(),*) 'A VM generative event already exits for this time step.'
-!                     ! Note: In future multiple generative events will be allowed to co-occur.
-!                     call endrun(msg = errMsg(__FILE__, __LINE__))
-!                   else
-!                     vm_generative_event = the_event
-!                     if (debug) then
-!                       write(fates_log(),*) 'VM generative event loaded.'
-!                       call vm_generative_event%dump()
-!                     endif
-!                   endif
-!                 else ! Mortality event:
-!                   if (vm_mortality_event%code /= vm_event_null) then
-!                     write(fates_log(),*) 'Only one VM mortality event per time step is currently allowed per site.'
-!                     call endrun(msg = errMsg(__FILE__, __LINE__))
-!                   else
-!                     vm_mortality_event = the_event
-!                     if (debug) then
-!                       write(fates_log(),*) 'VM mortailty event loaded.'
-!                       call vm_mortality_event%dump()
-!                     endif
-!                   endif ! vm_mortality_event%code /= vm_event_null)
-!                 endif ! (the_event%is_generative())
-!               endif ! (is_now(date_str) ...
             endif ! (len_trim(line_str) == 0)
-            
-            ! Extract the leading fields:
-            ! date_str = field_pop(line_str)
-!             lat_str = field_pop(line_str)
-!             lon_str = field_pop(line_str)
-!             
-!             ! Check if this event matches this timestep and location:
-!             if (is_now(date_str) .and. is_here(lat_str, lon_str, site)) then
-!               if (debug) write(fates_log(), *) 'VM event matches date and location.'
-!               
-!               ! Load the event:
-!               call the_event%load(line_str)
-!               
-!               ! Is the event a mortality inducing or generative (fecundity) event?
-!               ! Only allow one mortality but more than one planting?
-!               if (the_event%is_generative()) then
-!                 if (vm_generative_event%code /= vm_event_null) then
-!                   write(fates_log(),*) 'A VM generative event already exits for this time step.'
-!                   ! Note: In future multiple generative events will be allowed to co-occur.
-!                   call endrun(msg = errMsg(__FILE__, __LINE__))
-!                 else
-!                   vm_generative_event = the_event
-!                   if (debug) then
-!                     write(fates_log(),*) 'VM generative event loaded.'
-!                     call vm_generative_event%dump()
-!                   end if
-!                 endif
-!               else ! Mortality event:
-!                 if (vm_mortality_event%code /= vm_event_null) then
-!                   write(fates_log(),*) 'Only one VM mortality event per time step is currently allowed per site.'
-!                   call endrun(msg = errMsg(__FILE__, __LINE__))
-!                 else
-!                   vm_mortality_event = the_event
-!                   if (debug) then
-!                     write(fates_log(),*) 'VM mortailty event loaded.'
-!                     call vm_mortality_event%dump()
-!                   end if
-!                 endif
-!               endif ! (the_event%is_generative())
-!               
-!             endif ! (is_now(date_str) ...
             
             ! Read the next line:
             read(driver_file_unit, fmt='(A)',iostat = io_status) line_str
-          end do
+          end do ! while (io_status == 0)
           
         endif ! (io_status /= 0)
         
@@ -5117,9 +5011,6 @@ contains
     ! There should be no content after the closing parenthesis (any comments have already been removed):
     !end_string = event_str(delim_index+1:)
     end_string = arguments_string(delim_index+1:)
-    ! Remove any surrounding whitespace:
-    !end_string = adjustl(end_string)
-    !end_string = trim(end_string)
     if (len_trim(end_string) > 0) then
       write(fates_log(),*) 'Improperly formed VM event specification. Text after closing parenthesis: ', end_string
       call endrun(msg = errMsg(__FILE__, __LINE__))
