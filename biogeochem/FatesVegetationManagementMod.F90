@@ -4456,7 +4456,8 @@ contains
     ! Locals:
     !character(len = *), parameter ::vm_drive_file_path = "/glade/work/jmrady/InputFiles/Proj_7_Exp_57/DriverFile_D1c.txt" ! Temporary
     !character(len = *), parameter ::vm_drive_file_path = "/glade/u/home/jmrady/Proj_7_Exp_58_Cases/GarlandCoAR/VMDriver_GarlandCoAR_D1.txt" ! Temporary
-    character(len = *), parameter ::vm_drive_file_path = "/glade/work/jmrady/InputFiles/Proj_7_Exp_57/DriverFile_D2a.txt" ! Temporary
+    !character(len = *), parameter ::vm_drive_file_path = "/glade/work/jmrady/InputFiles/Proj_7_Exp_57/DriverFile_D2a.txt" ! Temporary
+    character(len = *), parameter ::vm_drive_file_path = '/glade/u/home/jmrady/Proj_7_Exp_58_Cases/GarlandCoAR/VMDriver_GarlandCoAR_D2.txt'
     ! In the future this will not be specified via a namelist and may be character(len=256).
     
     logical :: driver_file_exists ! Does the VM driver file exist
