@@ -5153,7 +5153,7 @@ contains
       
       if (debug) write(fates_log(),*) 'param_name: ', trim(param_name) ! Temporary!!!!!
       
-      param_value = param_string(delim_index-1:)
+      param_value = param_string(delim_index+1:)
       ! The following may not be needed since Fortran interprets numeric values pretty robustly:
       param_value = adjustl(param_value)
       param_value = trim(param_value)
