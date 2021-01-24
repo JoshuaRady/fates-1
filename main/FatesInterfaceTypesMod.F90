@@ -180,6 +180,12 @@ module FatesInterfaceTypesMod
                                                                     ! This need only be defined when
                                                                     ! hlm_use_inventory_init = 1
 
+   integer, public :: hlm_use_vm_driver_file ! If true use the Vegetation Management prescribed
+                                             ! event driver file.
+
+   character(len=256), public :: hlm_vm_driver_filepath ! The full path to the Vegetation Management
+                                                        ! prescribed event driver file.
+
   integer, public ::  hlm_use_fixed_biogeog                         !  Flag to use FATES fixed biogeography mode
                                                                     !  1 = TRUE, 0 = FALSE 
 

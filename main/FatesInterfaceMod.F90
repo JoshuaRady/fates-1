@@ -1177,6 +1177,8 @@ contains
          !hlm_use_nocomp = unset_int    ! future reduced complexity mode
          hlm_use_inventory_init = unset_int
          hlm_inventory_ctrl_file = 'unset'
+         hlm_use_vm_driver_file = unset_int
+         hlm_vm_driver_filepath = 'unset'
 
       case('check_allset')
          
@@ -1298,6 +1300,22 @@ contains
          if(trim(hlm_inventory_ctrl_file) .eq. 'unset') then
             if (fates_global_verbose()) then
                write(fates_log(),*) 'namelist entry for fates inventory control file is unset, exiting'
+            end if
+            call endrun(msg=errMsg(sourcefile, __LINE__))
+         end if
+         
+         ! Vegetation Management:
+         if (.not. ((hlm_use_vm_driver_file .eq. 0) .or. (hlm_use_vm_driver_file .eq. 1))) then
+            if (fates_global_verbose()) then
+               write(fates_log(), *) 'The Vegetation Management driver file flag must be 0 or 1, exiting'
+            end if
+            call endrun(msg=errMsg(sourcefile, __LINE__))
+         end if
+         
+         ! If on make sure there is a file to match.
+         if ((hlm_use_vm_driver_file .eq. 1) .and. (trim(hlm_vm_driver_filepath) .eq. 'unset') then
+            if (fates_global_verbose()) then
+               write(fates_log(), *) 'The Vegetation Management driver file flag is on but no path was specified, exiting'
             end if
             call endrun(msg=errMsg(sourcefile, __LINE__))
          end if
@@ -1644,6 +1662,12 @@ contains
                   write(fates_log(),*) 'Transfering hlm_use_inventory_init= ',ival,' to FATES'
                end if
 
+            case('use_vm_driver_file')
+               hlm_use_vm_driver_file = ival
+               if (fates_global_verbose()) then
+                  write(fates_log(),*) 'Transfering hlm_use_vm_driver_file = ',ival,' to FATES'
+               end if
+
             case default
                if (fates_global_verbose()) then
                    write(fates_log(), *) 'tag not recognized:',trim(tag)
@@ -1688,6 +1712,12 @@ contains
                hlm_inventory_ctrl_file = trim(cval)
                if (fates_global_verbose()) then
                   write(fates_log(),*) 'Transfering the name of the inventory control file = ',trim(cval)
+               end if
+               
+            case('vm_driver_filepath')
+               hlm_vm_driver_filepath = trim(cval)
+               if (fates_global_verbose()) then
+                  write(fates_log(),*) 'Transfering the path of the Vegetation Management driver file = ',trim(cval)
                end if
                
             case default
