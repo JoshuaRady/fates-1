@@ -4448,6 +4448,7 @@ contains
     ! ----------------------------------------------------------------------------------------------
     
     ! Uses:
+    use FatesInterfaceTypesMod, only : hlm_use_vm_driver_file, hlm_vm_driver_filepath
     use shr_file_mod, only : shr_file_getUnit, shr_file_freeUnit
     
     ! Arguments:
@@ -4457,31 +4458,35 @@ contains
     !character(len = *), parameter ::vm_drive_file_path = "/glade/work/jmrady/InputFiles/Proj_7_Exp_57/DriverFile_D1c.txt" ! Temporary
     !character(len = *), parameter ::vm_drive_file_path = "/glade/u/home/jmrady/Proj_7_Exp_58_Cases/GarlandCoAR/VMDriver_GarlandCoAR_D1.txt" ! Temporary
     !character(len = *), parameter ::vm_drive_file_path = "/glade/work/jmrady/InputFiles/Proj_7_Exp_57/DriverFile_D2a.txt" ! Temporary
-    character(len = *), parameter ::vm_drive_file_path = '/glade/u/home/jmrady/Proj_7_Exp_58_Cases/GarlandCoAR/VMDriver_GarlandCoAR_D2.txt'
+    !character(len = *), parameter ::vm_drive_file_path = '/glade/u/home/jmrady/Proj_7_Exp_58_Cases/GarlandCoAR/VMDriver_GarlandCoAR_D2.txt'
     ! In the future this will not be specified via a namelist and may be character(len=256).
     
-    logical :: driver_file_exists ! Does the VM driver file exist
-    logical :: driver_file_open ! Is the VM driver open
+    logical :: driver_file_exists ! Does the VM driver file exist?
+    logical :: driver_file_open ! Is the VM driver open?
     integer :: driver_file_unit ! File unit for the VM driver file
     integer :: io_status ! IO error flag
     integer :: comment_index
     
-    character(len = line_strlen) :: line_str ! Define line_strlen
+    character(len = line_strlen) :: line_str ! Holds lines of data from the file
     character(len = line_strlen) :: date_str, lat_str, lon_str ! Field values
     type(vm_event) :: the_event
     
     ! ----------------------------------------------------------------------------------------------
     if (debug) write(fates_log(), *) 'load_prescribed_events() entering.'
     
-    ! Initialize event flags and globals:
+    ! Initialize event globals in any case:
     call vm_generative_event%zero()
     call vm_mortality_event%zero()
     
-    ! Initialize locals:
+    ! Note: Indent the following block!
+    if (hlm_use_vm_driver_file) then
+    
+    ! Initialize an empty event to hold any events found:
+    ! Note: There could be more than one event.  We probably need to reinitialize again below.
     call the_event%zero()
     
     ! Check if the driver file exists and is not in use:
-    inquire(file = trim(vm_drive_file_path), exist = driver_file_exists, opened = driver_file_open)
+    inquire(file = trim(hlm_vm_driver_filepath), exist = driver_file_exists, opened = driver_file_open)
     
     ! If the file exists proceed otherwise don't. We don't use a flag:
     if (driver_file_exists) then
@@ -4493,7 +4498,7 @@ contains
         
         ! Open the file:
         driver_file_unit = shr_file_getUnit()
-        open(unit = driver_file_unit, file = trim(vm_drive_file_path), status = 'OLD', &
+        open(unit = driver_file_unit, file = trim(hlm_vm_driver_filepath), status = 'OLD', &
              action = 'READ', form = 'FORMATTED')
         rewind(driver_file_unit)
         
@@ -4606,6 +4611,7 @@ contains
     else
       write(fates_log(),*) 'A vegetation management prescribed event driver file was not found.'
     endif ! (driver_file_exists)
+    endif ! (hlm_use_vm_driver_file)
     
     if (debug) write(fates_log(), *) 'load_prescribed_events() exiting.'
   end subroutine load_prescribed_events
