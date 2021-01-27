@@ -1313,7 +1313,7 @@ contains
          end if
          
          ! If on make sure there is a file to match.
-         if ((hlm_use_vm_driver_file .eq. 1) .and. (trim(hlm_vm_driver_filepath) .eq. 'unset') then
+         if ((hlm_use_vm_driver_file .eq. 1) .and. (trim(hlm_vm_driver_filepath) .eq. 'unset')) then
             if (fates_global_verbose()) then
                write(fates_log(), *) 'The Vegetation Management driver file flag is on but no path was specified, exiting'
             end if
