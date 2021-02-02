@@ -155,6 +155,7 @@ module FatesVegetationManagementMod
       integer, dimension(1) :: pfts ! Change to array (16 in length?)
       real(r8) :: row_fraction
       real(r8) :: final_basal_area
+      real(r8) :: thin_fraction
     contains
       procedure :: zero
       procedure :: load
@@ -172,9 +173,10 @@ module FatesVegetationManagementMod
   !integer, parameter, private :: vm_event_XXXXX = 2
   integer, parameter, private :: vm_event_plant = 1 ! Not really thought out yet...
   integer, parameter, private :: vm_event_thin_test1 = 2 ! In progress
+  integer, parameter, private :: vm_event_thin_low = 3 ! In development.
 
   integer, parameter, private :: vm_event_generative_max = vm_event_plant
-  integer, parameter, private :: vm_event_mortality_max = vm_event_thin_test1
+  integer, parameter, private :: vm_event_mortality_max = vm_event_thin_low
 
   !=================================================================================================
   
@@ -597,6 +599,11 @@ contains
             endif
             current_patch => current_patch%younger
           end do
+          
+        case (vm_event_thin_low)
+          
+          thin_low(site = site_in, pfts = vm_mortality_event%pfts, &
+                   thin_fraction = vm_mortality_event%thin_fraction)
           
         case default
           write(fates_log(),*) 'Unrecognized event code:', vm_mortality_event%code
@@ -4904,6 +4911,7 @@ contains
     this%pfts = -1 ! Change to array (16 in length?)
     this%row_fraction = -1.0_r8
     this%final_basal_area = -1.0_r8
+    this%thin_fraction = -1.0_r8
     
   end subroutine zero
 
@@ -4987,6 +4995,8 @@ contains
         this%code = vm_event_plant
       case ('thin_row_low') ! Name will probably change!!!!!
         this%code = vm_event_thin_test1
+      case ('thin_low')
+        this$code = vm_event_thin_low
       !case ()
       case default
         write(fates_log(),*) 'VM event name is not recognised:', event_type_str
@@ -5062,6 +5072,8 @@ contains
           read(param_value, *) this%row_fraction
         case ('final_basal_area') ! thin_row_low()
           read(param_value, *) this%final_basal_area
+        case ('thin_fraction') ! thin_low()
+          read(param_value, *) this%thin_fraction
         !More to come:
         !case ('')
         !case ('where')
@@ -5144,6 +5156,7 @@ contains
     write(fates_log(), *) 'pfts:             ', this%pfts
     write(fates_log(), *) 'row_fraction:     ', this%row_fraction
     write(fates_log(), *) 'final_basal_area: ', this%final_basal_area
+    write(fates_log(), *) 'thin_fraction:    ', this%thin_fraction
     
   end subroutine dump
 
@@ -5154,5 +5167,56 @@ contains
   ! structure.
   !=================================================================================================
 
+  subroutine thin_low(site, pfts, thin_fraction) ! Return the harvest amount in harvest_estimate!
+    ! ----------------------------------------------------------------------------------------------
+    ! This is in development. The name and arguments may change.
+    !
+    ! This doesn't currently really do a low thinning.  It thins all trees matching the PFTs passed.
+    ! What it should do is calculate the number of stems of the requested stem and remove the
+    ! fraction requested starting with the smaller trees first.  Ideally the trees will be removed
+    ! in a realistic way, when mostly small trees are removed but in a probabilistic way where some
+    ! larger trees are removed.
+    !
+    ! Unlike thin_row_low() this thinning doesn't use specific thinning goals, the goal is relative.
+    !
+    ! VM Event Interface thin_low([pfts], thin_fraction)
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Uses: NA
+    use EDTypesMod, only : ed_site_type
+    
+    ! Arguments:
+    type(ed_site_type), intent(in), target :: site ! The current site object.
+    integer(i4), dimension(:), intent(in) :: pfts ! Make optional?
+    real(r8), intent(in) :: thin_fraction
+    ! Add where
+    
+    ! Locals:
+    type(ed_patch_type), pointer :: current_patch
+    type(ed_cohort_type), pointer :: current_cohort
+    
+    ! ----------------------------------------------------------------------------------------------
+    if (debug) write(fates_log(), *) 'thin_low() beginning.'
+      
+      current_patch => site%oldest_patch
+      do while (associated(current_patch))
+        current_cohort => patch%shortest
+        do while(associated(current_cohort))
+          
+          if (any(pfts == current_cohort%pft)) then
+            ! Harvest a fraction of all trees:
+            call kill(cohort = current_cohort, flux_profile = bole_harvest, &
+                      kill_fraction = thin_fraction, area_fraction = 1.0_r8)
+            
+            ! Accumulate harvest estimate:
+            !harvest = harvest + cohort_harvestable_biomass(current_cohort) ! staged = true!!!!
+          endif
+        
+          current_cohort => current_cohort%taller
+        end do ! Cohort loop.
+        current_patch => current_patch%younger
+      end do ! Patch loop.
+    
+  end subroutine thin_low
 
 end module FatesVegetationManagementMod
