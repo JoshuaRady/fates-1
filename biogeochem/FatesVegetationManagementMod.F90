@@ -602,8 +602,8 @@ contains
           
         case (vm_event_thin_low)
           
-          thin_low(site = site_in, pfts = vm_mortality_event%pfts, &
-                   thin_fraction = vm_mortality_event%thin_fraction)
+          call thin_low(site = site_in, pfts = vm_mortality_event%pfts, &
+                        thin_fraction = vm_mortality_event%thin_fraction)
           
         case default
           write(fates_log(),*) 'Unrecognized event code:', vm_mortality_event%code
@@ -4996,7 +4996,7 @@ contains
       case ('thin_row_low') ! Name will probably change!!!!!
         this%code = vm_event_thin_test1
       case ('thin_low')
-        this$code = vm_event_thin_low
+        this%code = vm_event_thin_low
       !case ()
       case default
         write(fates_log(),*) 'VM event name is not recognised:', event_type_str
@@ -5200,7 +5200,7 @@ contains
       
       current_patch => site%oldest_patch
       do while (associated(current_patch))
-        current_cohort => patch%shortest
+        current_cohort => current_patch%shortest
         do while(associated(current_cohort))
           
           if (any(pfts == current_cohort%pft)) then
