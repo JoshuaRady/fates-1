@@ -35,6 +35,7 @@ module EDCanopyStructureMod
   use FatesConstantsMod     , only : rsnbl_math_prec
   use FatesGlobals          , only : fates_log
   use EDPftvarcon           , only : EDPftvarcon_inst
+  use PRTParametersMod      , only : prt_params
   use FatesAllometryMod     , only : carea_allom
   use EDCohortDynamicsMod   , only : copy_cohort, terminate_cohorts, fuse_cohorts
   use EDCohortDynamicsMod   , only : InitPRTObject
@@ -47,12 +48,13 @@ module EDCanopyStructureMod
   use EDTypesMod            , only : nlevleaf
   use EDtypesMod            , only : AREA
   use FatesGlobals          , only : endrun => fates_endrun
-  use FatesInterfaceMod     , only : hlm_days_per_year
-  use FatesInterfaceMod     , only : hlm_use_planthydro
-  use FatesInterfaceMod     , only : numpft
+  use FatesInterfaceTypesMod     , only : hlm_days_per_year
+  use FatesInterfaceTypesMod     , only : hlm_use_planthydro
+  use FatesInterfaceTypesMod     , only : hlm_use_cohort_age_tracking
+  use FatesInterfaceTypesMod     , only : numpft
   use FatesPlantHydraulicsMod, only : UpdateH2OVeg,InitHydrCohort, RecruitWaterStorage
   use EDTypesMod            , only : maxCohortsPerPatch
-
+  
   use PRTGenericMod,          only : leaf_organ
   use PRTGenericMod,          only : all_carbon_elements
   use PRTGenericMod,          only : leaf_organ
@@ -143,7 +145,7 @@ contains
 
       use EDParamsMod, only : ED_val_comp_excln
       use EDTypesMod , only : min_patch_area
-      use FatesInterfaceMod, only : bc_in_type
+      use FatesInterfaceTypesMod, only : bc_in_type
       !
       ! !ARGUMENTS    
       type(ed_site_type) , intent(inout), target   :: currentSite
@@ -302,12 +304,12 @@ contains
                   write(fates_log(),*) 'coh n:',currentCohort%n
                   write(fates_log(),*) 'coh carea:',currentCohort%c_area
 		  ipft=currentCohort%pft
-		  write(fates_log(),*) 'maxh:',EDPftvarcon_inst%allom_dbh_maxheight(ipft)
-                  write(fates_log(),*) 'lmode: ',EDPftvarcon_inst%allom_lmode(ipft)
-		  write(fates_log(),*) 'd2bl2: ',EDPftvarcon_inst%allom_d2bl2(ipft)
-		  write(fates_log(),*) 'd2bl_ediff: ',EDPftvarcon_inst%allom_blca_expnt_diff(ipft)
-		  write(fates_log(),*) 'd2ca_min: ',EDPftvarcon_inst%allom_d2ca_coefficient_min(ipft)
-		  write(fates_log(),*) 'd2ca_max: ',EDPftvarcon_inst%allom_d2ca_coefficient_max(ipft)
+		  write(fates_log(),*) 'maxh:',prt_params%allom_dbh_maxheight(ipft)
+                  write(fates_log(),*) 'lmode: ',prt_params%allom_lmode(ipft)
+		  write(fates_log(),*) 'd2bl2: ',prt_params%allom_d2bl2(ipft)
+		  write(fates_log(),*) 'd2bl_ediff: ',prt_params%allom_blca_expnt_diff(ipft)
+		  write(fates_log(),*) 'd2ca_min: ',prt_params%allom_d2ca_coefficient_min(ipft)
+		  write(fates_log(),*) 'd2ca_max: ',prt_params%allom_d2ca_coefficient_max(ipft)
                   currentCohort => currentCohort%shorter
                enddo
                call endrun(msg=errMsg(sourcefile, __LINE__))
@@ -1260,7 +1262,7 @@ contains
        do while (associated(currentCohort))
           call carea_allom(currentCohort%dbh,currentCohort%n, &
                 currentSite%spread,currentCohort%pft,currentCohort%c_area)
-          if( (EDPftvarcon_inst%woody(currentCohort%pft) .eq. 1 ) .and. &
+          if( ( int(prt_params%woody(currentCohort%pft)) .eq. itrue ) .and. &
               (currentCohort%canopy_layer .eq. 1 ) ) then
              sitelevel_canopyarea = sitelevel_canopyarea + currentCohort%c_area
           endif
@@ -1300,11 +1302,13 @@ contains
      ! Much of this routine was once ed_clm_link minus all the IO and history stuff
      ! ---------------------------------------------------------------------------------
 
-    use FatesInterfaceMod    , only : bc_in_type
+    use FatesInterfaceTypesMod    , only : bc_in_type
+    use FatesInterfaceTypesMod    , only : hlm_use_cohort_age_tracking
     use EDPatchDynamicsMod   , only : set_patchno
     use FatesSizeAgeTypeIndicesMod, only : sizetype_class_index
+    use FatesSizeAgeTypeIndicesMod, only : coagetype_class_index
     use EDtypesMod           , only : area
-    use EDPftvarcon          , only : EDPftvarcon_inst
+    use FatesConstantsMod    , only : itrue
 
     ! !ARGUMENTS    
     integer                 , intent(in)            :: nsites
@@ -1324,8 +1328,9 @@ contains
     real(r8) :: sapw_c           ! sapwood carbon [kg]
     real(r8) :: store_c          ! storage carbon [kg]
     real(r8) :: struct_c         ! structure carbon [kg]
-    !----------------------------------------------------------------------
 
+    !----------------------------------------------------------------------
+    
     if ( debug ) then
        write(fates_log(),*) 'in canopy_summarization'
     endif
@@ -1364,8 +1369,13 @@ contains
              ! Update the cohort's index within the size bin classes
              ! Update the cohort's index within the SCPF classification system
              call sizetype_class_index(currentCohort%dbh,currentCohort%pft, &
-                                       currentCohort%size_class,currentCohort%size_by_pft_class)
+                  currentCohort%size_class,currentCohort%size_by_pft_class)
 
+             if (hlm_use_cohort_age_tracking .eq. itrue) then
+             call coagetype_class_index(currentCohort%coage,currentCohort%pft, &
+                  currentCohort%coage_class,currentCohort%coage_by_pft_class)
+          end if
+          
              call carea_allom(currentCohort%dbh,currentCohort%n,sites(s)%spread,&
                   currentCohort%pft,currentCohort%c_area)
 
@@ -1377,7 +1387,7 @@ contains
                   
              if(currentCohort%canopy_layer==1)then
                 currentPatch%total_canopy_area = currentPatch%total_canopy_area + currentCohort%c_area
-                if(EDPftvarcon_inst%woody(ft)==1)then
+                if( int(prt_params%woody(ft))==itrue)then
                    currentPatch%total_tree_area = currentPatch%total_tree_area + currentCohort%c_area
                 endif
              endif
@@ -1909,9 +1919,7 @@ contains
 
      use EDTypesMod        , only : ed_patch_type, ed_cohort_type, &
                                     ed_site_type, AREA
-     use FatesInterfaceMod , only : bc_out_type
-     use EDPftvarcon       , only : EDPftvarcon_inst
-
+     use FatesInterfaceTypesMod , only : bc_out_type
 
      !
      ! !ARGUMENTS    

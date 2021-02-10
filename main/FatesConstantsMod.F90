@@ -1,4 +1,5 @@
 module FatesConstantsMod
+
   ! This module is used to define global _immutable_ data. Everything in
   ! this module must have the parameter attribute.
 
@@ -20,6 +21,9 @@ module FatesConstantsMod
   ! Used to initialize and test unset r8s
   real(fates_r8), parameter, public :: fates_unset_r8 = -1.e36_fates_r8
 
+  ! Used to check if a parameter was specified in the parameter file (or left as _)
+  real(fates_r8), parameter, public :: fates_check_param_set = 9.9e32_fates_r8
+  
   ! Integer equivalent of true  (in case some compilers dont auto convert)
   integer, parameter, public :: itrue = 1
 
@@ -30,6 +34,40 @@ module FatesConstantsMod
   integer, parameter, public :: n_anthro_disturbance_categories = 2
   integer, parameter, public :: primaryforest = 1
   integer, parameter, public :: secondaryforest = 2
+
+
+  ! Flags specifying how phosphorous uptake and turnover interacts
+  ! with the host model.
+  integer, public, parameter :: prescribed_p_uptake = 1
+  integer, public, parameter :: coupled_p_uptake    = 2
+
+  ! Flags specifying how nitrogen uptake and turnover interacts
+  ! with the host model.
+  integer, public, parameter :: prescribed_n_uptake = 1
+  integer, public, parameter :: coupled_n_uptake    = 2
+
+  
+  integer, public, parameter :: cohort_np_comp_scaling = 1  ! This flag definition indicates that EVERY cohort on
+                                                          ! the column should compete independently in the soil
+                                                          ! BGC nitrogen and phosphorus acquisition scheme.
+
+  integer, public, parameter :: pft_np_comp_scaling    = 2  ! This flag definition indicates that cohorts should
+                                                          ! be grouped into PFTs, and each PFT will be represented
+                                                          ! as the competitor, in the BGC N and P acquisition scheme
+
+  ! This flag specifies the scaling of how we present
+  ! nutrient competitors to the HLM's soil BGC model
+  
+  integer, public, parameter :: fates_np_comp_scaling = cohort_np_comp_scaling
+
+  real(fates_r8), parameter, public :: secondary_age_threshold = 94._fates_r8 ! less than this value is young secondary land
+                                                            ! based on average age of global
+                                                            ! secondary 1900s land in hurtt-2011
+
+  ! integer labels for specifying harvest units
+  integer, parameter, public :: hlm_harvest_area_fraction = 1 ! Code for harvesting by area
+  integer, parameter, public :: hlm_harvest_carbon = 2 ! Code for harvesting based on carbon extracted. 
+
   
   ! Error Tolerances
 
@@ -70,6 +108,9 @@ module FatesConstantsMod
   ! Conversion factor: grams per kilograms
   real(fates_r8), parameter, public :: g_per_kg = 1000.0_fates_r8
   
+  ! Conversion factor: kilograms per gram
+  real(fates_r8), parameter, public :: kg_per_g = 0.001_fates_r8
+
   ! Conversion factor: miligrams per grams
   real(fates_r8), parameter, public :: mg_per_g = 1000.0_fates_r8
 
@@ -88,11 +129,25 @@ module FatesConstantsMod
   ! Conversion factor: umols per kilomole
   real(fates_r8), parameter, public :: umol_per_kmol = 1.0E9_fates_r8
 
+  ! Conversion factor: meters per milimeter
+  real(fates_r8), parameter, public :: m_per_mm = 1.0E-3_fates_r8
+
+  ! Conversion factor: milimeters per meter
+  real(fates_r8), parameter, public :: mm_per_m = 1.0E3_fates_r8
+
   ! Conversion factor: m2 per ha
   real(fates_r8), parameter, public :: m2_per_ha = 1.0e4_fates_r8
 
   ! Conversion factor: cm2 per m2
   real(fates_r8), parameter, public :: cm2_per_m2 = 10000.0_fates_r8
+
+  ! Conversion factor: m3 per mm3
+  real(fates_r8), parameter, public :: m3_per_mm3 = 1.0E-9_fates_r8
+
+  ! Conversion factor: cubic meters per cubic cm
+  real(fates_r8), parameter, public :: m3_per_cm3 = 1.0E-6_fates_r8
+
+  real(fates_r8), parameter, public :: cm3_per_m3 = 1.0E6_fates_r8
 
   ! Conversion factor :: ha per m2
   real(fates_r8), parameter, public :: ha_per_m2 = 1.0e-4_fates_r8
@@ -113,7 +168,10 @@ module FatesConstantsMod
   ! Conversion: years per day. assume HLM uses 365 day calendar.  
   ! If we need to link to 365.25-day-calendared HLM, rewire to pass through interface
   real(fates_r8), parameter, public :: years_per_day = 1.0_fates_r8/365.00_fates_r8
-  
+
+  ! Conversion: months per year
+  real(fates_r8), parameter, public :: months_per_year = 12.0_fates_r8
+
   ! Physical constants
 
   ! universal gas constant [J/K/kmol]
@@ -131,6 +189,11 @@ module FatesConstantsMod
   ! Gravity constant on earth [m/s]
   real(fates_r8), parameter, public :: grav_earth = 9.8_fates_r8
 
+  ! Megapascals to pascals
+  real(fates_r8), parameter, public :: pa_per_mpa = 1.e6_fates_r8
+
+  ! Pascals to megapascals
+  real(fates_r8), parameter, public :: mpa_per_pa = 1.e-6_fates_r8
 
   ! For numerical inquiry
   real(fates_r8), parameter, public :: fates_huge = huge(g_per_kg)

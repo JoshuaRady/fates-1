@@ -7,15 +7,16 @@ module ChecksBalancesMod
    use EDTypesMod,        only : ed_cohort_type
    use EDTypesMod,        only : AREA
    use EDTypesMod,        only : site_massbal_type
-   use EDTypesMod,        only : num_elements
-   use EDTypesMod,        only : element_list
-   use FatesInterfaceMod, only : numpft
+   use PRTGenericMod,     only : num_elements
+   use PRTGenericMod,     only : element_list
+   use FatesInterfaceTypesMod, only : numpft
    use FatesConstantsMod, only : g_per_kg
-   use FatesInterfaceMod, only : bc_in_type
+   use FatesInterfaceTypesMod, only : bc_in_type
    use FatesLitterMod,    only : litter_type
    use FatesLitterMod,    only : ncwd
    use FatesLitterMod,    only : ndcmpy
    use PRTGenericMod,     only : all_carbon_elements
+   use PRTGenericMod,     only : carbon12_element
    use PRTGenericMod,     only : leaf_organ
    use PRTGenericMod,     only : fnrt_organ
    use PRTGenericMod,     only : sapw_organ
@@ -119,7 +120,17 @@ contains
                 * currentCohort%n
           currentCohort => currentCohort%shorter
       enddo !end cohort loop 
-
+      
+      
+      if(element_id.eq.carbon12_element) then
+         currentCohort => currentPatch%tallest
+         do while(associated(currentCohort))
+            live_stock = live_stock - &
+                 (currentCohort%resp_m_def*currentCohort%n)
+            currentCohort => currentCohort%shorter
+         enddo !end cohort loop 
+      end if
+      
       return
   end subroutine PatchMassStock
 

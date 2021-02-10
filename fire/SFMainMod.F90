@@ -7,21 +7,25 @@
 
   use FatesConstantsMod     , only : r8 => fates_r8
   use FatesConstantsMod     , only : itrue, ifalse
-  use FatesInterfaceMod     , only : hlm_masterproc ! 1= master process, 0=not master process
+  use FatesInterfaceTypesMod     , only : hlm_masterproc ! 1= master process, 0=not master process
   use EDTypesMod            , only : numWaterMem
   use FatesGlobals          , only : fates_log
-
-  use FatesInterfaceMod     , only : bc_in_type
-
+  use FatesInterfaceTypesMod, only : hlm_spitfire_mode
+  use FatesInterfaceTypesMod, only : hlm_sf_nofire_def
+  use FatesInterfaceTypesMod, only : hlm_sf_scalar_lightning_def
+  use FatesInterfaceTypesMod, only : hlm_sf_successful_ignitions_def
+  use FatesInterfaceTypesMod, only : hlm_sf_anthro_ignitions_def
+  use FatesInterfaceTypesMod, only : bc_in_type
+  
   use EDPftvarcon           , only : EDPftvarcon_inst
-
-  use EDTypesMod            , only : element_pos
+  use PRTParametersMod      , only : prt_params
+  
+  use PRTGenericMod         , only : element_pos
   use EDtypesMod            , only : ed_site_type
   use EDtypesMod            , only : ed_patch_type
   use EDtypesMod            , only : ed_cohort_type
   use EDtypesMod            , only : AREA
   use EDtypesMod            , only : DL_SF
-  use EDtypesMod            , only : FIRE_THRESHOLD
   use EDTypesMod            , only : TW_SF
   use EDtypesMod            , only : LB_SF
   use EDtypesMod            , only : LG_SF
@@ -40,7 +44,7 @@
   use PRTGenericMod,          only : repro_organ
   use PRTGenericMod,          only : struct_organ
   use PRTGenericMod,          only : SetState
-
+  use FatesInterfaceTypesMod     , only : numpft
 
   implicit none
   private
@@ -50,14 +54,16 @@
   public :: charecteristics_of_fuel
   public :: rate_of_spread
   public :: ground_fuel_consumption
-  public :: fire_intensity
   public :: wind_effect
-  public :: area_burnt
+  public :: area_burnt_intensity
   public :: crown_scorching
   public :: crown_damage
   public :: cambial_damage_kill
   public :: post_fire_mortality
 
+  ! The following parameter represents one of the values of hlm_spitfire_mode
+  ! and more of these appear in subroutine area_burnt_intensity below
+  ! NB. The same parameters are set in /src/biogeochem/CNFireFactoryMod
   integer :: write_SF = 0     ! for debugging
   logical :: debug = .false.  ! for debugging
 
@@ -71,7 +77,7 @@ contains
   ! ============================================================================
   subroutine fire_model( currentSite, bc_in)
 
-    use FatesInterfaceMod, only : hlm_use_spitfire
+    
 
     type(ed_site_type)     , intent(inout), target :: currentSite
     type(bc_in_type)       , intent(in)            :: bc_in
@@ -88,17 +94,16 @@ contains
     enddo
 
     if(write_SF==1)then
-       write(fates_log(),*) 'use_spitfire',hlm_use_spitfire
+       write(fates_log(),*) 'spitfire_mode', hlm_spitfire_mode
     endif
 
-    if( hlm_use_spitfire == itrue )then
+    if( hlm_spitfire_mode > hlm_sf_nofire_def )then
        call fire_danger_index(currentSite, bc_in)
        call wind_effect(currentSite, bc_in) 
        call charecteristics_of_fuel(currentSite)
        call rate_of_spread(currentSite)
        call ground_fuel_consumption(currentSite)
-       call fire_intensity(currentSite)
-       call area_burnt(currentSite)
+       call area_burnt_intensity(currentSite, bc_in)
        call crown_scorching(currentSite)
        call crown_damage(currentSite)
        call cambial_damage_kill(currentSite)
@@ -144,7 +149,7 @@ contains
        d_NI = 0.0_r8
        currentSite%acc_NI = 0.0_r8
     else 
-       yipsolon = (SF_val_fdi_a* temp_in_C)/(SF_val_fdi_b+ temp_in_C)+log(rh/100.0_r8) 
+       yipsolon = (SF_val_fdi_a* temp_in_C)/(SF_val_fdi_b+ temp_in_C)+log(max(1.0_r8,rh)/100.0_r8) 
        dewpoint = (SF_val_fdi_b*yipsolon)/(SF_val_fdi_a-yipsolon) !Standard met. formula
        d_NI = ( temp_in_C-dewpoint)* temp_in_C !follows Nesterov 1968.  Equation 5. Thonicke et al. 2010.
        if (d_NI < 0.0_r8) then !Change in NI cannot be negative. 
@@ -185,7 +190,7 @@ contains
        currentPatch%livegrass = 0.0_r8 
        currentCohort => currentPatch%tallest
        do while(associated(currentCohort))
-          if(EDPftvarcon_inst%woody(currentCohort%pft) == 0)then 
+          if( int(prt_params%woody(currentCohort%pft)) == ifalse)then 
              
              currentPatch%livegrass = currentPatch%livegrass + &
                   currentCohort%prt%GetState(leaf_organ, all_carbon_elements) * &
@@ -370,7 +375,7 @@ contains
  
        do while(associated(currentCohort))
           if (debug) write(fates_log(),*) 'SF currentCohort%c_area ',currentCohort%c_area
-          if(EDPftvarcon_inst%woody(currentCohort%pft) == 1)then
+          if( int(prt_params%woody(currentCohort%pft)) == itrue)then
              currentPatch%total_tree_area = currentPatch%total_tree_area + currentCohort%c_area
           else
              total_grass_area = total_grass_area + currentCohort%c_area
@@ -421,7 +426,7 @@ contains
                              SF_val_miner_damp,  &
                              SF_val_fuel_energy
     
-    use FatesInterfaceMod, only : hlm_current_day, hlm_current_month
+    use FatesInterfaceTypesMod, only : hlm_current_day, hlm_current_month
 
     type(ed_site_type), intent(in), target :: currentSite
 
@@ -438,7 +443,8 @@ contains
     real(r8) a_beta               ! dummy variable for product of a* beta_ratio for react_v_opt equation
     real(r8) a,b,c,e              ! function of fuel sav
 
-    logical,parameter :: debug_windspeed = .false. !for debugging
+    logical, parameter :: debug_windspeed = .false. !for debugging
+    real(r8),parameter :: q_dry = 581.0_r8          !heat of pre-ignition of dry fuels (kJ/kg) 
 
     currentPatch=>currentSite%oldest_patch;  
 
@@ -481,7 +487,7 @@ contains
        !  Rothermal EQ12= 250 Btu/lb + 1116 Btu/lb * fuel_eff_moist
        !  conversion of Rothermal (1972) EQ12 in BTU/lb to current kJ/kg 
        !  q_ig in kJ/kg 
-       q_ig = 581.0_r8 +2594.0_r8 * currentPatch%fuel_eff_moist
+       q_ig = q_dry +2594.0_r8 * currentPatch%fuel_eff_moist
 
        ! ---effective heating number---
        ! Equation A3 in Thonicke et al. 2010.  
@@ -650,108 +656,102 @@ contains
 
   end subroutine ground_fuel_consumption
 
+  
   !*****************************************************************
-  subroutine  fire_intensity ( currentSite ) 
-    !*****************************************************************
+  subroutine  area_burnt_intensity ( currentSite, bc_in )
+  !*****************************************************************
+
     !returns the updated currentPatch%FI value for each patch.
 
     !currentPatch%FI  avg fire intensity of flaming front during day. Backward ROS plays no role here. kJ/m/s or kW/m.
     !currentSite%FDI  probability that an ignition will start a fire
+    !currentSite%NF   number of lighting strikes per day per km2
     !currentPatch%ROS_front  forward ROS (m/min) 
     !currentPatch%TFC_ROS total fuel consumed by flaming front (kgC/m2)
 
-    use FatesInterfaceMod, only : hlm_use_spitfire
-    use SFParamsMod,  only : SF_val_fdi_alpha,SF_val_fuel_energy, &
-         SF_val_max_durat, SF_val_durat_slope
-
+    use FatesInterfaceTypesMod, only : hlm_spitfire_mode
+    use EDParamsMod,       only : ED_val_nignitions
+    use EDParamsMod,       only : cg_strikes    ! fraction of cloud-to-ground ligtning strikes
+    use FatesConstantsMod, only : years_per_day
+    use SFParamsMod,       only : SF_val_fdi_alpha,SF_val_fuel_energy, &
+         SF_val_max_durat, SF_val_durat_slope, SF_val_fire_threshold
+    
     type(ed_site_type), intent(inout), target :: currentSite
-
     type(ed_patch_type), pointer :: currentPatch
+    type(bc_in_type), intent(in) :: bc_in
 
     real(r8) ROS !m/s
     real(r8) W   !kgBiomass/m2
-
-    currentPatch => currentSite%oldest_patch;  
-
-    do while(associated(currentPatch))
-       ROS   = currentPatch%ROS_front / 60.0_r8 !m/min to m/sec 
-       W     = currentPatch%TFC_ROS / 0.45_r8 !kgC/m2 to kgbiomass/m2
-       
-       !units of fire intensity = (kJ/kg)*(kgBiomass/m2)*(m/min)
-       currentPatch%FI = SF_val_fuel_energy * W * ROS !kj/m/s, or kW/m
-       
-       if(write_sf == itrue)then
-          if( hlm_masterproc == itrue ) write(fates_log(),*) 'fire_intensity',currentPatch%fi,W,currentPatch%ROS_front
-       endif
-       !'decide_fire' subroutine shortened and put in here... 
-       if (currentPatch%FI >= fire_threshold) then  ! 50kW/m is the threshold for a self-sustaining fire
-          currentPatch%fire = 1 ! Fire...    :D
-          
-          ! Equation 7 from Venevsky et al GCB 2002 (modification of equation 8 in Thonicke et al. 2010) 
-          ! FDI 0.1 = low, 0.3 moderate, 0.75 high, and 1 = extreme ignition potential for alpha 0.000337
-          currentSite%FDI  = 1.0_r8 - exp(-SF_val_fdi_alpha*currentSite%acc_NI)
-          
-          ! Equation 14 in Thonicke et al. 2010
-          ! fire duration in minutes
-
-          currentPatch%FD = (SF_val_max_durat+1.0_r8) / (1.0_r8 + SF_val_max_durat * &
-                            exp(SF_val_durat_slope*currentSite%FDI))
-
-          if(write_SF == itrue)then
-             if ( hlm_masterproc == itrue ) write(fates_log(),*) 'fire duration minutes',currentPatch%fd
-          endif
-          !equation 15 in Arora and Boer CTEM model.Average fire is 1 day long.
-          !currentPatch%FD = 60.0_r8 * 24.0_r8 !no minutes in a day      
-       else     
-          currentPatch%fire = 0 ! No fire... :-/
-          currentPatch%FD   = 0.0_r8      
-       endif
-       !  FIX(SPM,032414) needs a refactor
-       !  FIX(RF,032414) : should happen outside of SF loop - doing all spitfire code is inefficient otherwise. 
-       if( hlm_use_spitfire == ifalse )then   
-          currentPatch%fire = 0 !fudge to turn fire off
-       endif
-
-       currentPatch => currentPatch%younger;
-    enddo !end patch loop
-
-  end subroutine fire_intensity
-
-
-  !*****************************************************************
-  subroutine  area_burnt ( currentSite ) 
-    !*****************************************************************
-
-    use EDParamsMod,       only : ED_val_nignitions
-    use FatesConstantsMod, only : years_per_day
-
-    type(ed_site_type), intent(inout), target :: currentSite
-    type(ed_patch_type), pointer :: currentPatch
-
     real(r8) lb               !length to breadth ratio of fire ellipse (unitless)
     real(r8) df               !distance fire has travelled forward in m
     real(r8) db               !distance fire has travelled backward in m
-    real(r8) NF               !number of lightning strikes per day per km2
     real(r8) AB               !daily area burnt in m2 per km2
+    
     real(r8) size_of_fire !in m2
-    real(r8),parameter :: km2_to_m2 = 1000000.0_r8 !area conversion for square km to square m 
-    integer g, p
+    real(r8) cloud_to_ground_strikes  ! [fraction] depends on hlm_spitfire_mode
+    real(r8) anthro_ign_count  ! anthropogenic ignition count/km2/day
+    integer :: iofp  ! index of oldest fates patch
+    real(r8), parameter :: pot_hmn_ign_counts_alpha = 0.0035_r8  ! Potential human ignition counts (alpha in Li et al. 2012) (#/person/month)
+    real(r8),parameter :: km2_to_m2 = 1000000.0_r8 !area conversion for square km to square m
 
     !  ---initialize site parameters to zero--- 
-    currentSite%frac_burnt = 0.0_r8   
+    currentSite%frac_burnt = 0.0_r8  
 
-    !NF = number of lighting strikes per day per km2
-    NF = ED_val_nignitions * years_per_day
+    
+    ! Equation 7 from Venevsky et al GCB 2002 (modification of equation 8 in Thonicke et al. 2010) 
+    ! FDI 0.1 = low, 0.3 moderate, 0.75 high, and 1 = extreme ignition potential for alpha 0.000337
+    if (hlm_spitfire_mode == hlm_sf_successful_ignitions_def) then
+       currentSite%FDI = 1.0_r8  ! READING "SUCCESSFUL IGNITION" DATA
+                                  ! force ignition potential to be extreme
+       cloud_to_ground_strikes = 1.0_r8   ! cloud_to_ground = 1 = use 100% incoming observed ignitions
+    else  ! USING LIGHTNING DATA
+       currentSite%FDI  = 1.0_r8 - exp(-SF_val_fdi_alpha*currentSite%acc_NI)
+       cloud_to_ground_strikes = cg_strikes
+    end if
+    
+    !NF = number of lighting strikes per day per km2 scaled by cloud to ground strikes
+    iofp = currentSite%oldest_patch%patchno
+    if (hlm_spitfire_mode == hlm_sf_scalar_lightning_def ) then
+       currentSite%NF = ED_val_nignitions * years_per_day * cloud_to_ground_strikes
+    else    ! use external daily lightning ignition data
+       currentSite%NF = bc_in%lightning24(iofp) * cloud_to_ground_strikes
+    end if
 
     ! If there are 15  lightning strikes per year, per km2. (approx from NASA product for S.A.) 
-    ! then there are 15 * 1/365 strikes/km2 each day. 
+    ! then there are 15 * 1/365 strikes/km2 each day 
+ 
+    ! Calculate anthropogenic ignitions according to Li et al. (2012)
+    ! Add to ignitions by lightning
+    if (hlm_spitfire_mode == hlm_sf_anthro_ignitions_def) then
+      ! anthropogenic ignitions (count/km2/day)
+      !           =  ignitions/person/month * 6.8 * population_density **0.43 /approximate days per month
+      anthro_ign_count = pot_hmn_ign_counts_alpha * 6.8_r8 * bc_in%pop_density(iofp)**0.43_r8 / 30._r8
+                           
+       currentSite%NF = currentSite%NF + anthro_ign_count
+
+    end if
 
     currentPatch => currentSite%oldest_patch;  
     do while(associated(currentPatch))
        !  ---initialize patch parameters to zero---
+       currentPatch%fire       = 0
+       currentPatch%FD         = 0.0_r8
        currentPatch%frac_burnt = 0.0_r8
+       
 
-       if (currentPatch%fire == 1) then
+       if (currentSite%NF > 0.0_r8) then
+          
+          ! Equation 14 in Thonicke et al. 2010
+          ! fire duration in minutes
+          currentPatch%FD = (SF_val_max_durat+1.0_r8) / (1.0_r8 + SF_val_max_durat * &
+                            exp(SF_val_durat_slope*currentSite%FDI))
+          if(write_SF == itrue)then
+             if ( hlm_masterproc == itrue ) write(fates_log(),*) 'fire duration minutes',currentPatch%fd
+          endif
+          !equation 15 in Arora and Boer CTEM model.Average fire is 1 day long.
+          !currentPatch%FD = 60.0_r8 * 24.0_r8 !no minutes in a day
+
+           
        ! The feedback between vegetation structure and ellipse size if turned off for now, 
        ! to reduce the positive feedback in the syste,
        ! This will also be investigated by William Hoffmans proposal. 
@@ -785,95 +785,106 @@ contains
 
              !AB = daily area burnt = size fires in m2 * num ignitions per day per km2 * prob ignition starts fire
              !AB = m2 per km2 per day
-             AB = size_of_fire * NF * currentSite%FDI
+             AB = size_of_fire * currentSite%NF * currentSite%FDI
 
-              !frac_burnt in units of m2 here. 
-             currentPatch%frac_burnt = min(0.99_r8, AB / km2_to_m2)
+             !frac_burnt 
+             currentPatch%frac_burnt = (min(0.99_r8, AB / km2_to_m2)) * currentPatch%area/area 
              
              if(write_SF == itrue)then
                 if ( hlm_masterproc == itrue ) write(fates_log(),*) 'frac_burnt',currentPatch%frac_burnt
              endif
 
-          endif
-       endif! fire
-       ! convert frac_burnt to % prior to accumulating at site level
-       currentSite%frac_burnt = currentSite%frac_burnt + currentPatch%frac_burnt * currentPatch%area/area     
+          endif ! lb
+
+         ROS   = currentPatch%ROS_front / 60.0_r8 !m/min to m/sec 
+         W     = currentPatch%TFC_ROS / 0.45_r8 !kgC/m2 to kgbiomass/m2          
+
+         ! EQ 15 Thonicke et al 2010
+         !units of fire intensity = (kJ/kg)*(kgBiomass/m2)*(m/min)*unitless_fraction
+         currentPatch%FI = SF_val_fuel_energy * W * ROS * currentPatch%frac_burnt !kj/m/s, or kW/m
+       
+         if(write_sf == itrue)then
+             if( hlm_masterproc == itrue ) write(fates_log(),*) 'fire_intensity',currentPatch%fi,W,currentPatch%ROS_front
+         endif
+
+         !'decide_fire' subroutine 
+         if (currentPatch%FI > SF_val_fire_threshold) then !track fires greater than kW/m energy threshold
+            currentPatch%fire = 1 ! Fire...    :D
+          
+         else     
+            currentPatch%fire       = 0 ! No fire... :-/
+            currentPatch%FD         = 0.0_r8
+            currentPatch%frac_burnt = 0.0_r8
+         endif         
+          
+       endif! NF ignitions check
+
+       
+       ! accumulate frac_burnt % at site level
+       currentSite%frac_burnt = currentSite%frac_burnt + currentPatch%frac_burnt    
 
        currentPatch => currentPatch%younger
 
     enddo !end patch loop
 
-  end subroutine area_burnt
+  end subroutine area_burnt_intensity
+
+
 
   !*****************************************************************
   subroutine  crown_scorching ( currentSite ) 
   !*****************************************************************
-    !currentPatch%SH !average scorch height for the patch(m)
-    !currentPatch%FI  average fire intensity of flaming front during day.  kW/m.
+
+    !currentPatch%FI       average fire intensity of flaming front during day.  kW/m.
+    !currentPatch%SH(pft)  scorch height for all cohorts of a given PFT on a given patch (m)
 
     type(ed_site_type), intent(in), target :: currentSite
 
-    type(ed_patch_type), pointer :: currentPatch
+    type(ed_patch_type), pointer  :: currentPatch
     type(ed_cohort_type), pointer :: currentCohort
 
-    real(r8) ::  f_ag_bmass      ! fraction of tree cohort's above-ground biomass as a proportion of total patch ag tree biomass
     real(r8) ::  tree_ag_biomass ! total amount of above-ground tree biomass in patch. kgC/m2
     real(r8) ::  leaf_c          ! leaf carbon      [kg]
     real(r8) ::  sapw_c          ! sapwood carbon   [kg]
     real(r8) ::  struct_c        ! structure carbon [kg]
 
+    integer  ::  i_pft
+
 
     currentPatch => currentSite%oldest_patch;  
     do while(associated(currentPatch)) 
-
+       
        tree_ag_biomass = 0.0_r8
-       f_ag_bmass = 0.0_r8
        if (currentPatch%fire == 1) then
           currentCohort => currentPatch%tallest;
           do while(associated(currentCohort))  
-             if (EDPftvarcon_inst%woody(currentCohort%pft) == 1) then !trees only
-
-                leaf_c = currentCohort%prt%GetState(leaf_organ, all_carbon_elements)
-                sapw_c = currentCohort%prt%GetState(sapw_organ, all_carbon_elements)
-                struct_c = currentCohort%prt%GetState(struct_organ, all_carbon_elements)
-
-                tree_ag_biomass = tree_ag_biomass + &
-                      currentCohort%n * (leaf_c + & 
-                      EDPftvarcon_inst%allom_agb_frac(currentCohort%pft)*(sapw_c + struct_c))
-             endif !trees only
-
-             currentCohort=>currentCohort%shorter;
-
-          enddo !end cohort loop
-
-          !This loop weights the scorch height for the contribution of each cohort to the overall biomass.   
-
-         ! does this do anything? I think it might be redundant? RF. 
-          currentPatch%SH = 0.0_r8
-          currentCohort => currentPatch%tallest;
-          do while(associated(currentCohort))
-             if (EDPftvarcon_inst%woody(currentCohort%pft) == 1 &
-                  .and. (tree_ag_biomass > 0.0_r8)) then !trees only
+             if ( int(prt_params%woody(currentCohort%pft)) == itrue) then !trees only
 
                 leaf_c = currentCohort%prt%GetState(leaf_organ, all_carbon_elements)
                 sapw_c = currentCohort%prt%GetState(sapw_organ, all_carbon_elements)
                 struct_c = currentCohort%prt%GetState(struct_organ, all_carbon_elements)
                 
-                f_ag_bmass = currentCohort%n * (leaf_c + &
-                             EDPftvarcon_inst%allom_agb_frac(currentCohort%pft)*(sapw_c + struct_c)) &
-                             / tree_ag_biomass
-
-                !equation 16 in Thonicke et al. 2010
-                if(write_SF == itrue)then
-                   if ( hlm_masterproc == itrue ) write(fates_log(),*) 'currentPatch%SH',currentPatch%SH,f_ag_bmass
-                endif
-                !2/3 Byram (1959)
-                currentPatch%SH = currentPatch%SH + f_ag_bmass * &
-                      EDPftvarcon_inst%fire_alpha_SH(currentCohort%pft) * (currentPatch%FI**0.667_r8) 
-
+                tree_ag_biomass = tree_ag_biomass + &
+                      currentCohort%n * (leaf_c + & 
+                      prt_params%allom_agb_frac(currentCohort%pft)*(sapw_c + struct_c))
              endif !trees only
              currentCohort=>currentCohort%shorter;
           enddo !end cohort loop
+
+          do i_pft=1,numpft
+             if (tree_ag_biomass > 0.0_r8  .and. int(prt_params%woody(i_pft)) == itrue) then 
+                
+                !Equation 16 in Thonicke et al. 2010 !Van Wagner 1973 EQ8 !2/3 Byram (1959)
+                currentPatch%Scorch_ht(i_pft) = EDPftvarcon_inst%fire_alpha_SH(i_pft) * (currentPatch%FI**0.667_r8)
+
+                if(write_SF == itrue)then
+                   if ( hlm_masterproc == itrue ) write(fates_log(),*) 'currentPatch%SH',currentPatch%Scorch_ht(i_pft)
+                endif
+             else
+                currentPatch%Scorch_ht(i_pft) = 0.0_r8
+             endif ! tree biomass
+          end do
+
        endif !fire
 
        currentPatch => currentPatch%younger;  
@@ -902,19 +913,21 @@ contains
 
           do while(associated(currentCohort))  
              currentCohort%fraction_crown_burned = 0.0_r8
-             if (EDPftvarcon_inst%woody(currentCohort%pft) == 1) then !trees only
+             if ( int(prt_params%woody(currentCohort%pft)) == itrue) then !trees only
                 ! Flames lower than bottom of canopy. 
                 ! c%hite is height of cohort
-                if (currentPatch%SH < (currentCohort%hite-currentCohort%hite*EDPftvarcon_inst%crown(currentCohort%pft))) then 
+                if (currentPatch%Scorch_ht(currentCohort%pft) < &
+                     (currentCohort%hite-currentCohort%hite*EDPftvarcon_inst%crown(currentCohort%pft))) then 
                    currentCohort%fraction_crown_burned = 0.0_r8
                 else
                    ! Flames part of way up canopy. 
                    ! Equation 17 in Thonicke et al. 2010. 
                    ! flames over bottom of canopy but not over top.
-                   if ((currentCohort%hite > 0.0_r8).and.(currentPatch%SH >=  &
+                   if ((currentCohort%hite > 0.0_r8).and.(currentPatch%Scorch_ht(currentCohort%pft) >=  &
                         (currentCohort%hite-currentCohort%hite*EDPftvarcon_inst%crown(currentCohort%pft)))) then 
 
-                           currentCohort%fraction_crown_burned =  (currentPatch%SH-currentCohort%hite*(1.0_r8- &
+                        currentCohort%fraction_crown_burned = (currentPatch%Scorch_ht(currentCohort%pft) - &
+                                currentCohort%hite*(1.0_r8 - &
                                 EDPftvarcon_inst%crown(currentCohort%pft)))/(currentCohort%hite* &
                                 EDPftvarcon_inst%crown(currentCohort%pft)) 
 
@@ -963,7 +976,7 @@ contains
        if (currentPatch%fire == 1) then
           currentCohort => currentPatch%tallest;
           do while(associated(currentCohort))  
-             if (EDPftvarcon_inst%woody(currentCohort%pft) == 1) then !trees only
+             if ( int(prt_params%woody(currentCohort%pft)) == itrue) then !trees only
                 ! Equation 21 in Thonicke et al 2010
                 bt = EDPftvarcon_inst%bark_scaler(currentCohort%pft)*currentCohort%dbh ! bark thickness. 
                 ! Equation 20 in Thonicke et al. 2010. 
@@ -1015,7 +1028,7 @@ contains
           do while(associated(currentCohort))  
              currentCohort%fire_mort = 0.0_r8
              currentCohort%crownfire_mort = 0.0_r8
-             if (EDPftvarcon_inst%woody(currentCohort%pft) == 1) then
+             if ( int(prt_params%woody(currentCohort%pft)) == itrue) then
                 ! Equation 22 in Thonicke et al. 2010. 
                 currentCohort%crownfire_mort = EDPftvarcon_inst%crown_kill(currentCohort%pft)*currentCohort%fraction_crown_burned**3.0_r8
                 ! Equation 18 in Thonicke et al. 2010. 

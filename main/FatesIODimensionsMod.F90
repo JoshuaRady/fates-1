@@ -7,7 +7,9 @@ module FatesIODimensionsMod
 
     ! The following dimension names must be replicated in
     ! CLM/ALMs histFileMod.F90 and 
-
+    character(*), parameter, public :: levcapf = 'fates_levcapf'      ! matches histFileMod
+    character(*), parameter, public :: levcacls = 'fates_levcacls'    ! matches histFileMod
+   
     character(*), parameter, public  :: cohort = 'cohort'           ! matches clm_varcon
     character(*), parameter, public  :: patch = 'patch'             ! matches clm_varcon
     character(*), parameter, public  :: column = 'column'           ! matches clm_varcon
@@ -25,12 +27,13 @@ module FatesIODimensionsMod
     character(*), parameter, public  :: levcan = 'fates_levcan'        ! matches histFileMod
     character(*), parameter, public  :: levcnlf = 'fates_levcnlf'      ! matches histFileMod
     character(*), parameter, public  :: levcnlfpft = 'fates_levcnlfpf' ! matches histFileMod
+    character(*), parameter, public  :: levagefuel = 'fates_levagefuel' ! matches histFileMod
     
     character(*), parameter, public  :: levelem =  'fates_levelem'
     character(*), parameter, public  :: levelpft = 'fates_levelpft'
     character(*), parameter, public  :: levelcwd = 'fates_levelcwd'
     character(*), parameter, public  :: levelage = 'fates_levelage'
-
+    
     ! patch = This is a structure that records where FATES patch boundaries
     ! on each thread point to in the host IO array, this structure
     ! is allocated by number of threads
@@ -45,8 +48,14 @@ module FatesIODimensionsMod
     ! levscpf = This is a structure that records the boundaries for the
     ! number of size-class x pft dimension
 
+    ! levcapf = This is a structure that records the boundaries for the
+    ! number of cohort-age-class x pft dimension
+
     ! levscls = This is a structure that records the boundaries for the
     ! number of size-class dimension
+
+    ! levcacls = This is a structure that records the boundaries for the 
+    ! number of cohort age class dimension
 
     ! levpft = This is a structure that records the boundaries for the
     ! number of pft dimension
@@ -81,6 +90,8 @@ module FatesIODimensionsMod
     ! levagepft = This is a strcture that records the boundaries for the 
     ! number of patch age x pft
 
+    ! levagefuel = This is a strcture that records the boundaries for the 
+    ! number of patch age x fuel size class
 
     ! levelem  = This records the boundaries for the number of elements
     ! levelpft = This records the boundaries for elements x pft
@@ -105,8 +116,12 @@ module FatesIODimensionsMod
        integer :: agepft_class_end
        integer :: sizepft_class_begin
        integer :: sizepft_class_end
+       integer :: coagepf_class_begin
+       integer :: coagepf_class_end
        integer :: size_class_begin
        integer :: size_class_end
+       integer :: coage_class_begin
+       integer :: coage_class_end
        integer :: pft_class_begin
        integer :: pft_class_end
        integer :: age_class_begin
@@ -131,6 +146,8 @@ module FatesIODimensionsMod
        integer :: elcwd_end
        integer :: elage_begin
        integer :: elage_end
+       integer :: agefuel_begin
+       integer :: agefuel_end
     end type fates_bounds_type
     
 
