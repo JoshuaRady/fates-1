@@ -1,3 +1,26 @@
+!JMR_NOTES_START:---------------------------------------------------------------
+! Modifications Description
+! Based on EDCanopyStructureMod.F90 from FATES sci.1.31.0_api.8.0.0
+! Modified by; Joshua M. Rady
+! Started 4/16/2020
+! 11/12/2019
+!	Currently this is being used exclusively as a source mod so I'm playing fast and loose
+! with the comments etc.
+!
+! Version 1: 4/16/2020 Exp. 7/42
+! - 
+! Version 2: 4/17/2020 Exp. 7/42
+! - Note: I did not add these notes before uploading this file to FATES_VTST_KingAndQueenCoVA_CRUNCEP_BothS_SpreadTest9
+! so it is labled version 1 there but is actually this code.
+! - Revert to the default spread decrement behavior in canopy_spread().
+!
+! Version 3: 7/11/2020 Exp. 7/50
+!   This version aligns with parameterization U.
+! - Clean up comments and remove unused code.
+! - Decrease the spread increment in canopy_spread() to 1%.
+!
+!JMR_NOTES_END:-----------------------------------------------------------------
+
 module EDCanopyStructureMod
 
   ! =====================================================================================
@@ -1192,6 +1215,16 @@ contains
 
   ! ============================================================================
 
+  ! JMR_NOTES_START:--------------------------------------------------------------------------------
+  ! The default behavior results in a transition in the canopy allometry that forms a 'shelf' at the
+  ! canopy closure threshold. Here I modify the behavior to make transition more gradual.  This is
+  ! accomplished by treating the canopy closure threshold as the starting threshold and make the
+  ! triggering threshold a function of the spread so that the spread moves from 1 to 0 over the
+  ! domain from the starting threshold (the parameter value fates_canopy_closure_thresh) to full
+  ! canopy closure.
+  ! I also decreased the spread increment from 5% to 1%, which makes canopy contraction more similar
+  ! to the default behavior.
+  ! JMR_NOTES_END:----------------------------------------------------------------------------------
   subroutine canopy_spread( currentSite )
     !
     ! !DESCRIPTION:
@@ -1209,10 +1242,15 @@ contains
     type (ed_patch_type) , pointer :: currentPatch
     real(r8) :: sitelevel_canopyarea  ! Amount of canopy in top layer at the site level
     real(r8) :: inc                   ! Arbitrary daily incremental change in canopy area 
-    integer  :: z
+    !integer  :: z  JMR: Does not appear to be used.
+    
+    real(r8) :: transitionSlope       ! The slope used to calculate the transition the canopy allometry.
+    real(r8) :: triggerUpper          ! The upper value (ceiling) that triggers an decrease in spread.
+    !real(r8) :: triggerLower          ! The lower value (floor) that triggers an increase in spread.
+    
     !----------------------------------------------------------------------
 
-    inc = 0.05_r8
+    inc = 0.01_r8
 
     currentPatch => currentSite%oldest_patch
 
@@ -1235,11 +1273,18 @@ contains
 
     enddo !currentPatch
 
-    ! If the canopy area is approaching closure,
-    ! squash the tree canopies and make them taller and thinner
-    if( sitelevel_canopyarea/AREA .gt. ED_val_canopy_closure_thresh ) then
+    ! Calculate the amount of canopy closure that should trigger an increase in the spread factor
+    ! given its current value.  Assume that spread changes linearly between bounds.
+    ! The trigger starts at the starting threshold when the canopy is very open
+    ! (spread = 1) and moves linearly towards 0 as the canopy closes (area approaches 1):
+    transitionSlope = (1 - ED_val_canopy_closure_thresh)
+    triggerUpper = 1 - transitionSlope * currentSite%spread
+    
+    !If the canopy area has grown or contracted significantly adjust the spread but
+    !otherwise leave it the same:
+    if (sitelevel_canopyarea/AREA .gt. triggerUpper) then
        currentSite%spread = currentSite%spread - inc
-    else 
+    else
        currentSite%spread = currentSite%spread + inc 
     endif
 

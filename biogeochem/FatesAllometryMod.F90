@@ -79,6 +79,167 @@
 !
 !===============================================================================
 
+!JMR_NOTES_START:-----------------------------------------------------------------------------------
+! Modifications Description
+! Based on FatesAllometryMod.F90 from FATES sci.1.31.0_api.8.0.0
+! Source Modifications Version 4
+! 11/12/2019
+!	Currently this is being used exclusively as a source mod so I'm playing fast and loose
+! with the comments etc.
+!
+! In this version I retain the changes from the previous version:
+! - Changes to bagw_allom() to call d2bagw_GonzalezBenecke2014_T1() when fates_allom_amode = 4 (new condition).
+! - Changes to blmax_allom() to call dh2blmax_Zhao2105_10Y7() when fates_allom_amode = 4 (new condition).
+! - Changes to carea_allom() to call carea_2pwr() when fates_allom_lmode = 4 (new condition).
+! - Add handling to bdead_allom() for fates_allom_amode = 4.
+!
+! - Addition of the function d2blmax_Gonzalez_Benecke2014_F1() leaf allometry, which never worked as intended and is not currently used.
+! - Addition of the function dh2blmax_Zhao2105_10Y7() leaf allometry, which seems to work correctly.
+! - Addition of the d2bagw_GonzalezBenecke2014_T1() aboveground biomass allometry.
+!
+! In this version I made the following changes:
+! - Add carea_GeringAndMay1995().  I would like to make this a generic function
+!(carea_Linear_DBH_Diameter() maybe) but I would have to add parameters to the PFT
+!parameter file to complete that.
+! - Import pi_const from FatesConstantsMod.
+! - Changed carea_allom() to call carea_GeringAndMay1995() rather than carea_2pwr() when fates_allom_lmode = 5 (new condition).
+!This allows me to run simulations in the same case with the two canopy allometries simultaneously, using different parameter settings.
+! - Add case 5 to blmax_allom() so dh2blmax_Zhao2105_10Y7() is still called when fates_allom_lmode = 5.
+!
+! Version 4:
+! - Adjust carea_GeringAndMay1995() spread / trimming behavior.
+!
+! Version 5: 2/24/2020
+! - Correct an error (missing parentheses) in carea_GeringAndMay1995() spread equation.
+!
+! Version 6: 2/24/2020
+! - Test: Alter carea_GeringAndMay1995() to use the original equation without responding to the spread factor.
+!
+! Version 7: 2/25/2020
+! - Approximate the behavior of version 4 without the erroneous spread calculation.
+!
+! Version 8: 3/31/2020 Exp. 7/42
+! - Reintroduce the version of Gering & May canopy allometry, carea_GeringAndMay1995_B(),
+!that ignores the spread factor (see version 6) as a separate function with a different
+!switch value, allom_lmode = 6, so both versions can be run a the same time.
+! 
+! Version 9: 4/14/2020 Exp. 7/42
+! - Reintroduce the version of Gering & May canopy allometry from version 5 above that
+! uses the canopy spread factor as carea_GeringAndMay1995_A5() (A since implementation
+! came before carea_GeringAndMay1995_B(), and 5 to denote the source mod version it
+! originated in) and designate the switch value allom_lmode = 7 for it in blmax_allom() &
+! carea_allom().
+!
+! Version 10: 4/21-22/2020 Exp. 7/42
+! - Add a implementation carea_GeringAndMay1995_C10(), based on A5, that observes the
+! the spread but has a constant crown area intercept at DBH = 0. Add switch value,
+! allom_lmode = 8 for this version.
+!
+! Version 11: 6/9/2020 Exp. 7/42
+! - Add the subroutines d2h_ChapmanRichards() and h2d_ChapmanRichards() and a switch value
+! allom_hmode = 6 for it in h_allom() and h2d_allom().  I had to add allom_dbh_maxheight
+! to h2d_allom() as well.
+!
+! Version 12: 7/11/2020 Exp. 7/50 ------------------------------------------------------------------
+!   This version aligns with parameterization U.
+!   The changes made in this version should not change results assuming allometry switches are
+! updated.  Only code that was no longer in use was removed.  The remaining changes are to comments
+! and formatting.
+!
+! Change Summary:
+! - Remove previous draft allometry implementations: d2blmax_Gonzalez_Benecke2014_F1(),
+! the first implementation of carea_GeringAndMay1995(), carea_GeringAndMay1995_B(),
+! and carea_GeringAndMay1995_A5().
+! - Corrected dh2blmax_Zhao2105_10Y7() -> dh2blmax_Zhao2015_10Y7()
+! - Change carea_GeringAndMay1995_C10() -> carea_GeringAndMay1995()
+! - Clean up comments and remove unused code.
+! - Apply style guidelines and add descriptions to my added functions.
+!
+! Summary of new allometries and switches:
+! DBH to Height:
+! - allom_hmode: Mode 6 -> Chapman-Richards
+! - h2d_ChapmanRichards()
+! - d2h_ChapmanRichards()
+!
+! Aboveground Biomass (AGB):
+! - allom_amode: Mode 4 -> Gonzalez-Benecke et al. 2014 Equation T1
+! - d2bagw_GonzalezBenecke2014_T1()
+!
+! Diameter to Leaf Biomass:
+! - allom_lmode: Mode 4 (was 8) -> Zhao et al. 2015 Equation Y7 (Yhat7)
+! - dh2blmax_Zhao2015_10Y7()
+!
+! Crown Area Allometry:
+! - allom_lmode: Mode 4 (was 8) -> Gering & May 1995
+! - carea_GeringAndMay1995()
+!
+! Dead Biomass:
+! - allom_amode: Mode 4 = same as 2 & 3
+!
+! Version 13: 7/20/2020 Exp. 7/50 ------------------------------------------------------------------
+!   This version aligns with parameterization U2 and testing cases.
+!   I made a mistake in version 12 by removing the version of the Gering & May allometry that
+! ignored the spread factor.
+!
+! Change Summary:
+! - Restore the fixed spread Gering & May allometry from V11 (carea_GeringAndMay1995):
+!    - Renamed it carea_GeringAndMay1995_Fixed().
+!    - Improve the comments and formating constant with carea_GeringAndMay1995_Spread().
+! - Rename carea_GeringAndMay1995() -> carea_GeringAndMay1995_Spread()
+! - Add carea_GeringAndMay1995_InteceptTest(), a variant that removes the area intercept.
+! - Updated allom_lmode switches.
+!
+! Summary of modified allometries and switches:
+! DBH to Height:
+! - allom_hmode: Mode 6 -> Chapman-Richards
+! - h2d_ChapmanRichards()
+! - d2h_ChapmanRichards()
+!
+! Aboveground Biomass (AGB):
+! Based on Gonzalez-Benecke et al. 2014 Equation T1
+! - allom_amode: Mode 4 -> d2bagw_GonzalezBenecke2014_T1()
+!
+! Diameter to Leaf Biomass:
+! Based on Zhao et al. 2015 Equation Y7 (Yhat7)
+! - allom_lmode: Mode 4,5,6 (was 4) -> dh2blmax_Zhao2015_10Y7()
+!
+! Crown Area Allometry:
+! Based on Gering & May 1995.
+! - allom_lmode: Mode 4 -> carea_GeringAndMay1995_Fixed()
+! - allom_lmode: Mode 5 (was 4) -> carea_GeringAndMay1995_Spread()
+! - allom_lmode: Mode 6 -> carea_GeringAndMay1995_InteceptTest()
+!
+! Dead Biomass:
+! - allom_amode: Mode 4 = same as 2 & 3
+!
+! Version 14: 7/20/2020 Exp. 7/50 ------------------------------------------------------------------
+!   This version corrects the intercept test code to do what I intended.
+!
+! Change Summary:
+! - Modify carea_GeringAndMay1995_InteceptTest():
+!    - Correct the way I removed the intercept.
+!    - Renamed it carea_GeringAndMay1995_ZeroIntecept().
+! - Allometries and switches are unchanged from the previous version.
+!
+! Version 15: 8/13/2020 Exp. 7/52 ------------------------------------------------------------------
+! Change Summary:
+!   Add two values for allom_lmode (7 & 8) that allow separately specifying the leaf and crown allometries.
+! These changes should be backward compatible with version 14.
+!
+! Diameter to Leaf Biomass:
+! Based on Zhao et al. 2015 Equation Y7 (Yhat7)
+! - allom_lmode: Mode 4,5,6,7 (was 4) -> dh2blmax_Zhao2015_10Y7()
+! - allom_lmode: Mode 8 = same as 1
+!
+! Crown Area Allometry:
+! Based on Gering & May 1995.
+! - allom_lmode: Mode 4 -> carea_GeringAndMay1995_Fixed()
+! - allom_lmode: Mode 5 -> carea_GeringAndMay1995_Spread()
+! - allom_lmode: Mode 6,8 -> carea_GeringAndMay1995_InteceptTest()
+! - allom_lmode: Mode 7 = same as 1
+!
+!JMR_NOTES_END:-------------------------------------------------------------------------------------
+
 module FatesAllometryMod
 
   ! If this is a unit-test, these globals will be provided by a wrapper
@@ -92,6 +253,7 @@ module FatesAllometryMod
   use FatesConstantsMod, only : calloc_abs_error
   use FatesConstantsMod, only : fates_unset_r8
   use FatesConstantsMod, only : itrue
+  use FatesConstantsMod, only : pi_const !JMR_MOD 11/12/2019
   use shr_log_mod      , only : errMsg => shr_log_errMsg
   use FatesGlobals     , only : fates_log
   use FatesGlobals     , only : endrun => fates_endrun
@@ -291,6 +453,7 @@ contains
                 p2          => prt_params%allom_d2h2(ipft), &
                 p3          => prt_params%allom_d2h3(ipft), &
                 allom_hmode => prt_params%allom_hmode(ipft))
+                dbh_maxh    => prt_params%allom_dbh_maxheight(ipft)) ! JMR_MOD 6/9/2020
 
       select case(int(allom_hmode))
       case (1) ! O'Brien et al 1995, BCI
@@ -303,6 +466,8 @@ contains
          call h2d_chave2014(h,p1,p2,p3,d,dddh)
       case (5) ! Martinez-Cano
          call h2d_martcano(h,p1,p2,p3,d,dddh)
+      case (6)   ! Chapman-Richards JMR_MOD 6/9/2020
+         call h2d_ChapmanRichards(h,p1,p2,p3,dbh_maxh,d,dddh)
       case DEFAULT
          write(fates_log(),*) 'An undefined h2d allometry was specified: ',allom_hmode
          write(fates_log(),*) 'Aborting'
@@ -342,6 +507,8 @@ contains
          call d2h_chave2014(d,p1,p2,p3,dbh_maxh,h,dhdd)
       case (5)   ! Martinez-Cano
          call d2h_martcano(d,p1,p2,p3,dbh_maxh,h,dhdd)
+      case (6)   ! Chapman-Richards JMR_MOD 6/9/2020
+         call d2h_ChapmanRichards(d,p1,p2,p3,dbh_maxh,h,dhdd)
       case DEFAULT
          write(fates_log(),*) 'An undefined height allometry was specified: ',allom_hmode
          write(fates_log(),*) 'Aborting'
@@ -386,6 +553,8 @@ contains
       case (3) !"chave14") 
          call h_allom(d,ipft,h,dhdd)
          call dh2bagw_chave2014(d,h,dhdd,p1,p2,wood_density,c2b,bagw,dbagwdd)
+      case (4) ! Gonzalez-Benecke et al. 2014 Equation T1 JMR_MOD 11/5/2019:
+         call d2bagw_GonzalezBenecke2014_T1(d,p1,p2,c2b,bagw,dbagwdd)
       case DEFAULT
          write(fates_log(),*) 'An undefined AGB allometry was specified: ',allom_amode
          write(fates_log(),*) 'Aborting'
@@ -406,6 +575,11 @@ contains
     integer(i4),intent(in) :: ipft      ! PFT index
     real(r8),intent(out)   :: blmax     ! plant leaf biomass [kg]
     real(r8),intent(out),optional :: dblmaxdd  ! change leaf bio per diameter [kgC/cm]
+    
+    !JMR_MOD_START 11/10/2019:
+    real(r8)               :: h       ! height
+    real(r8)               :: dhdd    ! Not used actually used. Omit?
+    !JMR_MOD_END.
 
     associate( dbh_maxh    => prt_params%allom_dbh_maxheight(ipft), &
                rho         => prt_params%wood_density(ipft), &
@@ -416,12 +590,15 @@ contains
                p3          => prt_params%allom_d2bl3(ipft))
       
       select case(int(allom_lmode))
-      case(1) !"salda")
+      case(1,8) !"salda") ! JMR_MOD 8/13/2020.
          call d2blmax_salda(d,p1,p2,p3,rho,dbh_maxh,c2b,blmax,dblmaxdd)
       case(2) !"2par_pwr")
          call d2blmax_2pwr(d,p1,p2,c2b,blmax,dblmaxdd)
       case(3) ! dh2blmax_2pwr
          call dh2blmax_2pwr(d,p1,p2,dbh_maxh,c2b,blmax,dblmaxdd)
+      case(4,5,6,7) !Zhao et al. 2015 Equation Y7 JMR_MOD_START 8/13/2020:
+         call h_allom(d,ipft,h,dhdd)
+         call dh2blmax_Zhao2015_10Y7(d,h,p1,p2,p3,c2b,blmax,dblmaxdd) ! JMR_MOD_END.
       case DEFAULT
          write(fates_log(),*) 'An undefined leaf allometry was specified: ', &
               allom_lmode
@@ -470,7 +647,7 @@ contains
        endif
 
        select case(int(allom_lmode))
-       case(1)
+       case(1,7) ! JMR_MOD 8/13/2020
           dbh_eff = min(dbh,dbh_maxh)
           call carea_2pwr(dbh_eff,site_spread,d2bl_p2,d2bl_ediff,d2ca_min,d2ca_max,c_area,do_inverse)
           capped_allom = .true.
@@ -481,6 +658,16 @@ contains
           dbh_eff = min(dbh,dbh_maxh)
           call carea_2pwr(dbh_eff,site_spread,d2bl_p2,d2bl_ediff,d2ca_min,d2ca_max,c_area,do_inverse)
           capped_allom = .true.
+       case(4) ! JMR_MOD_START 8/13/2020:
+          call carea_GeringAndMay1995_Fixed(dbh,site_spread,d2ca_min,d2ca_max,c_area,do_inverse)
+          capped_allom = .false.
+       case(5)
+          call carea_GeringAndMay1995_Spread(dbh,site_spread,d2ca_min,d2ca_max,c_area,do_inverse)
+          capped_allom = .false.
+       case(6,8)
+          call carea_GeringAndMay1995_ZeroIntecept(dbh,site_spread,d2ca_min,d2ca_max,c_area,do_inverse)
+          capped_allom = .false.
+          ! JMR_MOD_END.
        case DEFAULT
           write(fates_log(),*) 'An undefined leaf allometry was specified: ', &
                allom_lmode
@@ -983,7 +1170,7 @@ contains
             dbdeaddd = dbagwdd/agb_fraction
          end if
          
-      case(2,3)
+      case(2,3,4)!JMR_MOD 11/5/2019: Added case 4.
          
          bdead = bagw + bbgw - bsap
          if(present(dbagwdd) .and. present(dbbgwdd) .and. &
@@ -1301,6 +1488,40 @@ contains
     return
   end subroutine dh2blmax_2pwr
   
+  !============================================================================
+  
+  !JMR_MOD_START 11/10/2019:
+  subroutine dh2blmax_Zhao2015_10Y7(d,h,p1,p2,p3,c2b,blmax,dblmaxdd)
+    
+    !-----------------------------------------------------------------------------------------------
+    ! Calculate foliage biomass from tree DBH and height based on equation Y7 from:
+    ! Additive Tree Biomass Equations for Midrotation Loblolly Pine Plantations.
+    ! Dehai Zhao, Michael Kane, Daniel Markewitz, Robert Teskey, Michael Clutter.
+    ! Forest Science 61(4): 613-623, 2015. https://doi.org/10.5849/forsci.14-193
+    !
+    ! Note: This allometry is based on foliage measurements made during the dormant season.
+    !-----------------------------------------------------------------------------------------------
+    
+    real(r8),intent(in)    :: d         ! plant diameter [cm]
+    real(r8),intent(in)    :: h         ! height (m)
+    real(r8),intent(in)    :: p1
+    real(r8),intent(in)    :: p2
+    real(r8),intent(in)    :: p3
+    real(r8),intent(in)    :: c2b       ! c to biomass multiplier (~2.0)
+    
+    real(r8),intent(out)   :: blmax     ! plant leaf biomass [kg]
+    real(r8),intent(out),optional   :: dblmaxdd  ! change leaf bio per diam [kgC/cm]
+    
+    blmax = p1 * d**p2 * h**p3 / c2b
+    
+    if (present(dblmaxdd)) then
+       dblmaxdd = p1 * p2 * d**(p2 - 1.0_r8) * h**p3 / c2b
+    end if
+    
+    return
+  end subroutine dh2blmax_Zhao2015_10Y7
+  !JMR_MOD_END.
+  
   ! =========================================================================
   ! Diameter to height (D2H) functions
   ! =========================================================================
@@ -1546,6 +1767,66 @@ contains
     return
   end subroutine d2h_martcano
   
+  !============================================================================
+  
+  !JMR_MOD_START 6/9/2020:
+  subroutine d2h_ChapmanRichards(d,p1,p2,p3,dbh_maxh,h,dhdd)
+  
+    !-----------------------------------------------------------------------------------------------
+    ! The Chapman-Richards generalized logistic model.
+    ! Originating in:
+    ! A Flexible Growth Function for Empirical Use.
+    ! F. J. Richards.
+    ! Journal of Experimental Botany 10(2): 290-301, 1959. https://doi.org/10.1093/jxb/10.2.290
+    ! and
+    ! Statistical problems in dynamics of exploited fisheries populations.
+    ! Douglas G. Chapman
+    ! Proc. 4th Berkeley Symp. on Mathematics, Statistics and Probability. Vol. 4. University of
+    ! California Press Berkeley, 1961.
+    !
+    ! Input Arguments:
+    ! d: Diameter at breast height (cm)
+    ! p1: Height intercept parameter
+    ! p2: The rate parameter
+    ! p3: The shape parameter
+    ! dbh_maxh: The maximum height asymptote parameter *
+    !
+    !   In order to keep the parameters as consistant with the meanings in the parameter file we
+    ! keep p1 as the intercept parameter. Many sources do not explicitly include an intercept in
+    ! their equation for the Chapman-Richards equation but it is important for the full
+    ! generalizability of the model.  The intercept needs to be used with care.  In principle the
+    ! height at DBH = 0 should be breast height.  However, this is not something which FATES
+    ! enforces.  Zero intercepts are allowed. For consistency of assumptions a zero intercept is
+    ! probably appropriate now and makes the model tolerate trees that are really too small for the
+    ! model.  This is a good thing until a more consistent way of handling saplings in the model is
+    ! introduced.
+    !   The dbh_maxh parameter is intended to be the DBH at the maximum height.  Here it is
+    ! interpreted as the height asymptote parameter.  I have checked this file to make sure it won't
+    ! cause issues.  I haven't found any problems but this difference of intention could cause
+    ! confusion and should be brought up with the FATES development core team.
+    !
+    ! Output:
+    ! h: Total tree height (m)
+    ! dhdd: Change in height per diameter (m/cm) (if provided).
+    !-----------------------------------------------------------------------------------------------
+    
+    real(r8),intent(in)  :: d              ! Diameter at breast height (cm)
+    real(r8),intent(in)  :: p1             ! Height intercept parameter
+    real(r8),intent(in)  :: p2             ! The rate parameter
+    real(r8),intent(in)  :: p3             ! The shape parameter
+    real(r8),intent(in)  :: dbh_maxh       ! The maximum height asymptote parameter
+    real(r8),intent(out) :: h              ! Total tree height (m)
+    real(r8),intent(out),optional :: dhdd  ! Change in height per diameter (m/cm)
+    
+    h = dbh_maxh * (1 - exp(-p2 * d))**p3 + p1
+    
+    if(present(dhdd))then
+       dhdd = (dbh_maxh * p2 * p3 * (1 - exp(-p2 * d))**p3) / (exp(p2 * d) - 1)
+    end if
+    
+    return
+  end subroutine d2h_ChapmanRichards
+  !JMR_MOD_END.
   
   ! =========================================================================
   ! Diameter to (2) above-ground biomass
@@ -1706,6 +1987,34 @@ contains
 
     return
   end subroutine dh2bagw_salda
+  
+  !============================================================================
+  
+  !JMR_MOD_START 11/5/2019:
+  subroutine d2bagw_GonzalezBenecke2014_T1(d,p1,p2,c2b,bagw,dbagwdd)
+    
+    !-----------------------------------------------------------------------------------------------
+    ! Calculate the aboveground biomass for a tree of DBH d using equation T1 from:
+    ! Local and general above-stump biomass functions for loblolly pine and slash pine trees.
+    ! Carlos A. Gonzalez-Benecke et. al.
+    ! Forest Ecology and Management 334: 254-276, 2014.
+    !-----------------------------------------------------------------------------------------------
+     
+    real(r8),intent(in) :: d             ! plant diameter [cm]
+    real(r8),intent(in) :: p1         !
+    real(r8),intent(in) :: p2         !
+    real(r8),intent(in) :: c2b            ! carbon 2 biomass ratio
+    real(r8),intent(out) :: bagw     ! plant biomass [kgC/indiv]
+    real(r8),intent(out),optional :: dbagwdd  ! change in agb per diameter [kgC/cm]
+    
+    bagw = p1 * d**p2 / c2b
+
+    if(present(dbagwdd)) then
+       dbagwdd = p1 * p2 * d**(p2-1.0_r8) / c2b
+    end if
+    return
+  end subroutine d2bagw_GonzalezBenecke2014_T1
+  !JMR_MOD_END.
   
   ! ============================================================================
   ! height to diameter conversions
@@ -1890,6 +2199,52 @@ contains
 
   ! =====================================================================================
 
+  !JMR_MOD_START 6/9/2020:
+  subroutine h2d_ChapmanRichards(h,p1,p2,p3,dbh_maxh,d,dddh)
+  
+    !-----------------------------------------------------------------------------------------------
+    ! Inverse Chapman-Richards equation.
+    ! See d2h_ChapmanRichards() for notes about the parameters.
+    !
+    ! Input Arguments:
+    ! h: Total tree height (m)
+    ! p1: Height intercept parameter
+    ! p2: The rate parameter
+    ! p3: The shape parameter
+    ! dbh_maxh: The maximum height asymptote parameter *
+    !
+    ! Output:
+    ! d: diameter at breast height (cm)
+    ! dddh: Change in diameter per height (cm/m) (if provided).
+    ! 
+    !-----------------------------------------------------------------------------------------------
+    
+    real(r8),intent(in) :: h              ! Total tree height (m)
+    real(r8),intent(in)  :: p1             ! Height intercept parameter
+    real(r8),intent(in)  :: p2             ! The rate parameter
+    real(r8),intent(in)  :: p3             ! The shape parameter
+    real(r8),intent(in)  :: dbh_maxh       ! The maximum height asymptote parameter
+    real(r8),intent(out)  :: d              ! Diameter at breast height (cm)
+    real(r8),intent(out),optional :: dddh  ! Change in diameter per height (cm/m)
+    
+    ! h = dbh_maxh * (1 - exp(-p2 * d))**p3 + p1
+    ! h - p1 = dbh_maxh * (1 - exp(-p2 * d))**p3
+    ! (h - p1) / dbh_maxh = (1 - exp(-p2 * d))**p3
+    ! ((h - p1) / dbh_maxh)**(1/p3) = 1 - exp(-p2 * d)
+    ! ((h - p1) / dbh_maxh)**(1/p3) - 1 = - exp(-p2 * d)
+    ! 1 - ((h - p1) / dbh_maxh)**(1/p3) = exp(-p2 * d)
+    ! log(1 - ((h - p1) / dbh_maxh)**(1/p3)) = -p2 * d
+    ! d = (log(1 - ((height - htIntercept) / htMax)^(1/p2))) / -p1
+    d = (log(1 - ((h - p1) / dbh_maxh)**(1/p3))) / -p2
+    
+    if(present(dddh))then
+       dddh = ((h - p1) / dbh_maxh)**(1/p3) / (p2 * p3 * (h - p1) * (1 - ((h - p1) / dbh_maxh)**(1/p3)))
+    end if
+  
+  end subroutine h2d_ChapmanRichards
+  !JMR_MOD_END.
+
+  ! =====================================================================================
 
   subroutine CrownDepth(height,crown_depth)
 
@@ -1965,6 +2320,219 @@ contains
      endif
      
   end subroutine carea_2pwr
+  
+  !============================================================================
+  
+  subroutine carea_GeringAndMay1995_Fixed(dbh,spread,d2ca_min,d2ca_max,c_area,inverse)
+  
+    !-----------------------------------------------------------------------------------------------
+    ! This crown area allometry assumes a linear relationship between DBH and crown diameter.
+    ! This approach is used by the papers:
+    ! - Gering & May. Southern Journal of Applied Forestry 19(4): 177-181, 1995 and
+    ! - Leites et al., Forest Ecology and Management 289: 455-462, 2013.
+    ! I use the parameters from the former, which are hard coded for now.
+    ! Crown diameter is then used to calculate crown area.
+    ! 
+    ! This variant ignored the variable spread factor and used a fixed adjustment.
+    !----------------------------------------------------------------------------------------------
+    
+    real(r8),intent(inout) :: dbh      ! diameter at breast (refernce) height [cm]
+    real(r8),intent(in) :: spread      ! site level relative spread score [0-1]
+    real(r8),intent(in) :: d2ca_min    ! minimum diameter to crown area scaling factor
+    real(r8),intent(in) :: d2ca_max    ! maximum diameter to crown area scaling factor
+    real(r8),intent(inout) :: c_area   ! crown area for one plant [m2]
+    logical,intent(in)  :: inverse     ! if true, calculate dbh from crown area rather than its reverse
+    
+    real(r8)           :: spreadterm        ! Effective 2bh to crown area scaling factor
+    ! There are no crown allometry paramaters in the parameter file so we hardwire them for now:
+                                            ! Gering & May 1995 intercept parameter a = 2.9660 (diameter in feet)
+    real(r8),parameter :: p1 = 0.9040368_r8 ! Intercept converted to meters.
+                                            ! Gering & May 1995 slope parameter b = 1.4038 (in ft / in)
+    real(r8),parameter :: p2 = 0.168456_r8  ! Slope converted to meters / cm
+    real(r8)           :: c_diam            ! Crown diameter in meters.
+    
+    ! Ignore the crown plasticity / spread factor and use a fixed value:
+    spreadterm = 0.6666666_r8
+    
+    if ( .not. inverse) then
+       c_diam = p1 + p2 * dbh ! Canopy diameter based on Gering & May.
+       c_area = spreadterm * pi_const * (c_diam / 2)**2
+    else
+       !Solve for inverse:
+       !c_area = spreadterm * pi_const * (c_diam / 2)**2
+       !c_area / spreadterm / pi_const = (c_diam / 2)**2
+       !sqrt(c_area / spreadterm / pi_const) = c_diam / 2
+       !2 * sqrt(c_area / spreadterm / pi_const) = c_diam
+       c_diam = 2 * sqrt(c_area / spreadterm / pi_const)
+       
+       !c_diam = p1 + p2 * dbh
+       !c_diam - p1 = p2 * dbh
+       !(c_diam - p1) / p2 = dbh
+       dbh = (c_diam - p1) / p2
+    endif
+    
+  end subroutine carea_GeringAndMay1995_Fixed
+  !JMR_MOD_END.
+  
+  !============================================================================
+  
+  ! JMR_MOD_START 4/21/2020:
+  subroutine carea_GeringAndMay1995_Spread(dbh,spread,d2ca_min,d2ca_max,c_area,inverse)
+  
+    !-----------------------------------------------------------------------------------------------
+    ! This crown area allometry assumes a linear relationship between DBH and crown diameter.
+    ! This approach is used by the papers:
+    ! - Gering & May. Southern Journal of Applied Forestry 19(4): 177-181, 1995 and
+    ! - Leites et al., Forest Ecology and Management 289: 455-462, 2013.
+    ! I use the parameters from the former, which are hard coded for now.
+    ! Crown diameter is then used to calculate crown area.
+    ! The crown area is adjusted by the spread in a manner similar to carea_2pwr(). To maintain a 
+    ! constant intercept with a changing spread we have to jump through some mathematical hoops. The
+    ! equation is a a little convoluted but basically breaks the allometry into an fixed intercept
+    ! and variable portion, which responds to the spread.
+    !----------------------------------------------------------------------------------------------
+    
+    real(r8),intent(inout) :: dbh      ! diameter at breast (refernce) height [cm]
+    real(r8),intent(in) :: spread      ! site level relative spread score [0-1]
+    real(r8),intent(in) :: d2ca_min    ! minimum diameter to crown area scaling factor
+    real(r8),intent(in) :: d2ca_max    ! maximum diameter to crown area scaling factor
+    real(r8),intent(inout) :: c_area   ! crown area for one plant [m2]
+    logical,intent(in)  :: inverse     ! if true, calculate dbh from crown area rather than its reverse
+    
+    real(r8)           :: spreadterm        ! Effective 2bh to crown area scaling factor
+    ! There are no crown allometry paramaters in the parameter file so we hardwire them for now:
+                                            ! Gering & May 1995 intercept parameter a = 2.9660 (diameter in feet)
+    real(r8),parameter :: p1 = 0.9040368_r8 ! Intercept converted to meters.
+    real(r8),parameter :: areaIntercept = 0.6418922_r8 ! Allometry area intercept at DBH = 0 in m^2
+                                                       ! pi * (0.9040368 / 2)^2 = 0.6418922
+                                            ! Gering & May 1995 slope parameter b = 1.4038 (in ft / in)
+    real(r8),parameter :: p2 = 0.168456_r8  ! Slope converted to meters / cm
+    real(r8)           :: c_diam            ! Crown diameter in meters.
+    real(r8)           :: nominalArea       ! Holds the area calculated from Gering & May 1995 prior to spread adjustment.
+    
+    ! Spreadterm modification:
+    ! We make the assumption that the a crown allometry calculated from a range of stands
+    ! will represent the behavior of the central / most average condition.  Based on this
+    ! we make a simple modification to the default equation behavior that puts the fitted
+    ! allometry at the center of the spread:
+    ! The outside parentheses are the only necessary ones, the others are for readability,
+    spreadterm = ((spread * d2ca_max) + ((1._r8 - spread) * d2ca_min)) * 2
+    
+    if ( .not. inverse) then
+       c_diam = p1 + p2 * dbh ! Canopy diameter based on Gering & May.
+       nominalArea = pi_const * (c_diam / 2)**2 ! Canopy area based on diameter.
+       c_area = spreadterm * (nominalArea - areaIntercept) + areaIntercept ! Value adjusted by the spread.
+       
+    else
+       !Solve for inverse:
+       !c_area = spreadterm * (nominalArea - areaIntercept) + areaIntercept
+       !c_area = (spreadterm * nominalArea) - (spreadterm * areaIntercept) + areaIntercept
+       !c_area + (spreadterm * areaIntercept) - areaIntercept = spreadterm * nominalArea
+       !(c_area + (spreadterm * areaIntercept) - areaIntercept) / spreadterm = nominalArea
+       nominalArea = (c_area + (spreadterm * areaIntercept) - areaIntercept) / spreadterm
+       
+       !nominalArea = pi_const * (c_diam / 2)**2
+       !nominalArea / pi_const = (c_diam / 2)**2
+       !sqrt(nominalArea / pi_const) = c_diam / 2
+       !2 * sqrt(nominalArea / pi_const) = c_diam
+       c_diam = 2 * sqrt(nominalArea / pi_const)
+       
+       !c_diam = p1 + p2 * dbh
+       !c_diam - p1 = p2 * dbh
+       !(c_diam - p1) / p2 = dbh
+       dbh = (c_diam - p1) / p2
+    endif
+    
+  end subroutine carea_GeringAndMay1995_Spread
+  !JMR_MOD_END.
+  
+  ! =========================================================================
+
+  ! JMR_MOD_START 7/20/2020:
+  subroutine carea_GeringAndMay1995_ZeroIntecept(dbh,spread,d2ca_min,d2ca_max,c_area,inverse)
+  
+    !-----------------------------------------------------------------------------------------------
+    ! This crown area allometry assumes a linear relationship between DBH and crown diameter.
+    ! This approach is used by the papers:
+    ! - Gering & May. Southern Journal of Applied Forestry 19(4): 177-181, 1995 and
+    ! - Leites et al., Forest Ecology and Management 289: 455-462, 2013.
+    ! I use the parameters from the former, which are hard coded for now.
+    ! Crown diameter is then used to calculate crown area.
+    ! The crown area is adjusted by the spread in a manner similar to carea_2pwr(). To maintain a 
+    ! constant intercept with a changing spread we have to jump through some mathematical hoops. The
+    ! equation is a a little convoluted but basically breaks the allometry into an fixed intercept
+    ! and variable portion, which responds to the spread.
+    !
+    ! This is exactly the same as carea_GeringAndMay1995_Spread() except it the area intercept is
+    ! set to 0.
+    !----------------------------------------------------------------------------------------------
+    
+    real(r8),intent(inout) :: dbh      ! diameter at breast (refernce) height [cm]
+    real(r8),intent(in) :: spread      ! site level relative spread score [0-1]
+    real(r8),intent(in) :: d2ca_min    ! minimum diameter to crown area scaling factor
+    real(r8),intent(in) :: d2ca_max    ! maximum diameter to crown area scaling factor
+    real(r8),intent(inout) :: c_area   ! crown area for one plant [m2]
+    logical,intent(in)  :: inverse     ! if true, calculate dbh from crown area rather than its reverse
+    
+    real(r8)           :: spreadterm        ! Effective 2bh to crown area scaling factor
+    ! There are no crown allometry paramaters in the parameter file so we hardwire them for now:
+                                            ! Gering & May 1995 intercept parameter a = 2.9660 (diameter in feet)
+    real(r8),parameter :: p1 = 0.9040368_r8 ! Intercept converted to meters.
+    real(r8),parameter :: areaIntercept = 0.6418922_r8 ! Allometry area intercept at DBH = 0 in m^2
+                                                       ! pi * (0.9040368 / 2)^2 = 0.6418922
+                                            ! Gering & May 1995 slope parameter b = 1.4038 (in ft / in)
+    real(r8),parameter :: p2 = 0.168456_r8  ! Slope converted to meters / cm
+    real(r8)           :: c_diam            ! Crown diameter in meters.
+    real(r8)           :: nominalArea       ! Holds the area calculated from Gering & May 1995 prior to spread adjustment.
+    
+    ! Spreadterm modification:
+    ! We make the assumption that the a crown allometry calculated from a range of stands
+    ! will represent the behavior of the central / most average condition.  Based on this
+    ! we make a simple modification to the default equation behavior that puts the fitted
+    ! allometry at the center of the spread:
+    ! The outside parentheses are the only necessary ones, the others are for readability,
+    spreadterm = ((spread * d2ca_max) + ((1._r8 - spread) * d2ca_min)) * 2
+    
+    if ( .not. inverse) then
+       c_diam = p1 + p2 * dbh ! Canopy diameter based on Gering & May.
+       nominalArea = pi_const * (c_diam / 2)**2 ! Canopy area based on diameter.
+       ! c_area = spreadterm * (nominalArea - areaIntercept) + areaIntercept ! Value adjusted by the spread.
+       ! No intercept:
+       !c_area = spreadterm * (nominalArea - areaIntercept) + 0
+       c_area = spreadterm * (nominalArea - areaIntercept)
+       
+    else
+       !Solve for inverse:
+       !c_area = spreadterm * (nominalArea - areaIntercept) + areaIntercept
+       !c_area = (spreadterm * nominalArea) - (spreadterm * areaIntercept) + areaIntercept
+       !c_area + (spreadterm * areaIntercept) - areaIntercept = spreadterm * nominalArea
+       !(c_area + (spreadterm * areaIntercept) - areaIntercept) / spreadterm = nominalArea
+       !nominalArea = (c_area + (spreadterm * areaIntercept) - areaIntercept) / spreadterm
+       ! No intercept:
+       ! nominalArea = (c_area + (spreadterm * areaIntercept) - 0) / spreadterm
+       ! nominalArea = (c_area + (spreadterm * areaIntercept)) / spreadterm
+       ! nominalArea = c_area / spreadterm + (spreadterm * areaIntercept) / spreadterm
+       ! nominalArea = c_area / spreadterm + areaIntercept
+       ! Or:
+       ! c_area = spreadterm * (nominalArea - areaIntercept)
+       ! c_area / spreadterm = (nominalArea - areaIntercept)
+       ! (nominalArea - areaIntercept) = c_area / spreadterm
+       nominalArea = c_area / spreadterm + areaIntercept
+       
+       !nominalArea = pi_const * (c_diam / 2)**2
+       !nominalArea / pi_const = (c_diam / 2)**2
+       !sqrt(nominalArea / pi_const) = c_diam / 2
+       !2 * sqrt(nominalArea / pi_const) = c_diam
+       c_diam = 2 * sqrt(nominalArea / pi_const)
+       
+       !c_diam = p1 + p2 * dbh
+       !c_diam - p1 = p2 * dbh
+       !(c_diam - p1) / p2 = dbh
+       dbh = (c_diam - p1) / p2
+    endif
+    
+  end subroutine carea_GeringAndMay1995_ZeroIntecept
+  !JMR_MOD_END.
   
   ! =========================================================================
 
