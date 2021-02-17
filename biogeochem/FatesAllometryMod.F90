@@ -452,7 +452,7 @@ contains
     associate(  p1          => prt_params%allom_d2h1(ipft), &
                 p2          => prt_params%allom_d2h2(ipft), &
                 p3          => prt_params%allom_d2h3(ipft), &
-                allom_hmode => prt_params%allom_hmode(ipft))
+                allom_hmode => prt_params%allom_hmode(ipft), &
                 dbh_maxh    => prt_params%allom_dbh_maxheight(ipft)) ! JMR_MOD 6/9/2020
 
       select case(int(allom_hmode))
