@@ -5391,25 +5391,25 @@ contains
     
     ! ----------------------------------------------------------------------------------------------
     if (debug) write(fates_log(), *) 'thin_low() beginning.'
-      
-      current_patch => site%oldest_patch
-      do while (associated(current_patch))
-        current_cohort => current_patch%shortest
-        do while(associated(current_cohort))
-          
-          if (any(pfts == current_cohort%pft)) then
-            ! Harvest a fraction of all trees:
-            call kill(cohort = current_cohort, flux_profile = bole_harvest, &
-                      kill_fraction = thin_fraction, area_fraction = 1.0_r8)
-            
-            ! Accumulate harvest estimate:
-            !harvest = harvest + cohort_harvestable_biomass(current_cohort) ! staged = true!!!!
-          endif
+    
+    current_patch => site%oldest_patch
+    do while (associated(current_patch))
+      current_cohort => current_patch%shortest
+      do while(associated(current_cohort))
         
-          current_cohort => current_cohort%taller
-        end do ! Cohort loop.
-        current_patch => current_patch%younger
-      end do ! Patch loop.
+        if (any(pfts == current_cohort%pft)) then
+          ! Harvest a fraction of all trees:
+          call kill(cohort = current_cohort, flux_profile = bole_harvest, &
+                    kill_fraction = thin_fraction, area_fraction = 1.0_r8)
+          
+          ! Accumulate harvest estimate:
+          !harvest = harvest + cohort_harvestable_biomass(current_cohort) ! staged = true!!!!
+        endif
+        
+        current_cohort => current_cohort%taller
+      end do ! Cohort loop.
+      current_patch => current_patch%younger
+    end do ! Patch loop.
     
   end subroutine thin_low
 
@@ -5430,7 +5430,7 @@ contains
     ! Uses: NA
     
     ! Arguments:
-    type(ed_patch_type), intent(in), target :: patch
+    type(ed_site_type), intent(in), target :: site ! The current site object.
     integer(i4), dimension(:), intent(in) :: pfts ! An array of PFT IDs to thin.
     real(r8), intent(in) :: thin_fraction ! Fraction of trees to thin.
     
