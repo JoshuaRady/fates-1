@@ -58,6 +58,8 @@ module FatesVegetationManagementMod
   private :: understory_control
   private :: thin_row_low
   private :: thinnable_patch
+  ! thin_low fractional?????
+  private :: thin_low_probabilistic
   private :: harvest_mass_min_area
   private :: plant_harvestable_biomass
   private :: cohort_harvestable_biomass
@@ -81,6 +83,9 @@ module FatesVegetationManagementMod
   private :: field_pop_real
   private :: is_now
   private :: is_here
+
+  ! Site Level Routines:
+  private :: thin_low
 
   ! Interfaces:
   ! JMR_NOTE: These interfaces have given me a bit of trouble and are a work in progress:
@@ -174,9 +179,10 @@ module FatesVegetationManagementMod
   integer, parameter, private :: vm_event_plant = 1 ! Not really thought out yet...
   integer, parameter, private :: vm_event_thin_test1 = 2 ! In progress
   integer, parameter, private :: vm_event_thin_low = 3 ! In development.
+  integer, parameter, private :: vm_event_thin_low_probabilistic = 4
 
   integer, parameter, private :: vm_event_generative_max = vm_event_plant
-  integer, parameter, private :: vm_event_mortality_max = vm_event_thin_low
+  integer, parameter, private :: vm_event_mortality_max = vm_event_thin_low_probabilistic
 
   !=================================================================================================
   
@@ -604,6 +610,10 @@ contains
           
           call thin_low(site = site_in, pfts = vm_mortality_event%pfts, &
                         thin_fraction = vm_mortality_event%thin_fraction)
+          
+        case (vm_event_thin_low_probabilistic)
+          call thin_low_probabilistic(site = site_in, pfts = vm_mortality_event%pfts, &
+                                      thin_fraction = vm_mortality_event%thin_fraction)
           
         case default
           write(fates_log(),*) 'Unrecognized event code:', vm_mortality_event%code
@@ -3297,11 +3307,193 @@ contains
     
     patch_basal_area = effective_basal_area(patch, pfts) ! Add PFTs
     
-    if (patch_basal_area >= goal_basal_area * 1.25) then
+    if (patch_basal_area >= goal_basal_area * 1.25_r8) then
       thinnable_patch = .true.
     endif
     
   end function thinnable_patch
+  
+  !=================================================================================================
+
+  subroutine thin_patch_low_probabilistic(patch, pfts, thin_fraction)!Name? thin_low_realistic  thin_low_X_patch
+    ! ----------------------------------------------------------------------------------------------
+    ! Perform a low thinning on a patch such that most thinned trees are those with smaller
+    ! diameters but some trees are also removed from the larger size classes.  This is more
+    ! realistic than a 'perfect' low thinning since foresters generally have balence spacing with
+    ! size during thinning.
+    ! 
+    ! The Thinning Model:
+    !   A model of thinning was constructed based on observations and some basic principles and is
+    ! able to reproduce a realistic demographic pattern.  The probability of thinning at a given DBH
+    ! is modeled as a function of the fraction of trees to be thinned.  The probability density
+    ! function is a logistic equation of the form:
+    !
+    ! 1 / (1 + e^-k(DBH_trans - DBH_0))
+    !
+    ! Where k is the steepness parameter, DBH_0 is the midpoint parameter, and DBH_trans is
+    ! transformed diameter at breast height.
+    !
+    ! Steepness:
+    !   The steepness parameter controls how 'imperfect' the low thinning is. We use a fixed average
+    ! value derived from data. However, the steepness can be adjusted to capture a wider range of
+    ! thinning behavior.  At a steepness of zero the thinning is proportional.  At the other extreem
+    ! at a very high steepness the behavior approaches a 'perfect' low thinning.  This function
+    ! should not be used for these extremes as such thinnings can be simulated with more efficiently
+    ! with other calls.  To allow the behavior to be tuned to different systems that may differ from
+    ! that to derive the default value the parameter could be made an optional parameter.
+    !
+    ! Midpoint:
+    !   The midpoint or inflection point of the logistic curve occurs at the DBH where the chance of
+    ! being thinned is 50%.  Moving the curve to the right increases the number of trees that will
+    ! be thinned.  We derived a relationship between the midpoint value and the intensity of
+    ! thinning from a observations.
+    !
+    ! DBH Transformation:
+    !   To apply a simple model to forests of different ages and demographics the thinning model
+    ! uses DBHs that are transformed so that mean of the distribution is centered at 0.
+    !
+    ! Parameterization:
+    !   The model was parameterized using a set of thinning trial experiments in loblolly pine
+    ! plantations across the Southerestern U.S. (manuscript in progress).
+    !
+    !   This model predicts the number of trees to be thinning quite accurately for observations.
+    ! Using the results of the calculation from the initial calculated midpoint value may do a
+    ! reasonable job for some purposes.  However, it is important for comparably that the thinning
+    ! occur very close to the rate specified.  To ensure this we iterate the calculation modifying
+    ! the midpoint value until the requested thinning fraction is achieved.
+    !
+    ! Realism and Weaknesses:
+    ! smoothness...
+    !
+    ! Instead of looping through all the cohorts multiple times we could make a list of the valid cohorts once and loop through those...
+    !
+    ! Use fraction or specific number of trees?????
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Uses: NA
+    
+    ! Arguments:
+    type(ed_patch_type), intent(in), target :: patch
+    integer(i4), dimension(:), intent(in) :: pfts ! An array of PFT IDs to thin.
+    real(r8), intent(in) :: thin_fraction ! Could compute from a number of tree to thin?
+    
+    ! Locals:
+    real(r8), parameter :: midpoint_slope = 16.48_r8 ! Exp. 7/58
+    real(r8), parameter :: midpoint_intercept = -8.34_r8 ! Exp. 7/58
+    real(r8), parameter :: model_steepness = -0.4428_r8 ! -0.442796647865622 Exp. 7/58
+    real(r8), parameter :: thin_tolerance = 0.1_r8 ! Thin trees to with 0.1 trees (n) of the goal.
+    
+    real(r8) :: sum_dbh ! Accumulator
+    real(r8) :: num_trees ! Accumulator
+    real(r8) :: mean_dbh ! Mean (weighted) DBH of the patch.
+    
+    real(r8) :: model_midpoint ! In centered DBH space.
+    real(r8) :: midpoint_step ! Step for iteratively solving the thinning weights.
+    real(r8) :: thin_goal ! The number of trees that should be thinned.
+    real(r8) :: thin_total ! Accumulator for thinning calculation
+    real(r8) :: thin_last ! The number of trees to thin calculated by the last iteration. 
+    real(r8) :: thin_prob ! The probability of thinning for a cohort.
+    real(r8) :: dbh_tranformed ! Cohort DBH adjusted so the mean DBH is at 0.
+    
+    integer :: cycles ! Loop counter for debugging purposes.
+    
+    type(ed_cohort_type), pointer :: current_cohort
+    
+    ! ----------------------------------------------------------------------------------------------
+    if (debug) write(fates_log(), *) 'thin_patch_low_probabilistic() entering.'
+    
+    sum_dbh = 0.0_r8
+    num_trees = 0.0_r8
+    thin_total = 0.0_r8
+    thin_last = 0.0_r8
+    midpoint_step = 0.05_r8 ! The initial step size is arbitrary. We assume we are pretty close when we start.
+    cycles = 0
+    
+    ! Validity checking for thinning_fraction!!!!!
+    
+    ! Calculate the mean DBH of the trees (cohort DBH weighted by number) to be thinned (exclude some?)
+    current_cohort => patch%shortest
+    do while(associated(current_cohort))
+      if (any(pfts == current_cohort%pft)) then
+        sum_dbh = sum_dbh + (current_cohort%dbh * current_cohort%n)
+        num_trees = num_trees + current_cohort%n
+      endif
+      current_cohort => current_cohort%taller
+    end do ! Cohort loop.
+    mean_dbh = sum_dbh / num_trees
+    
+    ! Calculate the number of trees to be removed based on the thinning fraction:
+    thin_goal = num_trees * thinning_fraction
+    
+    ! Calculate the midpoint parameter based on the fraction of trees to be thinned:
+    model_midpoint = midpoint_slope * thinning_fraction + midpoint_intercept
+    
+    ! Starting with the initial midpoint value calculate thinning weights and repeat the process
+    ! with adjusted values until we are within the tolerance:
+    do while(abs(thin_total - thin_goal) > thin_tolerance)
+      thin_total = 0.0_r8
+      
+      ! For each valid cohort determine the probability of thinning and number of trees to thin:
+      current_cohort => patch%shortest
+      do while(associated(current_cohort))
+        
+        if (any(pfts == current_cohort%pft)) then
+          dbh_tranformed = current_cohort%dbh - mean_dbh
+          thin_prob = 1 / (1 + exp(-model_steepness * (dbh_tranformed - model_midpoint)))
+          thin_total = thin_total + (thin_prob * current_cohort%n)
+        endif
+        
+        current_cohort => current_cohort%taller
+      end do ! Cohort loop.
+      
+      ! Adjust the midpoint for the next cycle (may not be used if we are close enough already):
+      
+      ! If we passed over the goal in the last step decrease the step size:
+      if ((thin_last < thin_goal .and. thin_total > thin_goal) .or. &
+          (thin_last > thin_goal .and. thin_total < thin_goal))
+        midpoint_step = midpoint_step / 2.0_r8
+      endif
+      
+      ! Step up or down:
+      if (thin_total < thin_goal) then
+        model_midpoint = model_midpoint + midpoint_step
+      elseif (thin_total > thin_goal) then
+        model_midpoint = model_midpoint - midpoint_step
+      endif
+      
+      ! Are there invalid midpoint values that will let us know the search has gone wrong?
+      
+      thin_last = thin_total ! Record the trees thinned for comparison during the next cycle.
+      cycles = cycles + 1 ! Counter for debugging purposes only.
+    end do ! Thinning calculation
+    
+    ! Once the proper thinning weights have been solved apply the thinning mortality:
+    ! This is a bit repetetive but there is little avoiding that this must be done in a loop.
+    current_cohort => patch%shortest
+    do while(associated(current_cohort))
+    
+      if (any(pfts == current_cohort%pft)) then
+        dbh_tranformed = current_cohort%dbh - mean_dbh
+        thin_prob = 1 / (1 + exp(-model_steepness * (dbh_tranformed - model_midpoint)))
+        
+        ! Some or all trees could be left in place but we assume a commercial harvest:
+        call kill(cohort = current_cohort, flux_profile = bole_harvest, kill_fraction = thin_prob)
+      endif
+      
+      current_cohort => current_cohort%taller
+    end do ! Cohort loop.
+    
+    if (debug) then
+      ! Report algorithm stats:
+      write(fates_log(), *) 'Thinning fraction specified: ', thinning_fraction
+      write(fates_log(), *) 'As trees:                    ', thin_goal
+      write(fates_log(), *) 'Number of trees thinned:     ', thin_total
+      ! Starting midpoint?
+      write(fates_log(), *) 'Solution midpoint:          ' , model_midpoint
+      write(fates_log(), *) 'Cycles to solve:             ', cycles
+      write(fates_log(), *) 'thin_patch_low_probabilistic() exiting.'
+    endif
+  end subroutine thin_patch_low_probabilistic
 
   !=================================================================================================
   ! Harvest Subroutines:
@@ -3335,7 +3527,7 @@ contains
 
   !=================================================================================================
 
-  ! Better name? harvest_by_mass()?
+  ! Better name? harvest_by_mass()?  This should be moved to the site level functions!
   subroutine harvest_mass_min_area(site_in, harvest_c_primary, harvest_c_secondary, & ! REVIEW!
                                    pfts, dbh_min, dbh_max, ht_min, ht_max)
     ! ----------------------------------------------------------------------------------------------
@@ -4997,6 +5189,8 @@ contains
         this%code = vm_event_thin_test1
       case ('thin_low')
         this%code = vm_event_thin_low
+      case ('thin_low_probabilistic')
+        this%code = vm_event_thin_low_probabilistic
       !case ()
       case default
         write(fates_log(),*) 'VM event name is not recognised:', event_type_str
@@ -5162,12 +5356,12 @@ contains
 
   !=================================================================================================
   ! Site Level Routines:
-  ! These routines perform management activities the level of the site / grid cell.
+  ! These routines perform management activities at the level of the site / grid cell.
   ! They may target only part of the site but they do so without any a priori knowledge of the patch
   ! structure.
   !=================================================================================================
 
-  subroutine thin_low(site, pfts, thin_fraction) ! Return the harvest amount in harvest_estimate!
+  subroutine thin_low(site, pfts, thin_fraction) ! Return the harvest amount in harvest_estimate! Rename?
     ! ----------------------------------------------------------------------------------------------
     ! This is in development. The name and arguments may change.
     !
@@ -5218,5 +5412,44 @@ contains
       end do ! Patch loop.
     
   end subroutine thin_low
+
+  !=================================================================================================
+
+  subroutine thin_low_probabilistic(site, pfts, thin_fraction) ! where = everywhere
+    ! ----------------------------------------------------------------------------------------------
+    ! Perform a low thinning for a site such that most thinned trees are those with smaller
+    ! diameters but some trees are also removed from the larger size classes.
+    !
+    ! In it's current form this function just applies thin_patch_low_probabilistic() to all patches.
+    ! In the future it will (may) allow targeting of thinning behavior to specific patches via the
+    ! where parameter.
+    !
+    ! VM Event Interface thin_low_probabilistic([pfts], thin_fraction)
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Uses: NA
+    
+    ! Arguments:
+    type(ed_patch_type), intent(in), target :: patch
+    integer(i4), dimension(:), intent(in) :: pfts ! An array of PFT IDs to thin.
+    real(r8), intent(in) :: thin_fraction ! Fraction of trees to thin.
+    
+    ! Locals:
+    type(ed_patch_type), pointer :: current_patch
+    
+    ! ----------------------------------------------------------------------------------------------
+    if (debug) write(fates_log(), *) 'thin_low_probabilistic() beginning.'
+    
+    ! Add handling for 'empty' pfts value.
+    
+    current_patch => site%oldest_patch
+    do while (associated(current_patch))
+      
+      call thin_patch_low_probabilistic(current_patch, pfts, thin_fraction)
+      
+      current_patch => current_patch%younger
+    end do ! Patch loop.
+    
+  end subroutine thin_low_probabilistic
 
 end module FatesVegetationManagementMod
