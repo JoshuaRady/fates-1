@@ -58,7 +58,9 @@ module FatesVegetationManagementMod
   private :: understory_control
   private :: thin_row_low
   private :: thinnable_patch
+  private :: thin_low
   ! thin_low fractional?????
+  private :: thin_patch_low_probabilistic
   private :: thin_low_probabilistic
   private :: harvest_mass_min_area
   private :: plant_harvestable_biomass
@@ -83,9 +85,6 @@ module FatesVegetationManagementMod
   private :: field_pop_real
   private :: is_now
   private :: is_here
-
-  ! Site Level Routines:
-  private :: thin_low
 
   ! Interfaces:
   ! JMR_NOTE: These interfaces have given me a bit of trouble and are a work in progress:
@@ -2881,6 +2880,17 @@ contains
   end subroutine kill_patch
 
   !=================================================================================================
+  ! Management Operations:
+  !
+  !=================================================================================================
+  !=================================================================================================
+  ! Site Level Routines:
+  ! These routines perform management activities at the level of the site / grid cell.
+  ! They may target only part of the site but they do so without any a priori knowledge of the patch
+  ! structure.
+  !=================================================================================================
+
+  !=================================================================================================
   ! Competition Control Subroutines:
   !=================================================================================================
 
@@ -3312,7 +3322,61 @@ contains
     endif
     
   end function thinnable_patch
-  
+
+  !=================================================================================================
+
+  subroutine thin_low(site, pfts, thin_fraction) ! Return the harvest amount in harvest_estimate! Rename?
+    ! ----------------------------------------------------------------------------------------------
+    ! This is in development. The name and arguments may change.
+    !
+    ! This doesn't currently really do a low thinning.  It thins all trees matching the PFTs passed.
+    ! What it should do is calculate the number of stems of the requested stem and remove the
+    ! fraction requested starting with the smaller trees first.  Ideally the trees will be removed
+    ! in a realistic way, when mostly small trees are removed but in a probabilistic way where some
+    ! larger trees are removed.
+    !
+    ! Unlike thin_row_low() this thinning doesn't use specific thinning goals, the goal is relative.
+    !
+    ! VM Event Interface thin_low([pfts], thin_fraction)
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Uses: NA
+    use EDTypesMod, only : ed_site_type
+    
+    ! Arguments:
+    type(ed_site_type), intent(in), target :: site ! The current site object.
+    integer(i4), dimension(:), intent(in) :: pfts ! Make optional?
+    real(r8), intent(in) :: thin_fraction
+    ! Add where
+    
+    ! Locals:
+    type(ed_patch_type), pointer :: current_patch
+    type(ed_cohort_type), pointer :: current_cohort
+    
+    ! ----------------------------------------------------------------------------------------------
+    if (debug) write(fates_log(), *) 'thin_low() beginning.'
+    
+    current_patch => site%oldest_patch
+    do while (associated(current_patch))
+      current_cohort => current_patch%shortest
+      do while(associated(current_cohort))
+        
+        if (any(pfts == current_cohort%pft)) then
+          ! Harvest a fraction of all trees:
+          call kill(cohort = current_cohort, flux_profile = bole_harvest, &
+                    kill_fraction = thin_fraction, area_fraction = 1.0_r8)
+          
+          ! Accumulate harvest estimate:
+          !harvest = harvest + cohort_harvestable_biomass(current_cohort) ! staged = true!!!!
+        endif
+        
+        current_cohort => current_cohort%taller
+      end do ! Cohort loop.
+      current_patch => current_patch%younger
+    end do ! Patch loop.
+    
+  end subroutine thin_low
+
   !=================================================================================================
 
   subroutine thin_patch_low_probabilistic(patch, pfts, thin_fraction)!Name? thin_low_realistic  thin_low_X_patch
@@ -3494,6 +3558,45 @@ contains
       write(fates_log(), *) 'thin_patch_low_probabilistic() exiting.'
     endif
   end subroutine thin_patch_low_probabilistic
+
+  !=================================================================================================
+
+  subroutine thin_low_probabilistic(site, pfts, thin_fraction) ! where = everywhere
+    ! ----------------------------------------------------------------------------------------------
+    ! Perform a low thinning for a site such that most thinned trees are those with smaller
+    ! diameters but some trees are also removed from the larger size classes.
+    !
+    ! In it's current form this function just applies thin_patch_low_probabilistic() to all patches.
+    ! In the future it will (may) allow targeting of thinning behavior to specific patches via the
+    ! where parameter.
+    !
+    ! VM Event Interface thin_low_probabilistic([pfts], thin_fraction)
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Uses: NA
+    
+    ! Arguments:
+    type(ed_site_type), intent(in), target :: site ! The current site object.
+    integer(i4), dimension(:), intent(in) :: pfts ! An array of PFT IDs to thin.
+    real(r8), intent(in) :: thin_fraction ! Fraction of trees to thin.
+    
+    ! Locals:
+    type(ed_patch_type), pointer :: current_patch
+    
+    ! ----------------------------------------------------------------------------------------------
+    if (debug) write(fates_log(), *) 'thin_low_probabilistic() beginning.'
+    
+    ! Add handling for 'empty' pfts value.
+    
+    current_patch => site%oldest_patch
+    do while (associated(current_patch))
+      
+      call thin_patch_low_probabilistic(current_patch, pfts, thin_fraction)
+      
+      current_patch => current_patch%younger
+    end do ! Patch loop.
+    
+  end subroutine thin_low_probabilistic
 
   !=================================================================================================
   ! Harvest Subroutines:
@@ -5353,103 +5456,5 @@ contains
     write(fates_log(), *) 'thin_fraction:    ', this%thin_fraction
     
   end subroutine dump
-
-  !=================================================================================================
-  ! Site Level Routines:
-  ! These routines perform management activities at the level of the site / grid cell.
-  ! They may target only part of the site but they do so without any a priori knowledge of the patch
-  ! structure.
-  !=================================================================================================
-
-  subroutine thin_low(site, pfts, thin_fraction) ! Return the harvest amount in harvest_estimate! Rename?
-    ! ----------------------------------------------------------------------------------------------
-    ! This is in development. The name and arguments may change.
-    !
-    ! This doesn't currently really do a low thinning.  It thins all trees matching the PFTs passed.
-    ! What it should do is calculate the number of stems of the requested stem and remove the
-    ! fraction requested starting with the smaller trees first.  Ideally the trees will be removed
-    ! in a realistic way, when mostly small trees are removed but in a probabilistic way where some
-    ! larger trees are removed.
-    !
-    ! Unlike thin_row_low() this thinning doesn't use specific thinning goals, the goal is relative.
-    !
-    ! VM Event Interface thin_low([pfts], thin_fraction)
-    ! ----------------------------------------------------------------------------------------------
-    
-    ! Uses: NA
-    use EDTypesMod, only : ed_site_type
-    
-    ! Arguments:
-    type(ed_site_type), intent(in), target :: site ! The current site object.
-    integer(i4), dimension(:), intent(in) :: pfts ! Make optional?
-    real(r8), intent(in) :: thin_fraction
-    ! Add where
-    
-    ! Locals:
-    type(ed_patch_type), pointer :: current_patch
-    type(ed_cohort_type), pointer :: current_cohort
-    
-    ! ----------------------------------------------------------------------------------------------
-    if (debug) write(fates_log(), *) 'thin_low() beginning.'
-    
-    current_patch => site%oldest_patch
-    do while (associated(current_patch))
-      current_cohort => current_patch%shortest
-      do while(associated(current_cohort))
-        
-        if (any(pfts == current_cohort%pft)) then
-          ! Harvest a fraction of all trees:
-          call kill(cohort = current_cohort, flux_profile = bole_harvest, &
-                    kill_fraction = thin_fraction, area_fraction = 1.0_r8)
-          
-          ! Accumulate harvest estimate:
-          !harvest = harvest + cohort_harvestable_biomass(current_cohort) ! staged = true!!!!
-        endif
-        
-        current_cohort => current_cohort%taller
-      end do ! Cohort loop.
-      current_patch => current_patch%younger
-    end do ! Patch loop.
-    
-  end subroutine thin_low
-
-  !=================================================================================================
-
-  subroutine thin_low_probabilistic(site, pfts, thin_fraction) ! where = everywhere
-    ! ----------------------------------------------------------------------------------------------
-    ! Perform a low thinning for a site such that most thinned trees are those with smaller
-    ! diameters but some trees are also removed from the larger size classes.
-    !
-    ! In it's current form this function just applies thin_patch_low_probabilistic() to all patches.
-    ! In the future it will (may) allow targeting of thinning behavior to specific patches via the
-    ! where parameter.
-    !
-    ! VM Event Interface thin_low_probabilistic([pfts], thin_fraction)
-    ! ----------------------------------------------------------------------------------------------
-    
-    ! Uses: NA
-    
-    ! Arguments:
-    type(ed_site_type), intent(in), target :: site ! The current site object.
-    integer(i4), dimension(:), intent(in) :: pfts ! An array of PFT IDs to thin.
-    real(r8), intent(in) :: thin_fraction ! Fraction of trees to thin.
-    
-    ! Locals:
-    type(ed_patch_type), pointer :: current_patch
-    
-    ! ----------------------------------------------------------------------------------------------
-    if (debug) write(fates_log(), *) 'thin_low_probabilistic() beginning.'
-    
-    ! Add handling for 'empty' pfts value.
-    
-    current_patch => site%oldest_patch
-    do while (associated(current_patch))
-      
-      call thin_patch_low_probabilistic(current_patch, pfts, thin_fraction)
-      
-      current_patch => current_patch%younger
-    end do ! Patch loop.
-    
-  end subroutine thin_low_probabilistic
 
 end module FatesVegetationManagementMod
