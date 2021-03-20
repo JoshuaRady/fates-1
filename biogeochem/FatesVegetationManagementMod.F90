@@ -1944,7 +1944,7 @@ contains
   ! They provide an interface for higher level functions to build abstractions of human vegetation
   ! management activities without depending as intimately on the the underlying implementation.
   !
-  !   Currently only planting is implemented but the addtion of seeds will be added in the future.
+  !   Currently only planting is implemented but the addition of seeds will be added in the future.
   !=================================================================================================
   
   subroutine plant(site, patch, bc_in, pft_index, density, dbh, height) !plant_sapling()?
@@ -2881,9 +2881,20 @@ contains
 
   !=================================================================================================
   ! Management Operations:
+  !   Operations are specific (atomci) real world management interventions that include activities
+  ! such as planting, fertilization, and harvest
+  !   These routines build on primitives to implement operations ...
   !
-  !=================================================================================================
-  !=================================================================================================
+  ! Establishment:
+  ! - Seeding and planting
+  !
+  ! Intermediate Operations:
+  ! - Competition control
+  ! - Fertilization
+  ! - Thinning
+  !
+  ! Harvest
+  !
   ! Site Level Routines:
   ! These routines perform management activities at the level of the site / grid cell.
   ! They may target only part of the site but they do so without any a priori knowledge of the patch
@@ -3473,7 +3484,7 @@ contains
     midpoint_step = 0.05_r8 ! The initial step size is arbitrary. We assume we are pretty close when we start.
     cycles = 0
     
-    ! Validity checking for thinning_fraction!!!!!
+    ! Validity checking for thin_fraction!!!!!
     
     ! Calculate the mean DBH of the trees (cohort DBH weighted by number) to be thinned (exclude some?)
     current_cohort => patch%shortest
@@ -3487,10 +3498,10 @@ contains
     mean_dbh = sum_dbh / num_trees
     
     ! Calculate the number of trees to be removed based on the thinning fraction:
-    thin_goal = num_trees * thinning_fraction
+    thin_goal = num_trees * thin_fraction
     
     ! Calculate the midpoint parameter based on the fraction of trees to be thinned:
-    model_midpoint = midpoint_slope * thinning_fraction + midpoint_intercept
+    model_midpoint = midpoint_slope * thin_fraction + midpoint_intercept
     
     ! Starting with the initial midpoint value calculate thinning weights and repeat the process
     ! with adjusted values until we are within the tolerance:
@@ -3503,7 +3514,7 @@ contains
         
         if (any(pfts == current_cohort%pft)) then
           dbh_tranformed = current_cohort%dbh - mean_dbh
-          thin_prob = 1 / (1 + exp(-model_steepness * (dbh_tranformed - model_midpoint)))
+          thin_prob = 1 / (1 + exp(-1.0r8 * model_steepness * (dbh_tranformed - model_midpoint))) ! -model_steepness?
           thin_total = thin_total + (thin_prob * current_cohort%n)
         endif
         
@@ -3549,7 +3560,7 @@ contains
     
     if (debug) then
       ! Report algorithm stats:
-      write(fates_log(), *) 'Thinning fraction specified: ', thinning_fraction
+      write(fates_log(), *) 'Thinning fraction specified: ', thin_fraction
       write(fates_log(), *) 'As trees:                    ', thin_goal
       write(fates_log(), *) 'Number of trees thinned:     ', thin_total
       ! Starting midpoint?
