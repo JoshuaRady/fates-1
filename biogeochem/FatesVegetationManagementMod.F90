@@ -3503,9 +3503,13 @@ contains
     ! Calculate the midpoint parameter based on the fraction of trees to be thinned:
     model_midpoint = midpoint_slope * thin_fraction + midpoint_intercept
     
+    if (debug) write(fates_log(), *) 'Initial model_midpoint:', model_midpoint
+    
     ! Starting with the initial midpoint value calculate thinning weights and repeat the process
     ! with adjusted values until we are within the tolerance:
     do while(abs(thin_total - thin_goal) > thin_tolerance)
+      if (debug) write(fates_log(), *) 'Cycles:', cycles
+      
       thin_total = 0.0_r8
       
       ! For each valid cohort determine the probability of thinning and number of trees to thin:
@@ -3542,6 +3546,8 @@ contains
       thin_last = thin_total ! Record the trees thinned for comparison during the next cycle.
       cycles = cycles + 1 ! Counter for debugging purposes only.
     end do ! Thinning calculation
+    
+    if (debug) write(fates_log(), *) 'Thinning calculation completed.'
     
     ! Once the proper thinning weights have been solved apply the thinning mortality:
     ! This is a bit repetetive but there is little avoiding that this must be done in a loop.
