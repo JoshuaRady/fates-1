@@ -3514,7 +3514,8 @@ contains
         
         if (any(pfts == current_cohort%pft)) then
           dbh_tranformed = current_cohort%dbh - mean_dbh
-          thin_prob = 1 / (1 + exp(-1.0r8 * model_steepness * (dbh_tranformed - model_midpoint))) ! -model_steepness?
+          !thin_prob = 1 / (1 + exp(-1.0r8 * model_steepness * (dbh_tranformed - model_midpoint))) ! -model_steepness?
+          thin_prob = 1 / (1 + exp(-model_steepness * (dbh_tranformed - model_midpoint)))
           thin_total = thin_total + (thin_prob * current_cohort%n)
         endif
         
@@ -3525,7 +3526,7 @@ contains
       
       ! If we passed over the goal in the last step decrease the step size:
       if ((thin_last < thin_goal .and. thin_total > thin_goal) .or. &
-          (thin_last > thin_goal .and. thin_total < thin_goal))
+          (thin_last > thin_goal .and. thin_total < thin_goal)) then
         midpoint_step = midpoint_step / 2.0_r8
       endif
       
