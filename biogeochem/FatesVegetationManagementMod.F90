@@ -59,6 +59,8 @@ module FatesVegetationManagementMod
   private :: thin_row_low
   private :: thinnable_patch
   !private :: thin_low
+  private :: thin_patch_low_perfect
+  private :: thin_low_perfect
   private :: thin_proportional
   private :: thin_patch_low_probabilistic
   private :: thin_low_probabilistic
@@ -177,8 +179,9 @@ module FatesVegetationManagementMod
   !integer, parameter, private :: vm_event_XXXXX = 2
   integer, parameter, private :: vm_event_plant = 1 ! Not really thought out yet...
   integer, parameter, private :: vm_event_thin_test1 = 2 ! In progress, currently wraps thin_row_low() to do perfect low thinning.
-  integer, parameter, private :: vm_event_thin_proportional = 3 ! In development.
-  integer, parameter, private :: vm_event_thin_low_probabilistic = 4
+  integer, parameter, private :: vm_event_thin_proportional = 3
+  integer, parameter, private :: vm_event_thin_low_perfect = 4
+  integer, parameter, private :: vm_event_thin_low_probabilistic = 5
 
   integer, parameter, private :: vm_event_generative_max = vm_event_plant
   integer, parameter, private :: vm_event_mortality_max = vm_event_thin_low_probabilistic
@@ -608,6 +611,10 @@ contains
         case (vm_event_thin_proportional)
           call thin_proportional(site = site_in, pfts = vm_mortality_event%pfts, &
                                  thin_fraction = vm_mortality_event%thin_fraction)
+          
+        case (vm_event_thin_low_perfect)
+          call thin_low_perfect(site = site_in, pfts = vm_mortality_event%pfts, &
+                                thin_fraction = vm_mortality_event%thin_fraction)
           
         case (vm_event_thin_low_probabilistic)
           call thin_low_probabilistic(site = site_in, pfts = vm_mortality_event%pfts, &
@@ -3394,6 +3401,313 @@ contains
 
   !=================================================================================================
 
+  subroutine thin_patch_low_perfect(patch, pfts, patch_fraction, thin_fraction, final_basal_area, &
+                                    final_stem_density, harvest_estimate)
+    ! ----------------------------------------------------------------------------------------------
+    ! Thinning a patch harvesting the trees from smallest to largest until the thinning goal is met.
+    ! For maximum flexibility the amount to thin may be specified as a fraction of stems (relative)
+    ! or a goal (stem density or basal area).
+    !
+    ! This routine duplicates and expands much of the code from thin_row_low(), except the row
+    ! thinning.  thin_row_low() should probably be rewritten to use this routine.
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Uses:
+    use FatesInterfaceTypesMod, only : numpft
+    
+    ! Arguments:
+    type(ed_patch_type), intent(inout), target :: patch
+    ! Which tree PFTs are harvestable trees.  If omitted all woody trees will be used.  Otherwise
+    ! any omitted will be ignored for the purpose of calculating BAI and stem density.
+    ! Be careful when excluding PFTs that may compete in the canopy.
+    integer(i4), intent(in), optional, target :: pfts(:) ! An array of PFT IDs to thin.
+    real(r8), intent(in), optional :: patch_fraction     ! The fraction of the patch to thin.
+                                                         ! Defaults to 1.0 / whole patch.
+                                                         ! Values > 1 result in the patch being 
+                                                         ! split into thinned and unthinned patches.
+    ! Three ways to specify how much to thin:
+    real(r8), intent(in), optional :: thin_fraction      ! Fraction of trees (in pfts) to thin.
+    real(r8), intent(in), optional :: final_basal_area   ! Goal final basal area index (m^2 / ha ?????)
+    real(r8), intent(in), optional :: final_stem_density ! Goal final stem density (trees / ha)
+    
+    real(r8), intent(out), optional :: harvest_estimate  ! The wood harvested by this operation.
+    
+    ! Locals:
+    integer(i4), pointer, dimension(:) :: thin_pfts ! Holds the PFTs to thin, computed from arguments.
+    real(r8) :: the_patch_fraction ! Patch fraction after application of defaults.
+    real(r8) :: the_final_stem_density ! Stem density goal possibly converted from thin_fraction.
+    
+    logical :: use_bai ! If true use basal area index as the criteria, otherwise use stem density.
+    real(r8) :: patch_bai ! Basal area of the patch (including only PFTs in pfts)
+    real(r8) :: patch_sd ! Stem density of the patch (including only PFTs in pfts)
+    real(r8) :: cohort_ba ! Basal area of a cohort
+    real(r8) :: cohort_stems
+    real(r8) :: thin_ba_remaining
+    real(r8) :: thin_sd_remaining
+    real(r8) :: cohort_fraction
+    real(r8) :: harvest ! Accumulator
+    
+    type(ed_cohort_type), pointer :: current_cohort
+    
+    integer :: i ! Iterator
+    
+    ! ----------------------------------------------------------------------------------------------
+    if (debug) write(fates_log(), *) 'thin_patch_low_perfect() entering.'
+    
+    ! Initialize variables:
+    harvest = 0.0_r8
+    thin_ba_remaining = 0.0_r8
+    
+    ! Determine which arguments were passed in, validity check them, and supply default values:
+    
+    ! If present check that the PFTs are valid:
+    if (present(pfts)) then
+      ! Check if PFTs to thin are valid:
+      do i = 1, size(pfts)
+        if (.not. any(pfts(i) == tree_pfts)) then
+          write(fates_log(),*) 'thin_patch_low_perfect(): Cannot thin non-tree PFTs.'
+          write(fates_log(),*) 'Tree PFTs =    ', tree_pfts
+          write(fates_log(),*) 'Selected PFTs =', pfts
+          call endrun(msg = errMsg(__FILE__, __LINE__))
+        endif
+      end do
+      
+      thin_pfts => pfts
+    else ! Otherwise thin all tree PFTs:
+      thin_pfts => tree_pfts
+    endif
+    
+    ! Determine the thinning amount:
+    ! if (present(row_fraction)) then
+!       if (row_fraction > 1.0_r8 .or. row_fraction <= 0.0_r8) then ! Better high and low values?
+!         write(fates_log(),*) 'thin_row_low(): Invalid row fraction provided.'
+!         call endrun(msg = errMsg(__FILE__, __LINE__))
+!       end if
+!     
+!       the_row_fraction = row_fraction
+!     else
+!       the_row_fraction = 0.2_r8 ! Default value.
+!     end if
+    
+    ! Note: Since all the calculations below are per area the patch fraction does not effect them.
+    ! It is only passed on to kill().
+    if (present(patch_fraction)) then
+      if (patch_fraction > 1.0_r8 .or. patch_fraction <= 0.0_r8) then
+        write(fates_log(),*) 'thin_patch_low_perfect(): Invalid patch fraction provided.'
+        call endrun(msg = errMsg(__FILE__, __LINE__))
+      end if
+    
+      the_patch_fraction = patch_fraction
+    else
+      the_patch_fraction = 1.0_r8
+    end if
+    
+    ! Determine the basal area and stem densities for the relavant PFTs:
+    patch_bai = disturbed_basal_area(patch, thin_pfts)
+    patch_sd = patch_disturbed_n(patch, thin_pfts) !disturbed_stem_density(patch, thin_pfts)
+    
+    ! Only thin_fraction, final_basal_area, or final_stem_density should be provided:
+    if ((present(thin_fraction) .and. present(final_basal_area)) .or. &
+        (present(thin_fraction) .and. present(final_stem_density)) .or. &
+        (present(final_basal_area) .and. present(final_stem_density))) then
+      write(fates_log(),*) 'thin_patch_low_perfect(): Provide thinning fraction, basal area index, or stem density, not more than one.'
+      call endrun(msg = errMsg(__FILE__, __LINE__))
+    else if (present(final_basal_area)) then
+      use_bai = .true.
+    else if (present(final_stem_density)) then
+      use_bai = .false.
+      the_final_stem_density = final_stem_density
+    else if (present(thin_fraction)) then
+      ! Validity checking:
+      if (thin_fraction <= 0.0_r8 .or. thin_fraction > 1.0_r8) then
+        write(fates_log(),*) 'Invalid value for thin_fraction argument.'
+        call endrun(msg = errMsg(__FILE__, __LINE__))
+      endif
+      
+      ! Convert the thinning fraction to a stem density goal:
+      use_bai = .false.
+      the_final_stem_density = patch_sd * (1.0_r8 - thin_fraction)
+    else
+      write(fates_log(),*) 'thin_patch_low_perfect(): Must provide thinning fraction, basal area index, or stem density.'
+      call endrun(msg = errMsg(__FILE__, __LINE__))
+    endif
+    
+    ! If the stand is above the goal value (BAI or stem density) start thinning:
+    if ((use_bai .and. (patch_bai > final_basal_area)) .or. &
+        ((.not. use_bai) .and. (patch_sd > the_final_stem_density))) then
+      
+      ! Thin every X rows = remove 1/X of each cohort:----------------------------------------------
+      !if (debug) write(fates_log(), *) 'thin_row_low() starting row thinning.'
+      
+      ! current_cohort => patch%shortest
+!       do while(associated(current_cohort))
+!         
+!         if (any(pfts == current_cohort%pft)) then
+!           ! Call kill() here to set the area fraction.  Use kill_disturbed() for subsequent calls:
+!           call kill(cohort = current_cohort, flux_profile = bole_harvest, &
+!                     kill_fraction = the_row_fraction, area_fraction = the_patch_fraction)
+!           
+!           ! Accumulate harvest estimate:
+!           harvest = harvest + cohort_harvestable_biomass(current_cohort) ! staged = true!!!!
+!         endif
+!         
+!         current_cohort => current_cohort%taller
+!       end do ! Cohort loop.
+      
+      ! If still over the goal value thin further:--------------------------------------------------
+      
+      ! The kill() call above does not result in a change to the cohort numbers yet, this will
+      ! happen later.  Therefore we need to keep track of the changes to BAI, density, and plant
+      ! number's manually from here on.
+      patch_bai = disturbed_basal_area(patch, thin_pfts)
+      patch_sd = patch_disturbed_n(patch, thin_pfts) !disturbed_stem_density(patch, thin_pfts)
+      
+      ! Cull the smallest trees (low thinning) recursively until the goal has been reached:
+      
+      if (use_bai) then ! Thin to a goal basal area:
+        if (debug) write(fates_log(), *) 'thin_patch_low_perfect() starting low thinning by BAI.'
+        
+        ! Given the fixed allometry this will also give us cohorts from the lowest DBH:
+        current_cohort => patch%shortest
+        do while(associated(current_cohort) .and. patch_bai > final_basal_area)
+          
+          if (any(pfts == current_cohort%pft)) then
+            ! Get the effective (after row thinning) basal area of the cohort and determine if it
+            ! can be removed in part or in whole:
+            cohort_ba = disturbed_basal_area(current_cohort)
+            
+            ! Remaining basal area:
+            thin_ba_remaining = patch_bai - final_basal_area
+            
+            ! If the cohort basal area is less that what still needs to be removed kill all of it:
+            if (cohort_ba <= thin_ba_remaining) then
+              if (debug) write(fates_log(), *) 'thin_patch_low_perfect() cut whole cohort.'
+              
+              call kill_disturbed(cohort = current_cohort, flux_profile = bole_harvest, &
+                                  kill_fraction = 1.0_r8)
+              
+            else ! Otherwise only take part of the cohort:
+              if (debug) write(fates_log(), *) 'thin_patch_low_perfect() cut part of cohort.'
+              
+              cohort_fraction = thin_ba_remaining / cohort_ba
+              
+              if (debug) then
+                write(fates_log(), *) 'thin_ba_remaining = ', thin_ba_remaining
+                write(fates_log(), *) 'cohort_ba = ', cohort_ba
+                write(fates_log(), *) 'cohort_fraction = ', cohort_fraction
+              end if
+              
+              call kill_disturbed(cohort = current_cohort, flux_profile = bole_harvest, &
+                                  kill_fraction = cohort_fraction)
+              
+            end if ! (cohort_ba <= thin_ba_remaining)
+            
+            ! The harvest estimate and BAI only needs to be updated if we harvested something:
+            ! Accumulate harvest estimate:
+            harvest = harvest + cohort_harvestable_biomass(current_cohort) ! staged = true!!!!
+            patch_bai = disturbed_basal_area(patch, thin_pfts) ! Update the BAI calculation.
+          end if ! (any(pfts == current_cohort%pft))
+          
+          current_cohort => current_cohort%taller
+        end do ! Cohort loop.
+        
+      else ! Thin to a goal stem density:
+        if (debug) write(fates_log(), *) 'thin_patch_low_perfect() starting row by stem density.'
+        
+        ! This loop is identically structured to the above so the two could be combined by
+        ! generalizing the comparator variables.
+        
+        current_cohort => patch%shortest
+        do while(patch_sd > the_final_stem_density)
+          
+          if (any(pfts == current_cohort%pft)) then
+            ! Get the effective number of stems in cohort and determine if they can be removed in
+            ! part or in whole.  Because n is per nominal hectare n = stem density (n/ha):
+            cohort_stems = cohort_disturbed_n(current_cohort)
+            
+            ! Remaining stems to remove:
+            thin_sd_remaining = patch_sd - the_final_stem_density
+            
+            ! If the cohort stem count is less that what still needs to be removed kill all of it:
+            if (cohort_stems <= thin_sd_remaining) then
+              if (debug) write(fates_log(), *) 'thin_patch_low_perfect() cut whole cohort.'
+              
+              call kill_disturbed(cohort = current_cohort, flux_profile = bole_harvest, &
+                                  kill_fraction = 1.0_r8)
+              
+            else ! Otherwise only take part of the cohort:
+              if (debug) write(fates_log(), *) 'thin_patch_low_perfect() cut part of cohort.'
+              
+              cohort_fraction = thin_sd_remaining / cohort_stems
+              call kill_disturbed(cohort = current_cohort, flux_profile = bole_harvest, &
+                                  kill_fraction = cohort_fraction)
+              
+            end if
+            
+            ! The harvest estimate and stem density only need to updated if we harvested something:
+            ! Accumulate harvest estimate:
+            harvest = harvest + cohort_harvestable_biomass(current_cohort) ! staged = true!!!!
+            patch_sd = patch_disturbed_n(patch, thin_pfts) ! disturbed_stem_density(patch, thin_pfts) ! Update the stem density.
+          end if ! (any(pfts == current_cohort%pft))
+          
+          current_cohort => current_cohort%taller
+        end do ! Cohort loop.
+      endif ! (use_bai)
+    endif ! Stand is above goal loop.
+    ! Consider adding warning here if patch is below goal?
+    
+    if (present(harvest_estimate)) then
+      harvest_estimate = harvest
+    endif
+    ! Should anything be done or reported if no thinning was needed?
+    
+    if (debug) write(fates_log(), *) 'thin_patch_low_perfect() exiting.'
+  end subroutine thin_patch_low_perfect
+
+  !=================================================================================================
+
+  subroutine thin_low_perfect(site, pfts, thin_fraction) ! where = everywhere
+    ! ----------------------------------------------------------------------------------------------
+    ! Perform a perfect low thinning for a site.
+    !
+    ! This routine applies thin_patch_low_perfect() to all the patches in the site using a limited
+    ! set of its options.
+    ! In the future it will (may) allow targeting of thinning behavior to specific patches via the
+    ! 'where' parameter.
+    !
+    ! This routine does not yet return a harvest estimate.
+    !
+    ! VM Event Interface thin_low_perfect([pfts], thin_fraction)
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Uses: NA
+    
+    ! Arguments:
+    type(ed_site_type), intent(in), target :: site ! The current site object.
+    integer(i4), dimension(:), intent(in) :: pfts ! An array of PFT IDs to thin.
+    real(r8), intent(in) :: thin_fraction ! Fraction of trees to thin.
+    
+    ! Locals:
+    type(ed_patch_type), pointer :: current_patch
+    
+    ! ----------------------------------------------------------------------------------------------
+    if (debug) write(fates_log(), *) 'thin_low_perfect() beginning.'
+    
+    ! Add handling for 'empty' pfts value.
+    
+    current_patch => site%oldest_patch
+    do while (associated(current_patch))
+      
+      ! Thinning is applied to all of each patch by omitting the patch_fraction argument:
+      call thin_patch_low_perfect(patch = current_patch, pfts = pfts, thin_fraction = thin_fraction)
+      
+      current_patch => current_patch%younger
+    end do ! Patch loop.
+    
+  end subroutine thin_low_perfect
+
+  !=================================================================================================
+
   subroutine thin_patch_low_probabilistic(patch, pfts, thin_fraction)!Name? thin_low_realistic  thin_low_X_patch
     ! ----------------------------------------------------------------------------------------------
     ! Perform a low thinning on a patch such that most thinned trees are those with smaller
@@ -3416,7 +3730,7 @@ contains
     !   The steepness parameter controls how 'imperfect' the low thinning is. We use a fixed average
     ! value derived from data. However, the steepness can be adjusted to capture a wider range of
     ! thinning behavior.  At a steepness of zero the thinning is proportional.  At the other extreem
-    ! at a very high steepness the behavior approaches a 'perfect' low thinning.  This function
+    ! at a very high steepness the behavior approaches a 'perfect' low thinning.  this routine
     ! should not be used for these extremes as such thinnings can be simulated with more efficiently
     ! with other calls.  To allow the behavior to be tuned to different systems that may differ from
     ! that to derive the default value the parameter could be made an optional parameter.
@@ -3457,7 +3771,9 @@ contains
     ! removed or ignored.
     !   In reality some very small trees may be left on site.
     !
-    ! Instead of looping through all the cohorts multiple times we could make a list of the valid cohorts once and loop through those...
+    ! Notes:
+    ! - This routine does use effective values in its calculations!
+    ! - Instead of looping through all the cohorts multiple times we could make a list of the valid cohorts once and loop through those...
     !
     ! Use fraction or specific number of trees?????
     ! ----------------------------------------------------------------------------------------------
@@ -3508,6 +3824,7 @@ contains
     current_cohort => patch%shortest
     do while(associated(current_cohort))
       if (any(pfts == current_cohort%pft)) then
+        ! Should use patch_effective_n() here!!!!!
         sum_dbh = sum_dbh + (current_cohort%dbh * current_cohort%n)
         num_trees = num_trees + current_cohort%n
       endif
@@ -3613,7 +3930,7 @@ contains
     ! Perform a low thinning for a site such that most thinned trees are those with smaller
     ! diameters but some trees are also removed from the larger size classes.
     !
-    ! In it's current form this function just applies thin_patch_low_probabilistic() to all patches.
+    ! In it's current form this routine just applies thin_patch_low_probabilistic() to all patches.
     ! In the future it will (may) allow targeting of thinning behavior to specific patches via the
     ! 'where' parameter.
     !
@@ -5339,6 +5656,8 @@ contains
         this%code = vm_event_thin_test1
       case ('thin_proportional')
         this%code = vm_event_thin_proportional
+      case ('thin_low_perfect')
+        this%code = vm_event_thin_low_perfect
       case ('thin_low_probabilistic')
         this%code = vm_event_thin_low_probabilistic
       !case ()
