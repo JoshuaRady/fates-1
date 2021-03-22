@@ -3503,13 +3503,11 @@ contains
     ! Calculate the midpoint parameter based on the fraction of trees to be thinned:
     model_midpoint = midpoint_slope * thin_fraction + midpoint_intercept
     
-    if (debug) write(fates_log(), *) 'Initial model_midpoint:', model_midpoint
+    if (debug) write(fates_log(), *) 'Initial model_midpoint:', model_midpoint ! Temporary reporting.
     
     ! Starting with the initial midpoint value calculate thinning weights and repeat the process
     ! with adjusted values until we are within the tolerance:
     do while(abs(thin_total - thin_goal) > thin_tolerance)
-      if (debug) write(fates_log(), *) 'Cycles:', cycles
-      
       thin_total = 0.0_r8
       
       ! For each valid cohort determine the probability of thinning and number of trees to thin:
@@ -3545,18 +3543,29 @@ contains
       
       thin_last = thin_total ! Record the trees thinned for comparison during the next cycle.
       cycles = cycles + 1 ! Counter for debugging purposes only.
+      
+      if (debug) then ! Temporary reporting:
+        write(fates_log(), *) 'cycles:', cycles
+        write(fates_log(), *) 'model_midpoint:', model_midpoint
+        write(fates_log(), *) 'midpoint_step:', midpoint_step
+        write(fates_log(), *) 'thin_total:', thin_total
+      endif
+      
     end do ! Thinning calculation
     
-    if (debug) write(fates_log(), *) 'Thinning calculation completed.'
+    if (debug) write(fates_log(), *) 'Thinning calculation completed.' ! Temporary reporting.
     
     ! Once the proper thinning weights have been solved apply the thinning mortality:
     ! This is a bit repetetive but there is little avoiding that this must be done in a loop.
     current_cohort => patch%shortest
     do while(associated(current_cohort))
-    
+      if (debug) write(fates_log(), *) 'Starting cohort.' ! Temporary reporting.
+      
       if (any(pfts == current_cohort%pft)) then
         dbh_tranformed = current_cohort%dbh - mean_dbh
         thin_prob = 1 / (1 + exp(-model_steepness * (dbh_tranformed - model_midpoint)))
+        
+        if (debug) write(fates_log(), *) 'thin_prob:', thin_prob! Temporary reporting.
         
         ! Some or all trees could be left in place but we assume a commercial harvest:
         call kill(cohort = current_cohort, flux_profile = bole_harvest, kill_fraction = thin_prob)
