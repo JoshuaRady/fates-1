@@ -2613,11 +2613,19 @@ contains
     real(r8), intent(in), optional :: area_fraction ! Not currently handled as optional!!!!!
     
     ! Locals:
+    real(r8) the_area_fraction
     real(r8), dimension(3) :: prev_mortalities
     integer :: num_mortalities ! How many different mortality factions have already been staged?
     real(r8) :: prev_vm_mortalities
     
     ! ----------------------------------------------------------------------------------------------
+    
+    ! If not provided assume the mortality is spread over the entire patch:
+    if (present(area_fraction)) then
+      the_area_fraction = area_fraction
+    else
+      the_area_fraction = 1.0_r8
+    endif
     
     num_mortalities = 0 ! Optional...
     prev_mortalities = [cohort%lmort_direct, cohort%vm_pfrac_in_place, &
@@ -2629,8 +2637,8 @@ contains
       call endrun(msg = errMsg(__FILE__, __LINE__))
     endif
     
-    if (area_fraction <= 0.0_r8 .or. area_fraction > 1.0_r8) then
-      write(fates_log(),*) 'Invalid value for area_fraction argument.', area_fraction
+    if (the_area_fraction <= 0.0_r8 .or. the_area_fraction > 1.0_r8) then
+      write(fates_log(),*) 'Invalid value for area_fraction argument.', the_area_fraction
       call endrun(msg = errMsg(__FILE__, __LINE__))
     endif
     
@@ -2638,7 +2646,7 @@ contains
     ! limits the amount that can be practically removed.
     ! Note: Currently the flux code will try to execute requests that don't make sense leading to 
     ! carbon balence errors.
-    if (kill_fraction > area_fraction) then
+    if (kill_fraction > the_area_fraction) then
       write(fates_log(),*) "The fraction of cohort vegetation being killed can't exceed the area fraction."
       call endrun(msg = errMsg(__FILE__, __LINE__))
     endif
@@ -2680,22 +2688,22 @@ contains
 !         endif
 !         
 !         if (cohort%vm_pfrac_in_place == 0.0_r8 .or. cohort%vm_pfrac_in_place == 1.0_r8)
-!           cohort%vm_pfrac_in_place = area_fraction
-!         else if (area_fraction /= 1.0_r8)
+!           cohort%vm_pfrac_in_place = the_area_fraction
+!         else if (the_area_fraction /= 1.0_r8)
 !           ! The previous mortality and this mortality both effect an area less than one, which
 !           ! presents and ambiguous result. 
 !         endif
-        ! if (area_fraction == 1.0_r8) leave cohort%vm_pfrac_in_place unchanged.
+        ! if (the_area_fraction == 1.0_r8) leave cohort%vm_pfrac_in_place unchanged.
         
         cohort%vm_mort_in_place = kill_fraction
-        cohort%vm_pfrac_in_place = area_fraction
+        cohort%vm_pfrac_in_place = the_area_fraction
         
       case (bole_harvest)
         ! We may be able to use cohort%lmort_direct here but that will require care.
         ! For now use a new profile.
         
         cohort%vm_mort_bole_harvest = kill_fraction
-        cohort%vm_pfrac_bole_harvest = area_fraction
+        cohort%vm_pfrac_bole_harvest = the_area_fraction
         
       ! case (burn)
         ! Placeholder.
