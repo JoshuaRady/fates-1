@@ -159,6 +159,8 @@ module FatesVegetationManagementMod
   type, private :: vm_event
       integer(i4) :: code ! The event code.
       integer, dimension(1) :: pfts ! Change to array (16 in length?)
+      real(r8) :: dbh
+      real(r8) :: height
       real(r8) :: row_fraction
       real(r8) :: final_basal_area
       real(r8) :: thin_fraction
@@ -185,6 +187,11 @@ module FatesVegetationManagementMod
 
   integer, parameter, private :: vm_event_generative_max = vm_event_plant
   integer, parameter, private :: vm_event_mortality_max = vm_event_thin_low_probabilistic
+  
+  ! These values are used to indicate an optional parameter was not provided by the driver call:
+  ! Can we safely use only vm_empty_integer?
+  integer, parameter, private :: vm_empty_integer = -99 ! Formerly -1
+  real, parameter, private :: vm_empty_real = -99.0_r8 ! Formerly -1.0_r8
 
   !=================================================================================================
   
@@ -463,21 +470,21 @@ contains
     ! not retrieve it in the code below.
     ! ----------------------------------------------------------------------------------------------
     if (thinning_needed) then
-      if (debug) write(fates_log(), *) 'VM thinning event beginning.'
-      
-      ! Making the following work would be a bit of a pain since it returns an variable length array
-      ! of pointers, which is not simple in Fortran:
-      ! thin_patches = find_thinnable_patches(site_in, criteria)
-      ! For now either just return the first or use a comparator function:
-      
-      current_patch => site_in%oldest_patch
-      do while (associated(current_patch))
-        if (thinnable_patch(patch = current_patch, pfts = tree_pfts, goal_basal_area = 20.0_r8)) then
-          call thin_row_low(patch = current_patch, pfts = woody_pfts, &
-                            row_fraction = 0.2_r8, final_basal_area = 25.0_r8)
-        endif
-        current_patch => current_patch%younger
-      end do
+!       if (debug) write(fates_log(), *) 'VM thinning event beginning.'
+!       
+!       ! Making the following work would be a bit of a pain since it returns an variable length array
+!       ! of pointers, which is not simple in Fortran:
+!       ! thin_patches = find_thinnable_patches(site_in, criteria)
+!       ! For now either just return the first or use a comparator function:
+!       
+!       current_patch => site_in%oldest_patch
+!       do while (associated(current_patch))
+!         if (thinnable_patch(patch = current_patch, pfts = tree_pfts, goal_basal_area = 20.0_r8)) then
+!           call thin_row_low(patch = current_patch, pfts = woody_pfts, &
+!                             row_fraction = 0.2_r8, final_basal_area = 25.0_r8)
+!         endif
+!         current_patch => current_patch%younger
+!       end do
       
       ! Estimate the woodproduct (trunk_product_site) if not done already. !!!!!
 !       cohort_harvestable_biomass(cohort = current_cohort, harvest_profile = bole_harvest, &
@@ -560,7 +567,7 @@ contains
     
     ! ----------------------------------------------------------------------------------------------
     ! Vegetation Management Events (Mortality Inducing):
-    ! If a VM event has been prescribed by the driver input execute it:
+    ! If a VM event has been prescribed by the driver input file execute it:
     !
     ! Note:  I haven't figured out how heuristic / land use time series events will work yet so this
     ! logic will likely be revised again.
@@ -1055,6 +1062,26 @@ contains
       ! No planting for now.
         
     end if ! if (logging_time)
+    
+    
+    ! Execute any generative events that came in via the driver file:-------------------------------
+    if (vm_generative_event%code /= vm_event_null) then
+      if (debug) write(fates_log(), *) 'VM generative event initiating.'
+      
+      select case (vm_generative_event%code)
+        !case (vm_event_null)
+        case (vm_event_plant)
+          call plant_site(site = site, bc_in = bc_in, pfts = vm_generative_event%pfts, &
+                          density = vm_generative_event%density, dbh = vm_generative_event%dbh, &
+                          height = vm_generative_event%height)
+          
+        case default
+          write(fates_log(),*) 'Unrecognized event code:', vm_generative_event%code
+          call endrun(msg = errMsg(__FILE__, __LINE__))
+          ! Add checking for generative events?
+      end select ! (vm_generative_event%code)
+      
+    end if ! (vm_generative_event%code /= vm_event_null)
     
     if (debug) write(fates_log(), *) 'managed_fecundity() exiting.'
   end subroutine managed_fecundity
@@ -1966,7 +1993,7 @@ contains
     use PRTGenericMod, only : num_elements, num_organ_types, element_list
     
     ! Arguments:
-    type(ed_site_type), intent(inout), target :: site
+    type(ed_site_type), intent(inout), target :: site ! Should be able to get this from patch?????
     ! I'm not sure why this must be pointer rather than target?
     type(ed_patch_type), intent(inout), pointer :: patch
     type(bc_in_type), intent(in) :: bc_in
@@ -1981,7 +2008,10 @@ contains
     ! Consider adding a warning?????
     ! If neither DBH nor height is provided then fates_recruit_hgt_min will be used.
     
+    ! Optional parameters:
     ! Note: It appears that the compliler on Cheyenne does not support the value keyword / attribute.
+    ! If called due to a VM driver file event 'empty' values may be passed for these parameters.
+    ! We check that below.
     real(r8), intent(in), optional :: density ! The planting density (plants / m^2)
     real(r8), intent(in), optional :: dbh ! Sapling diameter at breast height (cm)
     real(r8), intent(in), optional :: height ! Sapling height (m)
@@ -2009,7 +2039,7 @@ contains
     area = patch%area
     
     ! If not provided use the default initial plant density:
-    if (present(density)) then
+    if (present(density) .and. (density /= vm_empty_real)) then
       the_density = density
     else
       the_density = EDPftvarcon_inst%initd(pft_index)
@@ -2017,11 +2047,11 @@ contains
     
     ! Size:
     ! If DBH or height if provided (in that order), otherwise use the default height.
-    if (present(dbh)) then
+    if (present(dbh) .and. (dbh /= vm_empty_real)) then
       the_dbh = dbh
       use_dbh = .true.
     else
-      if (present(height)) then
+      if (present(height) .and. (height /= vm_empty_real)) then
         the_height = height
       else
         ! Get the default from the parameter file:
@@ -2916,6 +2946,65 @@ contains
   !=================================================================================================
 
   !=================================================================================================
+  ! Establishment Subroutines:
+  !=================================================================================================
+
+  subroutine plant_site(site, bc_in, pfts, density, dbh, height) ! where = "everywhere"
+    ! ----------------------------------------------------------------------------------------------
+    ! Plant the specified pft across all patches of a site.
+    !
+    ! In the future we may allow targeting of thinning behavior to specific patches via the 'where'
+    ! parameter.
+    !
+    ! VM Event Interface plant(pfts, [density], [dbh], [height])
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Uses: NA
+    
+    ! Arguments:
+    type(ed_site_type), intent(inout), target :: site
+    type(bc_in_type), intent(in) :: bc_in
+    ! The PFT index number to plant.  Allows an array but only on will be used (see pft_index):
+    integer(i4), intent(in), target :: pfts(:)
+    
+    ! Optional parameters:
+    ! If called due to a VM driver file event 'empty' values may be passed for these parameters.
+    ! The question is whether to catch that in managed_fecundity(), here, or in plant(). Handling
+    ! it in plant() seemed simplest.
+    real(r8), intent(in), optional :: density ! The planting density (plants / m^2)
+    real(r8), intent(in), optional :: dbh ! Sapling diameter at breast height (cm)
+    real(r8), intent(in), optional :: height ! Sapling height (m)
+    
+    ! Add 'where' parameter.
+    
+    ! Locals:
+    type(ed_patch_type), pointer :: current_patch
+    type(ed_cohort_type), pointer :: current_cohort
+    integer(i4) :: pft_index
+    
+    ! ----------------------------------------------------------------------------------------------
+    if (debug) write(fates_log(), *) 'plant_site() beginning.'
+    
+    ! Many other driver events take more than one PFTs.  We could loop over multiple PFTs if that
+    ! functionality were desired.  Now we just pass on one:
+    if (size(pfts) > 1) then
+      write(fates_log(),*) 'plant_site() currently only accepts a single PFT.  Only the first will be used.'
+    endif
+    
+    pft_index = pfts(1)
+    
+    current_patch => site%oldest_patch
+    do while (associated(current_patch))
+      
+      call plant(site = site, patch = current_patch, bc_in = bc_in, pft_index = pft_index, &
+                 density = density, dbh = dbh, height = height)
+      
+      current_patch => current_patch%younger
+    end do ! Patch loop.
+    
+  end subroutine plant_site
+
+  !=================================================================================================
   ! Competition Control Subroutines:
   !=================================================================================================
 
@@ -3363,7 +3452,6 @@ contains
     ! ----------------------------------------------------------------------------------------------
     
     ! Uses: NA
-    use EDTypesMod, only : ed_site_type
     
     ! Arguments:
     type(ed_site_type), intent(in), target :: site ! The current site object.
@@ -5536,10 +5624,12 @@ contains
     
     ! We need sensible defaults for these parameters or a value that indicates the parameter is
     ! 'missing'.  These value are temporary:
-    this%pfts = -1 ! Change to array (16 in length?)
-    this%row_fraction = -1.0_r8
-    this%final_basal_area = -1.0_r8
-    this%thin_fraction = -1.0_r8
+    this%pfts = vm_empty_integer ! Change to array (16 in length?)
+    this%dbh = vm_empty_real
+    this%height = vm_empty_real
+    this%row_fraction = vm_empty_real
+    this%final_basal_area = vm_empty_real
+    this%thin_fraction = vm_empty_real
     
   end subroutine zero
 
@@ -5700,6 +5790,10 @@ contains
           read(param_value, *) this%pfts
           !pfts = parse_array(param_value)
           
+        case ('dbh') ! plant()
+          read(param_value, *) this%dbh
+        case ('height') ! plant()
+          read(param_value, *) this%height
         case ('row_fraction') ! thin_row_low()
           read(param_value, *) this%row_fraction
         case ('final_basal_area') ! thin_row_low()
@@ -5786,6 +5880,8 @@ contains
     
     write(fates_log(), *) 'Parameters:'
     write(fates_log(), *) 'pfts:             ', this%pfts
+    write(fates_log(), *) 'dbh:              ', this%dbh
+    write(fates_log(), *) 'height:           ', this%height
     write(fates_log(), *) 'row_fraction:     ', this%row_fraction
     write(fates_log(), *) 'final_basal_area: ', this%final_basal_area
     write(fates_log(), *) 'thin_fraction:    ', this%thin_fraction
