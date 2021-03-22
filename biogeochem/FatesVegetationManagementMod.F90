@@ -3404,9 +3404,11 @@ contains
   subroutine thin_patch_low_perfect(patch, pfts, patch_fraction, thin_fraction, final_basal_area, &
                                     final_stem_density, harvest_estimate)
     ! ----------------------------------------------------------------------------------------------
-    ! Thinning a patch harvesting the trees from smallest to largest until the thinning goal is met.
+    ! Thin a patch harvesting the trees from smallest to largest until the thinning goal is met.
     ! For maximum flexibility the amount to thin may be specified as a fraction of stems (relative)
     ! or a goal (stem density or basal area).
+    ! The low thinning is 'perfect' because only exact number of the smallest trees are removed,
+    ! which is not terrible realistic in most cases.
     !
     ! This routine duplicates and expands much of the code from thin_row_low(), except the row
     ! thinning.  thin_row_low() should probably be rewritten to use this routine.
@@ -3477,18 +3479,6 @@ contains
       thin_pfts => tree_pfts
     endif
     
-    ! Determine the thinning amount:
-    ! if (present(row_fraction)) then
-!       if (row_fraction > 1.0_r8 .or. row_fraction <= 0.0_r8) then ! Better high and low values?
-!         write(fates_log(),*) 'thin_row_low(): Invalid row fraction provided.'
-!         call endrun(msg = errMsg(__FILE__, __LINE__))
-!       end if
-!     
-!       the_row_fraction = row_fraction
-!     else
-!       the_row_fraction = 0.2_r8 ! Default value.
-!     end if
-    
     ! Note: Since all the calculations below are per area the patch fraction does not effect them.
     ! It is only passed on to kill().
     if (present(patch_fraction)) then
@@ -3536,29 +3526,8 @@ contains
     if ((use_bai .and. (patch_bai > final_basal_area)) .or. &
         ((.not. use_bai) .and. (patch_sd > the_final_stem_density))) then
       
-      ! Thin every X rows = remove 1/X of each cohort:----------------------------------------------
-      !if (debug) write(fates_log(), *) 'thin_row_low() starting row thinning.'
-      
-      ! current_cohort => patch%shortest
-!       do while(associated(current_cohort))
-!         
-!         if (any(pfts == current_cohort%pft)) then
-!           ! Call kill() here to set the area fraction.  Use kill_disturbed() for subsequent calls:
-!           call kill(cohort = current_cohort, flux_profile = bole_harvest, &
-!                     kill_fraction = the_row_fraction, area_fraction = the_patch_fraction)
-!           
-!           ! Accumulate harvest estimate:
-!           harvest = harvest + cohort_harvestable_biomass(current_cohort) ! staged = true!!!!
-!         endif
-!         
-!         current_cohort => current_cohort%taller
-!       end do ! Cohort loop.
-      
-      ! If still over the goal value thin further:--------------------------------------------------
-      
-      ! The kill() call above does not result in a change to the cohort numbers yet, this will
-      ! happen later.  Therefore we need to keep track of the changes to BAI, density, and plant
-      ! number's manually from here on.
+      ! There may be previously staged mortality. Therefore we need to keep track of the changes to
+      ! BAI, density, and plant number's:
       patch_bai = disturbed_basal_area(patch, thin_pfts)
       patch_sd = patch_disturbed_n(patch, thin_pfts) !disturbed_stem_density(patch, thin_pfts)
       
@@ -3668,7 +3637,7 @@ contains
 
   subroutine thin_low_perfect(site, pfts, thin_fraction) ! where = everywhere
     ! ----------------------------------------------------------------------------------------------
-    ! Perform a perfect low thinning for a site.
+    ! Perform a 'perfect' low thinning for a site.
     !
     ! This routine applies thin_patch_low_perfect() to all the patches in the site using a limited
     ! set of its options.
