@@ -58,8 +58,8 @@ module FatesVegetationManagementMod
   private :: understory_control
   private :: thin_row_low
   private :: thinnable_patch
-  private :: thin_low
-  ! thin_low fractional?????
+  !private :: thin_low
+  private :: thin_proportional
   private :: thin_patch_low_probabilistic
   private :: thin_low_probabilistic
   private :: harvest_mass_min_area
@@ -176,8 +176,8 @@ module FatesVegetationManagementMod
   !integer, parameter, private :: vm_event_XXXXX = 1
   !integer, parameter, private :: vm_event_XXXXX = 2
   integer, parameter, private :: vm_event_plant = 1 ! Not really thought out yet...
-  integer, parameter, private :: vm_event_thin_test1 = 2 ! In progress
-  integer, parameter, private :: vm_event_thin_low = 3 ! In development.
+  integer, parameter, private :: vm_event_thin_test1 = 2 ! In progress, currently wraps thin_row_low() to do perfect low thinning.
+  integer, parameter, private :: vm_event_thin_proportional = 3 ! In development.
   integer, parameter, private :: vm_event_thin_low_probabilistic = 4
 
   integer, parameter, private :: vm_event_generative_max = vm_event_plant
@@ -605,10 +605,9 @@ contains
             current_patch => current_patch%younger
           end do
           
-        case (vm_event_thin_low)
-          
-          call thin_low(site = site_in, pfts = vm_mortality_event%pfts, &
-                        thin_fraction = vm_mortality_event%thin_fraction)
+        case (vm_event_thin_proportional)
+          call thin_proportional(site = site_in, pfts = vm_mortality_event%pfts, &
+                                 thin_fraction = vm_mortality_event%thin_fraction)
           
         case (vm_event_thin_low_probabilistic)
           call thin_low_probabilistic(site = site_in, pfts = vm_mortality_event%pfts, &
@@ -3344,19 +3343,16 @@ contains
 
   !=================================================================================================
 
-  subroutine thin_low(site, pfts, thin_fraction) ! Return the harvest amount in harvest_estimate! Rename?
+  subroutine thin_proportional(site, pfts, thin_fraction) ! Return the harvest amount in harvest_estimate! Rename?
     ! ----------------------------------------------------------------------------------------------
-    ! This is in development. The name and arguments may change.
-    !
-    ! This doesn't currently really do a low thinning.  It thins all trees matching the PFTs passed.
-    ! What it should do is calculate the number of stems of the requested stem and remove the
-    ! fraction requested starting with the smaller trees first.  Ideally the trees will be removed
-    ! in a realistic way, when mostly small trees are removed but in a probabilistic way where some
-    ! larger trees are removed.
+    ! Thin all size classes of the PFT(s) passed proportionally across a stie, i.e by the same
+    ! fraction for all sizes.  This approximates a random thinning.
     !
     ! Unlike thin_row_low() this thinning doesn't use specific thinning goals, the goal is relative.
+    ! In the future we may allow targeting of thinning behavior to specific patches via the 'where'
+    ! parameter.
     !
-    ! VM Event Interface thin_low([pfts], thin_fraction)
+    ! VM Event Interface thin_proportional([pfts], thin_fraction)
     ! ----------------------------------------------------------------------------------------------
     
     ! Uses: NA
@@ -3373,7 +3369,7 @@ contains
     type(ed_cohort_type), pointer :: current_cohort
     
     ! ----------------------------------------------------------------------------------------------
-    if (debug) write(fates_log(), *) 'thin_low() beginning.'
+    if (debug) write(fates_log(), *) 'thin_proportional() beginning.'
     
     current_patch => site%oldest_patch
     do while (associated(current_patch))
@@ -3394,7 +3390,7 @@ contains
       current_patch => current_patch%younger
     end do ! Patch loop.
     
-  end subroutine thin_low
+  end subroutine thin_proportional
 
   !=================================================================================================
 
@@ -3402,7 +3398,7 @@ contains
     ! ----------------------------------------------------------------------------------------------
     ! Perform a low thinning on a patch such that most thinned trees are those with smaller
     ! diameters but some trees are also removed from the larger size classes.  This is more
-    ! realistic than a 'perfect' low thinning since foresters generally have balence spacing with
+    ! realistic than a 'perfect' low thinning since foresters generally have to balence spacing with
     ! size during thinning.
     ! 
     ! The Thinning Model:
@@ -3446,7 +3442,20 @@ contains
     ! the midpoint value until the requested thinning fraction is achieved.
     !
     ! Realism and Weaknesses:
-    ! smoothness...
+    !   When performing a low thinning (thinning from below) foresters preferentially remove the
+    ! smaller trees but this in not perfect for several reasons.  First, trees are rarely evenly
+    ! spaced with regard to their size.  If small trees are clustered removing them will create
+    ! large canopy gaps and other trees will be closely spaced.  In such cases some larger trees may
+    ! be removed to maintain optimal spacing.  Also larger trees may be removed due to damage or
+    ! poor form.  And of couse some stochastic errors are to be expected.
+    !   This routine captures this demographic effect but is unrealistic in its smoothness.  The
+    ! smooth PDF used to calculate thinning results in some thinning at all sizes, where in reality
+    ! some small and many large trees escape thinning completely.
+    !   This algorithm was designed for single aged stands.  For stands that have a lot smaller
+    ! trees result may not be as intended.  Since canopy trees are the focus of thinning it is
+    ! probably appropriate in such cases to have a size cut-off under which all trees are either
+    ! removed or ignored.
+    !   In reality some very small trees may be left on site.
     !
     ! Instead of looping through all the cohorts multiple times we could make a list of the valid cohorts once and loop through those...
     !
@@ -3606,7 +3615,7 @@ contains
     !
     ! In it's current form this function just applies thin_patch_low_probabilistic() to all patches.
     ! In the future it will (may) allow targeting of thinning behavior to specific patches via the
-    ! where parameter.
+    ! 'where' parameter.
     !
     ! VM Event Interface thin_low_probabilistic([pfts], thin_fraction)
     ! ----------------------------------------------------------------------------------------------
@@ -5328,8 +5337,8 @@ contains
         this%code = vm_event_plant
       case ('thin_row_low') ! Name will probably change!!!!!
         this%code = vm_event_thin_test1
-      case ('thin_low')
-        this%code = vm_event_thin_low
+      case ('thin_proportional')
+        this%code = vm_event_thin_proportional
       case ('thin_low_probabilistic')
         this%code = vm_event_thin_low_probabilistic
       !case ()
@@ -5407,7 +5416,7 @@ contains
           read(param_value, *) this%row_fraction
         case ('final_basal_area') ! thin_row_low()
           read(param_value, *) this%final_basal_area
-        case ('thin_fraction') ! thin_low()
+        case ('thin_fraction') ! thin_proportional(), thin_patch_low_probabilistic()
           read(param_value, *) this%thin_fraction
         !More to come:
         !case ('')
