@@ -3489,7 +3489,8 @@ contains
     num_trees = 0.0_r8
     thin_total = 0.0_r8
     thin_last = 0.0_r8
-    midpoint_step = 0.05_r8 ! The initial step size is arbitrary. We assume we are pretty close when we start.
+    !midpoint_step = 0.05_r8 ! The initial step size is arbitrary. We assume we are pretty close when we start.
+    midpoint_step = 0.5_r8 ! Start by adjusting the midpoint by 0.5 cm if we are not within the tolerance.
     cycles = 0
     
     ! Validity checking for thin_fraction!!!!!
@@ -3516,6 +3517,7 @@ contains
     ! Starting with the initial midpoint value calculate thinning weights and repeat the process
     ! with adjusted values until we are within the tolerance:
     do while(abs(thin_total - thin_goal) > thin_tolerance)
+      cycles = cycles + 1 ! Counter ...
       thin_total = 0.0_r8
       
       ! For each valid cohort determine the probability of thinning and number of trees to thin:
@@ -3533,11 +3535,12 @@ contains
       end do ! Cohort loop.
       
       ! Adjust the midpoint for the next cycle (may not be used if we are close enough already):
-      
-      ! If we passed over the goal in the last step decrease the step size:
-      if ((thin_last < thin_goal .and. thin_total > thin_goal) .or. &
-          (thin_last > thin_goal .and. thin_total < thin_goal)) then
-        midpoint_step = midpoint_step / 2.0_r8
+      if (cycles > 1) then
+        ! If we passed over the goal since the last step decrease the step size:
+        if ((thin_last < thin_goal .and. thin_total > thin_goal) .or. &
+            (thin_last > thin_goal .and. thin_total < thin_goal)) then
+          midpoint_step = midpoint_step / 2.0_r8
+        endif
       endif
       
       ! Step up or down:
@@ -3550,7 +3553,7 @@ contains
       ! Are there invalid midpoint values that will let us know the search has gone wrong?
       
       thin_last = thin_total ! Record the trees thinned for comparison during the next cycle.
-      cycles = cycles + 1 ! Counter for debugging purposes only.
+      ! cycles = cycles + 1 ! Counter for debugging purposes only.
       
       if (debug) then ! Temporary reporting:
         write(fates_log(), *) 'cycles:', cycles
