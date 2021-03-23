@@ -198,7 +198,7 @@ module FatesVegetationManagementMod
   ! Can we safely use only vm_empty_integer?
   integer, parameter, private :: vm_empty_integer = -99 ! Formerly -1
   real, parameter, private :: vm_empty_real = -99.0_r8 ! Formerly -1.0_r8
-  real, parameter, private :: vm_empty_array = vm_empty_integer ! Temporary until vm_event%pfts is a real array.
+  !real, parameter, private :: vm_empty_array = vm_empty_integer ! Temporary until vm_event%pfts is a real array.
 
   !=================================================================================================
   
@@ -4520,6 +4520,7 @@ contains
     ! Uses: NA
     
     ! Arguments:
+    type(ed_patch_type), intent(in), target :: patch
     ! Which tree PFTs are harvestable trees?  If omitted all woody trees will be used:
     !integer(i4), dimension(:), intent(in) :: pfts ! Defaults to trees?
     integer(i4), intent(in), optional, target :: pfts(:)
@@ -4530,7 +4531,7 @@ contains
     real(r8), intent(in), optional :: ht_min ! Defaults to 0.
     
     ! The fraction of the patch that the mortality is removed from / the size of the disturbance:
-    real(r8), intent(in), optional :: patch_fraction ! Defaults to 1 (all).
+    real(r8), intent(in), optional :: patch_fraction ! Defaults to 1 (whole patch).
     
     ! Locals:
     integer(i4), pointer, dimension(:) :: the_pfts ! Holds the PFTs to harvest, computed from arguments.
@@ -4539,14 +4540,15 @@ contains
     real(r8) :: the_patch_fraction
     
     integer :: i, j ! Counters
-    integer:: all_pfts(12) = (/ (k, k = 1, 12) /) ! Generalize and make global!!!!!
+    integer:: all_pfts(12) = (/ (integer :: k, k = 1, 12) /) ! Generalize and make global!!!!!
     integer:: other_pfts(12)
     
     ! ----------------------------------------------------------------------------------------------
     if (debug) write(fates_log(), *) 'clearcut_patch() entering.'
     
     ! Validate the PFTs:
-    if (present(pfts) .and. (pfts /= vm_empty_array)) then
+    !if (present(pfts) .and. (pfts /= vm_empty_array)) then
+    if (present(pfts) .and. all(pfts /= vm_empty_integer)) then
       ! Confirm PFTs to harvest are all trees:
       do i = 1, size(pfts)
         if (.not. any(pfts(i) == tree_pfts)) then
@@ -4580,8 +4582,9 @@ contains
     
     ! Harvest the appropriate trees:
     call kill_patch(patch = patch, flux_profile = bole_harvest, pfts = pfts, &
-                    dbh_min = the_dbh_min, dbh_max = the_dbh_max, &
-                    ht_min = the_ht_min, ht_max = the_ht_max, &
+                    !dbh_min = the_dbh_min, dbh_max = the_dbh_max, &
+                    !ht_min = the_ht_min, ht_max = the_ht_max, &
+                    dbh_min = the_dbh_min, ht_min = the_ht_min, &
                     kill_fraction = 1.0_r8, area_fraction = 1.0_r8)
     
     ! Kill everything else in place:
