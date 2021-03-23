@@ -4539,7 +4539,8 @@ contains
     real(r8) :: the_ht_min
     real(r8) :: the_patch_fraction
     
-    integer :: i, j ! Counters
+    integer :: i, j, k ! Counters
+    !integer:: all_pfts(12) = (/ (integer :: k, k = 1, 12) /) ! Generalize and make global!!!!!
     integer:: all_pfts(12) = (/ (integer :: k, k = 1, 12) /) ! Generalize and make global!!!!!
     integer:: other_pfts(12)
     
@@ -4634,7 +4635,7 @@ contains
     
     ! Uses:
     
-    type(ed_site_type), intent(in), target :: site ! The current site object.
+    type(ed_site_type), intent(inout), target :: site ! The current site object.
     integer(i4), dimension(:), intent(in), optional :: pfts ! An array of PFT IDs to harvest.
     
     ! Size specification:
