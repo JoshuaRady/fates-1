@@ -68,6 +68,7 @@ module FatesVegetationManagementMod
   private :: plant_harvestable_biomass
   private :: cohort_harvestable_biomass
   private :: clearcut_patch
+  private :: clearcut
   
   ! Utilities:
   private :: cohort_effective_basal_area
@@ -166,6 +167,9 @@ module FatesVegetationManagementMod
       real(r8) :: row_fraction
       real(r8) :: final_basal_area
       real(r8) :: thin_fraction
+      real(r8) :: dbh_min
+      real(r8) :: ht_min
+      real(r8) :: patch_fraction
     contains
       procedure :: zero
       procedure :: load
@@ -179,21 +183,22 @@ module FatesVegetationManagementMod
 
   ! VM event codes:
   integer, parameter, private :: vm_event_null = 0 ! No event
-  !integer, parameter, private :: vm_event_XXXXX = 1
-  !integer, parameter, private :: vm_event_XXXXX = 2
-  integer, parameter, private :: vm_event_plant = 1 ! Not really thought out yet...
+  integer, parameter, private :: vm_event_plant = 1
   integer, parameter, private :: vm_event_thin_test1 = 2 ! In progress, currently wraps thin_row_low() to do perfect low thinning.
   integer, parameter, private :: vm_event_thin_proportional = 3
   integer, parameter, private :: vm_event_thin_low_perfect = 4
   integer, parameter, private :: vm_event_thin_low_probabilistic = 5
+  integer, parameter, private :: vm_event_clearcut = 6
+  !integer, parameter, private :: vm_event_XXXXX = X
 
   integer, parameter, private :: vm_event_generative_max = vm_event_plant
-  integer, parameter, private :: vm_event_mortality_max = vm_event_thin_low_probabilistic
+  integer, parameter, private :: vm_event_mortality_max = vm_event_clearcut
   
   ! These values are used to indicate an optional parameter was not provided by the driver call:
   ! Can we safely use only vm_empty_integer?
   integer, parameter, private :: vm_empty_integer = -99 ! Formerly -1
   real, parameter, private :: vm_empty_real = -99.0_r8 ! Formerly -1.0_r8
+  real, parameter, private :: vm_empty_array = vm_empty_integer ! Temporary until vm_event%pfts is a real array.
 
   !=================================================================================================
   
@@ -3140,7 +3145,7 @@ contains
     
     ! Arguments:
     type(ed_patch_type), intent(inout), target :: patch ! Or pointer?????
-    ! Which tree PFTs are harvestable trees.  If omitted all woody trees will be used.  Otherwise
+    ! Which tree PFTs are harvestable trees?  If omitted all woody trees will be used.  Otherwise
     ! any omitted will be ignored for the purpose of calculating BAI and stem density.
     ! Be careful when excluding PFTs that may compete in the canopy.
     integer(i4), intent(in), optional, target :: pfts(:) ! An array of PFT IDs to thin.
@@ -3731,7 +3736,7 @@ contains
     !
     ! This routine applies thin_patch_low_perfect() to all the patches in the site using a limited
     ! set of its options.
-    ! In the future it will (may) allow targeting of thinning behavior to specific patches via the
+    ! In the future we will (may) allow targeting of thinning behavior to specific patches via the
     ! 'where' parameter.
     !
     ! This routine does not yet return a harvest estimate.
@@ -3990,7 +3995,7 @@ contains
     ! diameters but some trees are also removed from the larger size classes.
     !
     ! In it's current form this routine just applies thin_patch_low_probabilistic() to all patches.
-    ! In the future it will (may) allow targeting of thinning behavior to specific patches via the
+    ! In the future we will (may) allow targeting of thinning behavior to specific patches via the
     ! 'where' parameter.
     !
     ! VM Event Interface thin_low_probabilistic([pfts], thin_fraction)
@@ -4490,44 +4495,88 @@ contains
 
   !=================================================================================================
 
-  subroutine clearcut_patch(patch, pfts, dbh_min, ht_min) ! area_fraction
+  subroutine clearcut_patch(patch, pfts, dbh_min, ht_min, patch_fraction)
     ! ----------------------------------------------------------------------------------------------
     ! Perform a clearcut harvest on a patch.
+    !   All the trees matching the PFT and size specification are bole harvested and moved to the
+    ! wood product pool.  Other trees and understory are killed and left on site. For simplicity we
+    ! assume that there will be no maximum tree size limit for harvest, though there may be minimum
+    ! size, which can be specified by either diameter or height.
     !
-    ! For simplicity we assume that there will be no maximum size limit for harvest, though there
-    ! may be minimum sizes.
+    ! It could be more realistic to leave some harvestable biomass on site as a harvest
+    ! inefficiency (the logging module behavior does this).  Also leaving some understory alive
+    ! would be appropriate if a reasonable fraction could be determined.
     !
+    ! This routine uses kill() calls that assume this is the first disturbing event that has
+    ! occurred.  It should be revised used 'disturbed' calls.
+    !
+    !-----------------------------------------------------------------------------------------------
+    ! Harvest Operation: Patch Level
+    ! Operation Type: Harvest
+    ! Operation Level: Patch
+    ! Regime: (single age) clearcut harvest rotation
     ! ----------------------------------------------------------------------------------------------
     
     ! Uses: NA
     
     ! Arguments:
-    ! An array of PFT IDs to include in the basal area calculation: Make optional?
-    integer(i4), dimension(:), intent(in) :: pfts ! Default to trees?
+    ! Which tree PFTs are harvestable trees?  If omitted all woody trees will be used:
+    !integer(i4), dimension(:), intent(in) :: pfts ! Defaults to trees?
+    integer(i4), intent(in), optional, target :: pfts(:)
     
     ! Size specification:
     ! Minimum size of to trees to harvest.  Only provide a minimum DBH or height, not both:
     real(r8), intent(in), optional :: dbh_min ! Defaults to 0.
     real(r8), intent(in), optional :: ht_min ! Defaults to 0.
     
-    ! area_fraction / patch_fraction
+    ! The fraction of the patch that the mortality is removed from / the size of the disturbance:
+    real(r8), intent(in), optional :: patch_fraction ! Defaults to 1 (all).
     
     ! Locals:
+    integer(i4), pointer, dimension(:) :: the_pfts ! Holds the PFTs to harvest, computed from arguments.
     real(r8) :: the_dbh_min
     real(r8) :: the_ht_min
+    real(r8) :: the_patch_fraction
     
     integer :: i, j ! Counters
     integer:: all_pfts(12) = (/ (k, k = 1, 12) /) ! Generalize and make global!!!!!
     integer:: other_pfts(12)
     
     ! ----------------------------------------------------------------------------------------------
-    if (debug) write(fates_log(), *) 'thin_patch_low_probabilistic() entering.'
+    if (debug) write(fates_log(), *) 'clearcut_patch() entering.'
+    
+    ! Validate the PFTs:
+    if (present(pfts) .and. (pfts /= vm_empty_array)) then
+      ! Confirm PFTs to harvest are all trees:
+      do i = 1, size(pfts)
+        if (.not. any(pfts(i) == tree_pfts)) then
+          write(fates_log(),*) 'clearcut_patch(): Only tree PFTs are expected.'
+          write(fates_log(),*) 'Tree PFTs =    ', tree_pfts
+          write(fates_log(),*) 'Selected PFTs =', pfts
+          call endrun(msg = errMsg(__FILE__, __LINE__)) ! We could just warn here?
+        endif
+      end do
+      
+      the_pfts => pfts
+    else
+      the_pfts => tree_pfts
+    endif ! present(dbh)...
     
     ! Validate the size specifications:
     call validate_size_specifications(dbh_min_out = the_dbh_min, ht_min_out = the_ht_min, &
                                       dbh_min = dbh_min, ht_min = ht_min)
     
-    ! Check that the PFTs are all trees?
+    ! Validate the patch fraction:
+    if (present(patch_fraction)) then
+      the_patch_fraction = patch_fraction
+    else
+      the_patch_fraction = 1.0_r8
+    endif
+    
+    if (the_patch_fraction <= 0.0_r8 .or. the_patch_fraction > 1.0_r8) then
+      write(fates_log(),*) 'Invalid value for the_patch_fraction argument.', the_patch_fraction
+      call endrun(msg = errMsg(__FILE__, __LINE__))
+    endif
     
     ! Harvest the appropriate trees:
     call kill_patch(patch = patch, flux_profile = bole_harvest, pfts = pfts, &
@@ -4537,7 +4586,7 @@ contains
     
     ! Kill everything else in place:
     
-    ! If there were size limits used for the harvested PFTs then there may be some trees remaining.
+    ! If there were size limits set for the harvested PFTs then there may be some trees remaining.
     ! Assume those were killed in the process of harvest but were left on site:
     if (present(dbh_min)) then
       call kill_patch(patch = patch, flux_profile = in_place, pfts = pfts, dbh_max = the_dbh_min, &
@@ -4560,29 +4609,51 @@ contains
       endif
     end do
     
-    if (j > 0) then ! If there are any PFTs kill them:
+    if (j > 0) then ! If there are any remaining PFTs kill them:
       call kill_patch(patch = patch, flux_profile = in_place, pfts = other_pfts(1:j), &
                       kill_fraction = 1.0_r8, area_fraction = 1.0_r8)
     endif
     
+    if (debug) write(fates_log(), *) 'clearcut_patch() exiting.'
   end subroutine clearcut_patch
 
   !=================================================================================================
 
-!   subroutine clearcut()
-!     ! ----------------------------------------------------------------------------------------------
-!     ! 
-!     ! ----------------------------------------------------------------------------------------------
-!     
-!     ! Uses:
-!     
-!     ! Arguments:
-!     
-!     ! Locals:
-!     
-!     ! ----------------------------------------------------------------------------------------------
-!     
-!   end subroutine clearcut
+  subroutine clearcut(site, pfts, dbh_min, ht_min) ! patch_fraction
+    ! ----------------------------------------------------------------------------------------------
+    ! Perform a clearcut harvest for all patches of a site.
+    !
+    ! In the future we will (may) allow targeting of thinning behavior to specific patches via the
+    ! 'where' parameter.
+    !
+    ! VM Event Interface: clearcut(pfts, [dbh_min], [ht_min]) pfts optional?
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Uses:
+    
+    type(ed_site_type), intent(in), target :: site ! The current site object.
+    integer(i4), dimension(:), intent(in), optional :: pfts ! An array of PFT IDs to harvest.
+    
+    ! Size specification:
+    ! Minimum size of to trees to harvest.  Only provide a minimum DBH or height, not both:
+    real(r8), intent(in), optional :: dbh_min ! Defaults to 0.
+    real(r8), intent(in), optional :: ht_min ! Defaults to 0.
+    
+    ! Locals:
+    type(ed_patch_type), pointer :: current_patch
+    
+    ! ----------------------------------------------------------------------------------------------
+    if (debug) write(fates_log(), *) 'clearcut() beginning.'
+    
+    current_patch => site%oldest_patch
+    do while (associated(current_patch))
+      
+      call clearcut_patch(current_patch, pfts, dbh_min, ht_min)
+      
+      current_patch => current_patch%younger
+    end do ! Patch loop.
+    
+  end subroutine clearcut
 
   !=================================================================================================
   ! Utilities:
@@ -5722,13 +5793,16 @@ contains
     
     ! We need sensible defaults for these parameters or a value that indicates the parameter is
     ! 'missing'.  These value are temporary:
-    this%pfts = vm_empty_integer ! Change to array (16 in length?)
+    this%pfts = vm_empty_integer ! Change to array (16 in length?)!!!!!
     this%density = vm_empty_real
     this%dbh = vm_empty_real
     this%height = vm_empty_real
     this%row_fraction = vm_empty_real
     this%final_basal_area = vm_empty_real
     this%thin_fraction = vm_empty_real
+    this%dbh_min = vm_empty_real
+    this%ht_min = vm_empty_real
+    this%patch_fraction = vm_empty_real
     
   end subroutine zero
 
@@ -5818,6 +5892,8 @@ contains
         this%code = vm_event_thin_low_perfect
       case ('thin_low_probabilistic')
         this%code = vm_event_thin_low_probabilistic
+      case ('clearcut')
+        this%code = vm_event_clearcut
       !case ()
       case default
         write(fates_log(),*) 'VM event name is not recognised:', event_type_str
@@ -5901,6 +5977,12 @@ contains
           read(param_value, *) this%final_basal_area
         case ('thin_fraction') ! thin_proportional(), thin_patch_low_probabilistic()
           read(param_value, *) this%thin_fraction
+        case ('dbh_min') ! clearcut()
+          read(param_value, *) this%dbh_min
+        case ('ht_min') ! clearcut()
+          read(param_value, *) this%ht_min
+        case ('patch_fraction') ! clearcut()
+          read(param_value, *) this%patch_fraction
         !More to come:
         !case ('')
         !case ('where')
@@ -5976,6 +6058,9 @@ contains
     write(fates_log(), *) 'row_fraction:     ', this%row_fraction
     write(fates_log(), *) 'final_basal_area: ', this%final_basal_area
     write(fates_log(), *) 'thin_fraction:    ', this%thin_fraction
+    write(fates_log(), *) 'dbh_min:          ', this%dbh_min
+    write(fates_log(), *) 'ht_min:           ', this%ht_min
+    write(fates_log(), *) 'patch_fraction:   ', this%patch_fraction
     
   end subroutine dump
 
