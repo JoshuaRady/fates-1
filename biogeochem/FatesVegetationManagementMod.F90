@@ -159,6 +159,7 @@ module FatesVegetationManagementMod
   type, private :: vm_event
       integer(i4) :: code ! The event code.
       integer, dimension(1) :: pfts ! Change to array (16 in length?)
+      real(r8) :: density ! planting_density?
       real(r8) :: dbh
       real(r8) :: height
       real(r8) :: row_fraction
@@ -5625,6 +5626,7 @@ contains
     ! We need sensible defaults for these parameters or a value that indicates the parameter is
     ! 'missing'.  These value are temporary:
     this%pfts = vm_empty_integer ! Change to array (16 in length?)
+    this%density = vm_empty_real
     this%dbh = vm_empty_real
     this%height = vm_empty_real
     this%row_fraction = vm_empty_real
@@ -5789,7 +5791,9 @@ contains
           ! We also should allow group names.
           read(param_value, *) this%pfts
           !pfts = parse_array(param_value)
-          
+        
+        case ('density') ! plant()
+          read(param_value, *) this%density  
         case ('dbh') ! plant()
           read(param_value, *) this%dbh
         case ('height') ! plant()
@@ -5880,6 +5884,7 @@ contains
     
     write(fates_log(), *) 'Parameters:'
     write(fates_log(), *) 'pfts:             ', this%pfts
+    write(fates_log(), *) 'density:          ', this%density
     write(fates_log(), *) 'dbh:              ', this%dbh
     write(fates_log(), *) 'height:           ', this%height
     write(fates_log(), *) 'row_fraction:     ', this%row_fraction
