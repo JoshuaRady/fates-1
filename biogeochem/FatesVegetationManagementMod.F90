@@ -4520,7 +4520,7 @@ contains
     ! Uses: NA
     
     ! Arguments:
-    type(ed_patch_type), intent(in), target :: patch
+    type(ed_patch_type), intent(inout), target :: patch
     ! Which tree PFTs are harvestable trees?  If omitted all woody trees will be used:
     !integer(i4), dimension(:), intent(in) :: pfts ! Defaults to trees?
     integer(i4), intent(in), optional, target :: pfts(:)
@@ -4541,7 +4541,7 @@ contains
     
     integer :: i, j, k ! Counters
     !integer:: all_pfts(12) = (/ (integer :: k, k = 1, 12) /) ! Generalize and make global!!!!!
-    integer:: all_pfts(12) = (/ (integer :: k, k = 1, 12) /) ! Generalize and make global!!!!!
+    integer:: all_pfts(12) = (/ (k, k = 1, 12) /) ! Generalize and make global!!!!!
     integer:: other_pfts(12)
     
     ! ----------------------------------------------------------------------------------------------
@@ -4635,7 +4635,7 @@ contains
     
     ! Uses:
     
-    type(ed_site_type), intent(inout), target :: site ! The current site object.
+    type(ed_site_type), intent(in), target :: site ! The current site object.
     integer(i4), dimension(:), intent(in), optional :: pfts ! An array of PFT IDs to harvest.
     
     ! Size specification:
