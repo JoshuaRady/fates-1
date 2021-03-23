@@ -59,14 +59,15 @@ module FatesVegetationManagementMod
   private :: thin_row_low
   private :: thinnable_patch
   !private :: thin_low
+  private :: thin_proportional
   private :: thin_patch_low_perfect
   private :: thin_low_perfect
-  private :: thin_proportional
   private :: thin_patch_low_probabilistic
   private :: thin_low_probabilistic
   private :: harvest_mass_min_area
   private :: plant_harvestable_biomass
   private :: cohort_harvestable_biomass
+  private :: clearcut_patch
   
   ! Utilities:
   private :: cohort_effective_basal_area
@@ -2941,7 +2942,7 @@ contains
   ! Harvest
   !
   ! Site Level Routines:
-  ! These routines perform management activities at the level of the site / grid cell.
+  !   These routines perform management activities at the level of the site / grid cell.
   ! They may target only part of the site but they do so without any a priori knowledge of the patch
   ! structure.
   !=================================================================================================
@@ -4486,6 +4487,102 @@ contains
     endif
     
   end function cohort_harvestable_biomass
+
+  !=================================================================================================
+
+  subroutine clearcut_patch(patch, pfts, dbh_min, ht_min) ! area_fraction
+    ! ----------------------------------------------------------------------------------------------
+    ! Perform a clearcut harvest on a patch.
+    !
+    ! For simplicity we assume that there will be no maximum size limit for harvest, though there
+    ! may be minimum sizes.
+    !
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Uses: NA
+    
+    ! Arguments:
+    ! An array of PFT IDs to include in the basal area calculation: Make optional?
+    integer(i4), dimension(:), intent(in) :: pfts ! Default to trees?
+    
+    ! Size specification:
+    ! Minimum size of to trees to harvest.  Only provide a minimum DBH or height, not both:
+    real(r8), intent(in), optional :: dbh_min ! Defaults to 0.
+    real(r8), intent(in), optional :: ht_min ! Defaults to 0.
+    
+    ! area_fraction / patch_fraction
+    
+    ! Locals:
+    real(r8) :: the_dbh_min
+    real(r8) :: the_ht_min
+    
+    integer :: i, j ! Counters
+    integer:: all_pfts(12) = (/ (k, k = 1, 12) /) ! Generalize and make global!!!!!
+    integer:: other_pfts(12)
+    
+    ! ----------------------------------------------------------------------------------------------
+    if (debug) write(fates_log(), *) 'thin_patch_low_probabilistic() entering.'
+    
+    ! Validate the size specifications:
+    call validate_size_specifications(dbh_min_out = the_dbh_min, ht_min_out = the_ht_min, &
+                                      dbh_min = dbh_min, ht_min = ht_min)
+    
+    ! Check that the PFTs are all trees?
+    
+    ! Harvest the appropriate trees:
+    call kill_patch(patch = patch, flux_profile = bole_harvest, pfts = pfts, &
+                    dbh_min = the_dbh_min, dbh_max = the_dbh_max, &
+                    ht_min = the_ht_min, ht_max = the_ht_max, &
+                    kill_fraction = 1.0_r8, area_fraction = 1.0_r8)
+    
+    ! Kill everything else in place:
+    
+    ! If there were size limits used for the harvested PFTs then there may be some trees remaining.
+    ! Assume those were killed in the process of harvest but were left on site:
+    if (present(dbh_min)) then
+      call kill_patch(patch = patch, flux_profile = in_place, pfts = pfts, dbh_max = the_dbh_min, &
+                      kill_fraction = 1.0_r8, area_fraction = 1.0_r8)
+      
+    else if (present(ht_min)) then
+      call kill_patch(patch = patch, flux_profile = in_place, pfts = pfts, ht_max = the_ht_min, &
+                      kill_fraction = 1.0_r8, area_fraction = 1.0_r8)
+    endif
+    
+    ! Kill the unharvested PFTs and leave them on site:
+    ! It might be more realistic to leave some fraction of plants, especially grasses, alive.
+    
+    ! Get the reciprocal PFTs:
+    j = 0
+    do i = 1, size(all_pfts)
+      if (.not. any(all_pfts(i) == pfts)) then
+        j = j + 1
+        other_pfts(j) = all_pfts(i)
+      endif
+    end do
+    
+    if (j > 0) then ! If there are any PFTs kill them:
+      call kill_patch(patch = patch, flux_profile = in_place, pfts = other_pfts(1:j), &
+                      kill_fraction = 1.0_r8, area_fraction = 1.0_r8)
+    endif
+    
+  end subroutine clearcut_patch
+
+  !=================================================================================================
+
+!   subroutine clearcut()
+!     ! ----------------------------------------------------------------------------------------------
+!     ! 
+!     ! ----------------------------------------------------------------------------------------------
+!     
+!     ! Uses:
+!     
+!     ! Arguments:
+!     
+!     ! Locals:
+!     
+!     ! ----------------------------------------------------------------------------------------------
+!     
+!   end subroutine clearcut
 
   !=================================================================================================
   ! Utilities:
