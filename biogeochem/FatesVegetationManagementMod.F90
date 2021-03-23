@@ -5839,17 +5839,6 @@ contains
     
     ! ----------------------------------------------------------------------------------------------
     
-    ! What to do if this%code  = vm_event_null
-    ! Could return a code?
-    
-    ! Initial: Works but isn't very robust:
-!     if (this%code <= vm_event_plant) then
-!       is_generative = .true.
-!     else
-!       is_generative = .false.
-!     endif
-    
-    ! Revised:
     if (this%code > vm_event_null .and. this%code <= vm_event_generative_max) then
       is_generative = .true.
     else if (this%code <= vm_event_mortality_max) then
