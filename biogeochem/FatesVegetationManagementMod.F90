@@ -3476,6 +3476,8 @@ contains
     ! Locals:
     type(ed_patch_type), pointer :: current_patch
     type(ed_cohort_type), pointer :: current_cohort
+    integer(i4), pointer, dimension(:) :: thin_pfts ! Holds the PFTs to thin, computed from arguments.
+    integer :: i ! Iterator
     
     ! ----------------------------------------------------------------------------------------------
     if (debug) write(fates_log(), *) 'thin_proportional() beginning.'
@@ -3502,7 +3504,7 @@ contains
       current_cohort => current_patch%shortest
       do while(associated(current_cohort))
         
-        if (any(pfts == current_cohort%pft)) then
+        if (any(thin_pfts == current_cohort%pft)) then
           ! Harvest a fraction of all trees:
           call kill(cohort = current_cohort, flux_profile = bole_harvest, &
                     kill_fraction = thin_fraction, area_fraction = 1.0_r8)
