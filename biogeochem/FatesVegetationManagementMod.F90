@@ -4586,6 +4586,8 @@ contains
     integer(i4), pointer, dimension(:) :: the_pfts ! Holds the PFTs to harvest, computed from arguments.
     real(r8) :: the_dbh_min
     real(r8) :: the_ht_min
+    real(r8) :: unused1, unused2 ! The maximum values are not used here.
+    
     real(r8) :: the_patch_fraction
     
     integer :: i, j, k ! Iterators and counters
@@ -4614,11 +4616,15 @@ contains
     endif ! present(dbh)...
     
     ! Validate the size specifications:
-    call validate_size_specifications(dbh_min_out = the_dbh_min, ht_min_out = the_ht_min, &
-                                      dbh_min = dbh_min, ht_min = ht_min)
+    ! call validate_size_specifications(dbh_min_out = the_dbh_min, ht_min_out = the_ht_min, &
+!                                       dbh_min = dbh_min, ht_min = ht_min)
     ! Hack:
     !the_dbh_min = 10.0_r8
     !the_ht_min = 0.0_r8
+    ! We have to use names for all since dbh_min and dbh_min are not in order! 
+    call validate_size_specifications(dbh_min_out = the_dbh_min, ht_min_out = the_ht_min, &
+                                      dbh_min = dbh_min, ht_min = ht_min,
+                                      dbh_max_out = unused1, ht_max_out = unused2)
     
     ! Validate the patch fraction:
     if (present(patch_fraction)) then
@@ -5196,10 +5202,14 @@ contains
     ! Uses: None
     
     ! Arguments:
-    real(r8), intent(out), optional :: dbh_min_out
-    real(r8), intent(out), optional :: dbh_max_out
-    real(r8), intent(out), optional :: ht_min_out
-    real(r8), intent(out), optional :: ht_max_out
+!     real(r8), intent(out), optional :: dbh_min_out
+!     real(r8), intent(out), optional :: dbh_max_out
+!     real(r8), intent(out), optional :: ht_min_out
+!     real(r8), intent(out), optional :: ht_max_out
+    real(r8), intent(out) :: dbh_min_out
+    real(r8), intent(out) :: dbh_max_out
+    real(r8), intent(out) :: ht_min_out
+    real(r8), intent(out) :: ht_max_out
     
     ! Size range of to trees to harvest.  Defaults to everything, otherwise some range of sizes,
     ! e.g. > 10cm DBH, < 15 m in height, etc.
