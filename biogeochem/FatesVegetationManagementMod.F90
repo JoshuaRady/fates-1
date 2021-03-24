@@ -3469,7 +3469,8 @@ contains
     ! Arguments:
     type(ed_site_type), intent(in), target :: site ! The current site object.
     !integer(i4), dimension(:), intent(in) :: pfts ! Make optional?
-    integer(i4), dimension(:), intent(in), optional :: pfts
+    !integer(i4), dimension(:), intent(in), optional :: pfts
+    integer(i4), intent(in), optional, target :: pfts(:) ! An array of PFT IDs to thin.
     real(r8), intent(in) :: thin_fraction
     ! Add where
     
