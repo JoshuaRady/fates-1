@@ -4623,8 +4623,8 @@ contains
     !the_ht_min = 0.0_r8
     ! We have to use names for all since dbh_min and dbh_min are not in order! 
     call validate_size_specifications(dbh_min_out = the_dbh_min, ht_min_out = the_ht_min, &
-                                      dbh_min = dbh_min, ht_min = ht_min,
-                                      dbh_max_out = unused1, ht_max_out = unused2)
+                                      dbh_min = dbh_min, ht_min = ht_min, &
+                                      dbh_max_out = unused1, ht_max_out = unused2) ! Not in order.
     
     ! Validate the patch fraction:
     if (present(patch_fraction)) then
