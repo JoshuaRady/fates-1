@@ -5204,13 +5204,22 @@ contains
     real(r8), intent(in), optional :: ht_max
     
     ! Locals:
-    real(r8), parameter :: imposibly_small = 0.0_r8 ! Impossibly small value
+    real(r8), parameter :: impossibly_small = 0.0_r8 ! Impossibly small value
     
     ! Massive upper size limits based on the largest trees known:
     real(r8), parameter :: dbh_massive = 14050.0_r8 ! Arbol del Tule: Taxodium mucronatum, 14.05 m
     real(r8), parameter :: ht_massive = 115.92_r8 ! Hyperion: Sequoia sempervirens
     
     ! ----------------------------------------------------------------------------------------------
+    
+    ! Convert 'empty' values from driver events:
+    if ((present(dbh_min) .and. (dbh_min == vm_empty_real)) then
+      dbh_min = impossibly_small
+    end if
+    
+    if ((present(ht_min) .and. (ht_min == vm_empty_real)) then
+      ht_min = impossibly_small
+    end if
     
     ! Only allow specification of harvest size by DBH or height:
     ! Note: For a single PFT it would be acceptable to specify a size range using a single DBH value
@@ -5221,8 +5230,11 @@ contains
       ! Only allow a mix of DBH and height if the values for one essentially include all possible
       ! values.  It is pretty safe to assume that this will only be the case when the values have
       ! already been set by this routine.
-      if (.not. ((dbh_min == imposibly_small .and. dbh_max == dbh_massive) .or. &
-                 (ht_min == imposibly_small .and. ht_max == ht_massive))) then
+      
+      ! The logic above does not quite hold now!!!!!
+      
+      if (.not. ((dbh_min == impossibly_small .and. dbh_max == dbh_massive) .or. &
+                 (ht_min == impossibly_small .and. ht_max == ht_massive))) then
         write(fates_log(),*) 'Cannot specify harvest range as a mix of DBH and height.'
         call endrun(msg = errMsg(__FILE__, __LINE__))
       else if (debug) then
@@ -5230,7 +5242,7 @@ contains
       end if
     endif
     
-    ! Check validity of values that are present and provide sensibel defaults for the missing ones:
+    ! Check validity of values that are present and provide sensible defaults for the missing ones:
     if (present(dbh_min)) then
       if (dbh_min < 0) then
         write(fates_log(),*) 'dbh_min cannot be less than 0. Leave blank for no lower limit.'
@@ -5238,7 +5250,7 @@ contains
       endif
       dbh_min_out = dbh_min
     else
-      dbh_min_out = imposibly_small ! Impossibly small value.
+      dbh_min_out = impossibly_small ! Impossibly small value.
     endif
     
     if (present(dbh_max)) then
@@ -5259,7 +5271,7 @@ contains
       endif
       ht_min_out = ht_min
     else
-      ht_min_out = imposibly_small ! Impossibly small value.
+      ht_min_out = impossibly_small ! Impossibly small value.
     endif
     
     if (present(ht_max)) then
