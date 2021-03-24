@@ -5249,7 +5249,7 @@ contains
     
     ! Check validity of values that are present and provide sensible defaults for the missing ones:
     !if (present(dbh_min)) then
-    if (present(dbh_min) .and. (dbh_min / = vm_empty_real)) then
+    if (present(dbh_min) .and. (dbh_min /= vm_empty_real)) then
       if (dbh_min < 0) then
         write(fates_log(),*) 'dbh_min cannot be less than 0. Leave blank for no lower limit.'
         call endrun(msg = errMsg(__FILE__, __LINE__))
@@ -5260,7 +5260,7 @@ contains
     endif
     
     !if (present(dbh_max)) then
-    if (present(dbh_max) .and. (dbh_max / = vm_empty_real)) then
+    if (present(dbh_max) .and. (dbh_max /= vm_empty_real)) then
       if (dbh_max > dbh_massive) then
         write(fates_log(),*) 'dbh_max is unrealistically large. Leave blank for no upper limit.'
         ! We could just warn here as this is unlikely to have any negative effects.
@@ -5272,7 +5272,7 @@ contains
     endif
     
     !if (present(ht_min)) then
-    if (present(ht_min) .and. (ht_min / = vm_empty_real)) then
+    if (present(ht_min) .and. (ht_min /= vm_empty_real)) then
       if (ht_min < 0) then
         write(fates_log(),*) 'ht_min cannot be less than 0. Leave blank for no lower limit.'
         call endrun(msg = errMsg(__FILE__, __LINE__))
@@ -5283,7 +5283,7 @@ contains
     endif
     
     !if (present(ht_max)) then
-    if (present(ht_max) .and. (ht_max / = vm_empty_real)) then
+    if (present(ht_max) .and. (ht_max /= vm_empty_real)) then
       if (ht_max > ht_massive) then
         write(fates_log(),*) 'ht_max is unrealistically large. Leave blank for no upper limit.'
         call endrun(msg = errMsg(__FILE__, __LINE__))
