@@ -4705,7 +4705,9 @@ contains
     current_patch => site%oldest_patch
     do while (associated(current_patch))
       
-      call clearcut_patch(current_patch, pfts, dbh_min, ht_min)
+      !call clearcut_patch(current_patch, pfts, dbh_min, ht_min)
+      ! Temporary hack:
+      call clearcut_patch(current_patch, pfts, dbh_min)
       
       current_patch => current_patch%younger
     end do ! Patch loop.
@@ -5213,13 +5215,13 @@ contains
     ! ----------------------------------------------------------------------------------------------
     
     ! Convert 'empty' values from driver events:
-    if (present(dbh_min) .and. (dbh_min == vm_empty_real)) then
-      dbh_min = impossibly_small
-    end if
-    
-    if (present(ht_min) .and. (ht_min == vm_empty_real)) then
-      ht_min = impossibly_small
-    end if
+    ! if (present(dbh_min) .and. (dbh_min == vm_empty_real)) then
+!       dbh_min = impossibly_small
+!     end if
+!     
+!     if (present(ht_min) .and. (ht_min == vm_empty_real)) then
+!       ht_min = impossibly_small
+!     end if
     
     ! Only allow specification of harvest size by DBH or height:
     ! Note: For a single PFT it would be acceptable to specify a size range using a single DBH value
