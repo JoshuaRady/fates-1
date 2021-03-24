@@ -4614,14 +4614,17 @@ contains
     endif ! present(dbh)...
     
     ! Validate the size specifications:
-    call validate_size_specifications(dbh_min_out = the_dbh_min, ht_min_out = the_ht_min, &
-                                      dbh_min = dbh_min, ht_min = ht_min)
+    !call validate_size_specifications(dbh_min_out = the_dbh_min, ht_min_out = the_ht_min, &
+    !                                  dbh_min = dbh_min, ht_min = ht_min)
+    ! Hack:
+    the_dbh_min = 10.0_r8
+    the_ht_min = 0.0_r8
     
     ! Validate the patch fraction:
     if (present(patch_fraction)) then
       the_patch_fraction = patch_fraction
     else
-      the_patch_fraction = 1.0_r8
+      the_patch_fraction = 1.0_r8 ! Use it!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     endif
     
     if (the_patch_fraction <= 0.0_r8 .or. the_patch_fraction > 1.0_r8) then
