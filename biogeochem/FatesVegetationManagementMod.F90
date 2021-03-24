@@ -636,6 +636,10 @@ contains
           call thin_low_probabilistic(site = site_in, pfts = vm_mortality_event%pfts, &
                                       thin_fraction = vm_mortality_event%thin_fraction)
           
+        case (vm_event_clearcut)
+          call clearcut(site = site_in, pfts = vm_mortality_event%pfts, &
+                        dbh_min = vm_mortality_event%dbh_min, ht_min = vm_mortality_event%ht_min)
+          
         case default
           write(fates_log(),*) 'Unrecognized event code:', vm_mortality_event%code
           call endrun(msg = errMsg(__FILE__, __LINE__))
@@ -3464,7 +3468,8 @@ contains
     
     ! Arguments:
     type(ed_site_type), intent(in), target :: site ! The current site object.
-    integer(i4), dimension(:), intent(in) :: pfts ! Make optional?
+    !integer(i4), dimension(:), intent(in) :: pfts ! Make optional?
+    integer(i4), dimension(:), intent(in), optional :: pfts
     real(r8), intent(in) :: thin_fraction
     ! Add where
     
@@ -3474,6 +3479,23 @@ contains
     
     ! ----------------------------------------------------------------------------------------------
     if (debug) write(fates_log(), *) 'thin_proportional() beginning.'
+    
+    ! Validity checking:
+    if (present(pfts) .and. all(pfts /= vm_empty_integer)) then
+      ! Check if PFTs to thin are valid:
+      do i = 1, size(pfts)
+        if (.not. any(pfts(i) == tree_pfts)) then
+          write(fates_log(),*) 'thin_proportional(): Cannot thin non-tree PFTs.'
+          write(fates_log(),*) 'Tree PFTs =    ', tree_pfts
+          write(fates_log(),*) 'Selected PFTs =', pfts
+          call endrun(msg = errMsg(__FILE__, __LINE__)) ! We could just warn here?
+        endif
+      end do
+      
+      thin_pfts => pfts
+    else ! Otherwise thin all tree PFTs:
+      thin_pfts => tree_pfts
+    endif
     
     current_patch => site%oldest_patch
     do while (associated(current_patch))
@@ -3509,6 +3531,8 @@ contains
     !
     ! This routine duplicates and expands much of the code from thin_row_low(), except the row
     ! thinning.  thin_row_low() should probably be rewritten to use this routine.
+    !
+    ! ! Add handling for 'empty' PFTs!!!!!
     !
     !-----------------------------------------------------------------------------------------------
     ! Operation Type: Thinnning
@@ -3565,7 +3589,8 @@ contains
     ! Determine which arguments were passed in, validity check them, and supply default values:
     
     ! If present check that the PFTs are valid:
-    if (present(pfts)) then
+    !if (present(pfts)) then
+    if (present(pfts) .and. all(pfts /= vm_empty_integer)) then
       ! Check if PFTs to thin are valid:
       do i = 1, size(pfts)
         if (.not. any(pfts(i) == tree_pfts)) then
