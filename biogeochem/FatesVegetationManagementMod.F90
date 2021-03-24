@@ -5213,11 +5213,11 @@ contains
     ! ----------------------------------------------------------------------------------------------
     
     ! Convert 'empty' values from driver events:
-    if ((present(dbh_min) .and. (dbh_min == vm_empty_real)) then
+    if (present(dbh_min) .and. (dbh_min == vm_empty_real)) then
       dbh_min = impossibly_small
     end if
     
-    if ((present(ht_min) .and. (ht_min == vm_empty_real)) then
+    if (present(ht_min) .and. (ht_min == vm_empty_real)) then
       ht_min = impossibly_small
     end if
     
