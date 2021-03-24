@@ -2921,8 +2921,8 @@ contains
     do while(associated(current_cohort))
     
       if (any(pfts == current_cohort%pft) .and. &
-          current_cohort%dbh >= dbh_min .and. current_cohort%dbh <= dbh_max .and. &
-          current_cohort%hite >= ht_min .and. current_cohort%hite <= ht_max) then
+          current_cohort%dbh >= the_dbh_min .and. current_cohort%dbh <= the_dbh_max .and. &
+          current_cohort%hite >= the_ht_min .and. current_cohort%hite <= the_ht_max) then
         
         call kill(cohort = current_cohort, flux_profile = flux_profile, &
                   kill_fraction = kill_fraction, & area_fraction = area_fraction)
@@ -4642,6 +4642,7 @@ contains
     ! Temporary reporting:
     if (debug) then
       write(fates_log(), *) 'pfts: ', pfts
+      write(fates_log(), *) 'the_pfts: ', the_pfts
       write(fates_log(), *) 'the_dbh_min: ', the_dbh_min
       write(fates_log(), *) 'the_ht_min: ', the_ht_min
       write(fates_log(), *) 'dbh_max_out: ', unused1
