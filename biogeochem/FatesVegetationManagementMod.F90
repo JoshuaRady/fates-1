@@ -55,6 +55,7 @@ module FatesVegetationManagementMod
   private :: kill_patch
   
   ! Management Operations:
+  private :: plant_site
   private :: understory_control
   private :: thin_row_low
   private :: thinnable_patch
@@ -198,7 +199,7 @@ module FatesVegetationManagementMod
   ! Can we safely use only vm_empty_integer?
   integer, parameter, private :: vm_empty_integer = -99 ! Formerly -1
   real, parameter, private :: vm_empty_real = -99.0_r8 ! Formerly -1.0_r8
-  !real, parameter, private :: vm_empty_array = vm_empty_integer ! Temporary until vm_event%pfts is a real array.
+  !real, parameter, private :: vm_empty_array = vm_empty_integer ! Temporary until vm_event%pfts is a real array. Deprecated?
 
   !=================================================================================================
   
@@ -390,6 +391,7 @@ contains
     site_in%harvest_carbon_flux = 0.0_r8
     
     ! ----------------------------------------------------------------------------------------------
+    ! Manual Event Triggering:
     ! Note: This section has been rendered (mostly?) unnecessary beyond testing.  Most functionality
     ! has been moved into vegetation_management_init().  Review and remove.
     ! ----------------------------------------------------------------------------------------------
@@ -525,13 +527,13 @@ contains
 !       end do ! Patch loop.
       
       ! Test 2:
-      c_1st = 10000.0_r8 ! 2000.0_r8
-      c_2nd = 0.0_r8
-      call harvest_mass_min_area(site_in = site_in, harvest_c_primary = c_1st, harvest_c_secondary = c_2nd, & ! REVIEW!
-                                 pfts = tree_pfts, dbh_min = 10.0_r8)
-      
-      ! Report the amount harvested to the log:
-      write(fates_log(), *) 'Amount harvested: ', c_1st
+!       c_1st = 10000.0_r8 ! 2000.0_r8
+!       c_2nd = 0.0_r8
+!       call harvest_mass_min_area(site_in = site_in, harvest_c_primary = c_1st, harvest_c_secondary = c_2nd, & ! REVIEW!
+!                                  pfts = tree_pfts, dbh_min = 10.0_r8)
+!       
+!       ! Report the amount harvested to the log:
+!       write(fates_log(), *) 'Amount harvested: ', c_1st
       
       ! Estimate the woodproduct (trunk_product_site) if not done already. !!!!!
       
@@ -988,6 +990,11 @@ contains
     ! Currently this is largely a hack for testing planting but over time logic will be added to
     ! determine what actions are due based on event codes, input files, or heuristics.
     !
+    ! ToDo: 
+    ! Determine which patch or patches to plant into:
+    ! Considerations including the area that needs to be planted, the composition of the patches: i.e.
+    ! what species are there, is it a bare patch, and history: is it secondary or managed land.
+    !
     ! ----------------------------------------------------------------------------------------------
     
     use EDLoggingMortalityMod, only : logging_time ! Temporary trigger for planting
@@ -1002,21 +1009,11 @@ contains
     type(ed_patch_type), pointer :: thisPatch
     
     ! ----------------------------------------------------------------------------------------------
-    
     if (debug) write(fates_log(), *) 'managed_fecundity() entering.'
     
-    ! ToDo: 
-    ! Determine which patch or patches to plant into:
-    ! Considerations include the area that needs to be planted, the composition of the patches: i.e.
-    ! what species are there, is it a bare patch, and history: is it secondary or managed land.
-    !
-    ! For initial testing the patch doesn't matter much but we want to make sure it is big enough
-    ! that any new cohorts are not eliminated.
-    
-    ! For testing we use the logging event code to trigger a planting event:
-    !if (logging_time) then
-    ! New testing:
-    if (hlm_current_year == 2050 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
+    ! Manual Testing:-------------------------------------------------------------------------------
+    ! Manually trigger planting on a date:
+    if (hlm_current_year == 2250 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
       
       if (debug) then
         !write(fates_log(), *) 'Planting triggered by logging event (for testing).'
@@ -1026,6 +1023,8 @@ contains
       thisPatch => site%oldest_patch
       do while (associated(thisPatch))
         
+        ! For initial testing the patch doesn't matter much but we want to make sure it is big
+        ! enough that any new cohorts are not eliminated.
         ! Assuming we are using a nominal hectare of 10,000 m^2, the 1/10th should be big enough.
         if (thisPatch%area > 1000) then
           exit
@@ -1068,8 +1067,7 @@ contains
       
       ! No planting for now.
         
-    end if ! if (logging_time)
-    
+    end if
     
     ! Execute any generative events that came in via the driver file:-------------------------------
     if (vm_generative_event%code /= vm_event_null) then
@@ -2950,6 +2948,12 @@ contains
   !   These routines perform management activities at the level of the site / grid cell.
   ! They may target only part of the site but they do so without any a priori knowledge of the patch
   ! structure.
+  !
+  ! plant_site()
+  ! thin_proportional()
+  ! thin_low_perfect()
+  ! thin_low_probabilistic()
+  ! clearcut()
   !=================================================================================================
 
   !=================================================================================================
@@ -2962,6 +2966,11 @@ contains
     !
     ! In the future we may allow targeting of thinning behavior to specific patches via the 'where'
     ! parameter.
+    !
+    !-----------------------------------------------------------------------------------------------
+    ! Operation Type: Planting
+    ! Operation Level: Site
+    ! Regime: All
     !
     ! VM Event Interface plant(pfts, [density], [dbh], [height])
     ! ----------------------------------------------------------------------------------------------
@@ -3098,15 +3107,18 @@ contains
   ! individuals.
   !
   !  In reality some trees removed in a thinning may too small or of insufficient quality to yeild
-  ! lumber.  Therefore some or all harvest from a thinning be used for pulp, or other uses (biomass
-  ! is an emerging possible use).  It is also possible that some small trees may be left on site.
+  ! lumber.  Therefore some or all harvest from a thinning may be used for pulp, or other uses
+  ! (biomass is an emerging possible use).  It is also possible that some small trees may be left
+  ! on site.
   !
-  ! There is more than one way to perform a thinning.  The simplest example would be to remove a
-  ! fixed percentage.  In practice the methods for thinning are a function of management goals, the
-  ! the stand structure and available machinery.
-  ! I'm starting with a thinning methodology that is common for southern pines both because I need
-  ! it and because it is complex enough that it will force me to figure out most of the components
-  ! I will need to build other thinning types.
+  !   There is more than one way to perform a thinning.  In practice the methods for thinning are a
+  ! function of management goals, the the stand structure, and available machinery.  We have
+  ! implemented several thinning methods:
+  ! - Proportional thinning: A fixed percentage of all size classes are removed.
+  ! - Low thinning: Also know as thinning from below. The smaller trees are removed from the stand.
+  ! We have implemented two versions, one which removes trees from the smallest upwards perfectly
+  ! and a more realistic version that incorporates a decreasing probability of thinning with size.
+  ! - thin_row_low() combines a low thinning with a thinning of rows.
   !  
   !=================================================================================================
 
@@ -3123,7 +3135,7 @@ contains
     ! access) or collateral damage from thinning.
     !
     ! This is a fairly specific thinning routine.  It was chosen to directly mimic an actual
-    ! management practice and is parameterized to be compatible with an operation perception.  The
+    ! management practice and is parameterized to be compatible with an operation perscription.  The
     ! two phase thinning process yields a more complex demography and the final result will be
     ! somewhat variable, not always hitting the goal value perfectly, which is also realistic.  It
     ! alos requires an iterative algorithm, which was useful to help develop a robust set of low
@@ -3137,6 +3149,13 @@ contains
     ! Ideas:
     ! This could be performed at a site level as well.  Would that just be a loop?
     ! Alternatively, supply as a row frequency?
+    !
+    !-----------------------------------------------------------------------------------------------
+    ! Operation Type: Thinning
+    ! Operation Level: Patch
+    ! Regime: Multiple
+    !
+    ! VM Event Interface: No yet implemented (thin_test1() calls a specific use of this)
     ! ----------------------------------------------------------------------------------------------
     
     ! Uses:
@@ -3190,27 +3209,6 @@ contains
     
     ! If present check that the PFTs are valid:
     if (present(pfts)) then
-      ! Check if PFTs are valid:
-!       if (.not. any(tree_pfts == pfts)) then
-!         write(fates_log(),*) 'thin_row_low(): Cannot thin non-tree PFTs.'
-!         write(fates_log(),*) 'PFTs =', pfts
-!         write(fates_log(),*) 'tree_pfts =', tree_pfts
-!         write(fates_log(),*) '(tree_pfts == pfts) = ', (tree_pfts == pfts)
-!         write(fates_log(),*) '(pfts == tree_pfts) = ', (pfts == tree_pfts)
-!         write(fates_log(),*) 'any(tree_pfts == pfts) = ', any(tree_pfts == pfts)
-!         write(fates_log(),*) 'any(pfts == tree_pfts) = ', any(pfts == tree_pfts)
-!         
-!         !write(fates_log(),*) 'any(woody_pfts == tree_pfts) = ', any(woody_pfts == tree_pfts)
-!         write(fates_log(),*) '(2 == tree_pfts) = ', (2 == tree_pfts)
-!         write(fates_log(),*) 'any(2 == tree_pfts) = ', any(2 == tree_pfts)
-!         write(fates_log(),*) '([2,2,2,2,2,2] == tree_pfts) = ', ([2,2,2,2,2,2] == tree_pfts)
-!         
-!         !write(fates_log(),*) '(woody_pfts == tree_pfts) = ', (woody_pfts == tree_pfts)
-!         
-!         call endrun(msg = errMsg(__FILE__, __LINE__))
-!       end if
-      
-      ! Revised and corrected:
       ! Check if PFTs to thin are valid:
       do i = 1, size(pfts)
         if (.not. any(pfts(i) == tree_pfts)) then
@@ -3349,7 +3347,6 @@ contains
           current_cohort => current_cohort%taller
         end do ! Cohort loop.
         
-      !else if ((.not. use_bai) .and. (patch_sd > final_stem_density)) then
       else ! Thin to a goal stem density:
         if (debug) write(fates_log(), *) 'thin_row_low() starting row by stem density.'
         
@@ -3455,6 +3452,11 @@ contains
     ! In the future we may allow targeting of thinning behavior to specific patches via the 'where'
     ! parameter.
     !
+    !-----------------------------------------------------------------------------------------------
+    ! Operation Type: Thinnning
+    ! Operation Level: Site
+    ! Regime: Multiple
+    !
     ! VM Event Interface thin_proportional([pfts], thin_fraction)
     ! ----------------------------------------------------------------------------------------------
     
@@ -3507,6 +3509,11 @@ contains
     !
     ! This routine duplicates and expands much of the code from thin_row_low(), except the row
     ! thinning.  thin_row_low() should probably be rewritten to use this routine.
+    !
+    !-----------------------------------------------------------------------------------------------
+    ! Operation Type: Thinnning
+    ! Operation Level: Patch
+    ! Regime: Multiple
     ! ----------------------------------------------------------------------------------------------
     
     ! Uses:
@@ -3741,6 +3748,11 @@ contains
     !
     ! This routine does not yet return a harvest estimate.
     !
+    !-----------------------------------------------------------------------------------------------
+    ! Operation Type: Thinnning
+    ! Operation Level: Site
+    ! Regime: Multiple
+    !
     ! VM Event Interface thin_low_perfect([pfts], thin_fraction)
     ! ----------------------------------------------------------------------------------------------
     
@@ -3840,6 +3852,11 @@ contains
     ! - Instead of looping through all the cohorts multiple times we could make a list of the valid cohorts once and loop through those...
     !
     ! Use fraction or specific number of trees?????
+    !
+    !-----------------------------------------------------------------------------------------------
+    ! Operation Type: Thinnning
+    ! Operation Level: Patch
+    ! Regime: Multiple
     ! ----------------------------------------------------------------------------------------------
     
     ! Uses: NA
@@ -3997,6 +4014,11 @@ contains
     ! In it's current form this routine just applies thin_patch_low_probabilistic() to all patches.
     ! In the future we will (may) allow targeting of thinning behavior to specific patches via the
     ! 'where' parameter.
+    !
+    !-----------------------------------------------------------------------------------------------
+    ! Operation Type: Thinnning
+    ! Operation Level: Site
+    ! Regime: Multiple
     !
     ! VM Event Interface thin_low_probabilistic([pfts], thin_fraction)
     ! ----------------------------------------------------------------------------------------------
@@ -4522,7 +4544,6 @@ contains
     ! Arguments:
     type(ed_patch_type), intent(inout), target :: patch
     ! Which tree PFTs are harvestable trees?  If omitted all woody trees will be used:
-    !integer(i4), dimension(:), intent(in) :: pfts ! Defaults to trees?
     integer(i4), intent(in), optional, target :: pfts(:)
     
     ! Size specification:
@@ -4539,8 +4560,7 @@ contains
     real(r8) :: the_ht_min
     real(r8) :: the_patch_fraction
     
-    integer :: i, j, k ! Counters
-    !integer:: all_pfts(12) = (/ (integer :: k, k = 1, 12) /) ! Generalize and make global!!!!!
+    integer :: i, j, k ! Iterators and counters
     integer:: all_pfts(12) = (/ (k, k = 1, 12) /) ! Generalize and make global!!!!!
     integer:: other_pfts(12)
     
@@ -4630,10 +4650,15 @@ contains
     ! In the future we will (may) allow targeting of thinning behavior to specific patches via the
     ! 'where' parameter.
     !
+    !-----------------------------------------------------------------------------------------------
+    ! Operation Type: Harvest
+    ! Operation Level: Site
+    ! Regime: (single age) clearcut harvest rotation
+    !
     ! VM Event Interface: clearcut(pfts, [dbh_min], [ht_min]) pfts optional?
     ! ----------------------------------------------------------------------------------------------
     
-    ! Uses:
+    ! Uses: NA
     
     type(ed_site_type), intent(in), target :: site ! The current site object.
     integer(i4), dimension(:), intent(in), optional :: pfts ! An array of PFT IDs to harvest.
