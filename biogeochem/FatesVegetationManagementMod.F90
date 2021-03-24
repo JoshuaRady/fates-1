@@ -4625,6 +4625,7 @@ contains
     call validate_size_specifications(dbh_min_out = the_dbh_min, ht_min_out = the_ht_min, &
                                       dbh_min = dbh_min, ht_min = ht_min, &
                                       dbh_max_out = unused1, ht_max_out = unused2) ! Not in order.
+    ! All these parameters could be used at least in the first call so there is no need to discar them.
     
     ! Validate the patch fraction:
     if (present(patch_fraction)) then
@@ -4638,6 +4639,16 @@ contains
       call endrun(msg = errMsg(__FILE__, __LINE__))
     endif
     
+    ! Temporary reporting:
+    if (debug) then
+      write(fates_log(), *) 'pfts: ', pfts
+      write(fates_log(), *) 'the_dbh_min: ', the_dbh_min
+      write(fates_log(), *) 'the_ht_min: ', the_ht_min
+      write(fates_log(), *) 'dbh_max_out: ', unused1
+      write(fates_log(), *) 'ht_max_out: ', unused2
+      write(fates_log(), *) 'the_patch_fraction: ', the_patch_fraction
+    endif
+    
     ! Harvest the appropriate trees:
     call kill_patch(patch = patch, flux_profile = bole_harvest, pfts = pfts, &
                     !dbh_min = the_dbh_min, dbh_max = the_dbh_max, &
@@ -4646,6 +4657,7 @@ contains
                     kill_fraction = 1.0_r8, area_fraction = 1.0_r8)
     
     ! Kill everything else in place:
+    if (debug) write(fates_log(), *) 'Start kill in place:'
     
     ! If there were size limits set for the harvested PFTs then there may be some trees remaining.
     ! Assume those were killed in the process of harvest but were left on site:
