@@ -4614,11 +4614,11 @@ contains
     endif ! present(dbh)...
     
     ! Validate the size specifications:
-    !call validate_size_specifications(dbh_min_out = the_dbh_min, ht_min_out = the_ht_min, &
-    !                                  dbh_min = dbh_min, ht_min = ht_min)
+    call validate_size_specifications(dbh_min_out = the_dbh_min, ht_min_out = the_ht_min, &
+                                      dbh_min = dbh_min, ht_min = ht_min)
     ! Hack:
-    the_dbh_min = 10.0_r8
-    the_ht_min = 0.0_r8
+    !the_dbh_min = 10.0_r8
+    !the_ht_min = 0.0_r8
     
     ! Validate the patch fraction:
     if (present(patch_fraction)) then
@@ -4708,9 +4708,9 @@ contains
     current_patch => site%oldest_patch
     do while (associated(current_patch))
       
-      !call clearcut_patch(current_patch, pfts, dbh_min, ht_min)
+      call clearcut_patch(current_patch, pfts, dbh_min, ht_min)
       ! Temporary hack:
-      call clearcut_patch(current_patch, pfts, dbh_min)
+      !call clearcut_patch(current_patch, pfts, dbh_min)
       
       current_patch => current_patch%younger
     end do ! Patch loop.
@@ -5230,25 +5230,26 @@ contains
     ! Note: For a single PFT it would be acceptable to specify a size range using a single DBH value
     ! and a single height value.  However, for a mix of PFTs differing allometries means a DBH can
     ! not be mapped uniquely to height and it becomes imposible to perform comparisons safely.
-    if ((present(dbh_min) .or. present(dbh_max)) .and. (present(ht_min) .or. present(ht_max))) then
-      
-      ! Only allow a mix of DBH and height if the values for one essentially include all possible
-      ! values.  It is pretty safe to assume that this will only be the case when the values have
-      ! already been set by this routine.
-      
-      ! The logic above does not quite hold now!!!!!
-      
-      if (.not. ((dbh_min == impossibly_small .and. dbh_max == dbh_massive) .or. &
-                 (ht_min == impossibly_small .and. ht_max == ht_massive))) then
-        write(fates_log(),*) 'Cannot specify harvest range as a mix of DBH and height.'
-        call endrun(msg = errMsg(__FILE__, __LINE__))
-      else if (debug) then
-        write(fates_log(),*) 'It appears these size specifications have been validated previously.'
-      end if
-    endif
+    ! if ((present(dbh_min) .or. present(dbh_max)) .and. (present(ht_min) .or. present(ht_max))) then
+!       
+!       ! Only allow a mix of DBH and height if the values for one essentially include all possible
+!       ! values.  It is pretty safe to assume that this will only be the case when the values have
+!       ! already been set by this routine.
+!       
+!       ! The logic above does not quite hold now!!!!!
+!       
+!       if (.not. ((dbh_min == impossibly_small .and. dbh_max == dbh_massive) .or. &
+!                  (ht_min == impossibly_small .and. ht_max == ht_massive))) then
+!         write(fates_log(),*) 'Cannot specify harvest range as a mix of DBH and height.'
+!         call endrun(msg = errMsg(__FILE__, __LINE__))
+!       else if (debug) then
+!         write(fates_log(),*) 'It appears these size specifications have been validated previously.'
+!       end if
+!     endif
     
     ! Check validity of values that are present and provide sensible defaults for the missing ones:
-    if (present(dbh_min)) then
+    !if (present(dbh_min)) then
+    if (present(dbh_min) .and. (dbh_min / = vm_empty_real)) then
       if (dbh_min < 0) then
         write(fates_log(),*) 'dbh_min cannot be less than 0. Leave blank for no lower limit.'
         call endrun(msg = errMsg(__FILE__, __LINE__))
@@ -5258,7 +5259,8 @@ contains
       dbh_min_out = impossibly_small ! Impossibly small value.
     endif
     
-    if (present(dbh_max)) then
+    !if (present(dbh_max)) then
+    if (present(dbh_max) .and. (dbh_max / = vm_empty_real)) then
       if (dbh_max > dbh_massive) then
         write(fates_log(),*) 'dbh_max is unrealistically large. Leave blank for no upper limit.'
         ! We could just warn here as this is unlikely to have any negative effects.
@@ -5269,7 +5271,8 @@ contains
       dbh_max_out = dbh_massive ! Impossibly large value.
     endif
     
-    if (present(ht_min)) then
+    !if (present(ht_min)) then
+    if (present(ht_min) .and. (ht_min / = vm_empty_real)) then
       if (ht_min < 0) then
         write(fates_log(),*) 'ht_min cannot be less than 0. Leave blank for no lower limit.'
         call endrun(msg = errMsg(__FILE__, __LINE__))
@@ -5279,7 +5282,8 @@ contains
       ht_min_out = impossibly_small ! Impossibly small value.
     endif
     
-    if (present(ht_max)) then
+    !if (present(ht_max)) then
+    if (present(ht_max) .and. (ht_max / = vm_empty_real)) then
       if (ht_max > ht_massive) then
         write(fates_log(),*) 'ht_max is unrealistically large. Leave blank for no upper limit.'
         call endrun(msg = errMsg(__FILE__, __LINE__))
@@ -5288,6 +5292,29 @@ contains
     else
       ht_max_out = ht_massive ! Impossibly large value.
     endif
+    
+    
+    
+    ! Redux:
+    ! Instead of checking the incoming values first check the adjusted values after ...:
+    ! This allow 'empty' values to be present...
+    if ((present(dbh_min) .or. present(dbh_max)) .and. (present(ht_min) .or. present(ht_max))) then
+      ! Only allow a mix of DBH and height if the values for one essentially include all possible
+      ! values.  This will be the case when:
+      ! - The values have been previously set by this routine.
+      ! - Or they were converted in the steps above.
+      ! We can't tell which is which so ...
+      
+      if (.not. ((dbh_min_out == impossibly_small .and. dbh_max_out == dbh_massive) .or. &
+                 (ht_min_out == impossibly_small .and. ht_max_out == ht_massive))) then
+        write(fates_log(),*) 'Cannot specify size ranges as a mix of DBH and height.'
+        call endrun(msg = errMsg(__FILE__, __LINE__))
+      else if (debug) then
+        write(fates_log(),*) 'Size was specified as both DBH and height but one is inclusive.'
+      end if
+    endif
+    
+    
     
     ! Check that values define valid ranges:
     if (dbh_min_out > dbh_max_out) then
