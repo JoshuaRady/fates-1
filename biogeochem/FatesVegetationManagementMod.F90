@@ -991,8 +991,9 @@ contains
     ! driven changes in plant fecundity in the form of planting, additions of seeds, and possibly
     ! species changes.
     !
-    ! Currently this is largely a hack for testing planting but over time logic will be added to
-    ! determine what actions are due based on event codes, input files, or heuristics.
+    ! The routine dispatches planting events passed in from the VM driver file.  In the future it
+    ! may handle other event codes or heuristics.  Currently there is also a testing block used for
+    ! manual experimentation.
     !
     ! ToDo: 
     ! Determine which patch or patches to plant into:
@@ -4554,8 +4555,8 @@ contains
     ! size, which can be specified by either diameter or height.
     !
     ! It could be more realistic to leave some harvestable biomass on site as a harvest
-    ! inefficiency (the logging module behavior does this).  Also leaving some understory alive
-    ! would be appropriate if a reasonable fraction could be determined.
+    ! inefficiency (the logging module behavior does this).  Also leaving some understory alive,
+    ! especially grasses, would be appropriate if a reasonable fraction could be determined.
     !
     ! This routine uses kill() calls that assume this is the first disturbing event that has
     ! occurred.  It should be revised used 'disturbed' calls.
@@ -4585,8 +4586,10 @@ contains
     ! Locals:
     integer(i4), pointer, dimension(:) :: the_pfts ! Holds the PFTs to harvest, computed from arguments.
     real(r8) :: the_dbh_min
+    real(r8) :: the_dbh_max ! Not passed in, receives default.
     real(r8) :: the_ht_min
-    real(r8) :: unused1, unused2 ! The maximum values are not used here.
+    real(r8) :: the_ht_max ! Not passed in, receives default.
+    !real(r8) :: unused1, unused2 ! The maximum values are not used here.
     
     real(r8) :: the_patch_fraction
     
@@ -4622,16 +4625,19 @@ contains
     !the_dbh_min = 10.0_r8
     !the_ht_min = 0.0_r8
     ! We have to use names for all since dbh_min and dbh_min are not in order! 
-    call validate_size_specifications(dbh_min_out = the_dbh_min, ht_min_out = the_ht_min, &
-                                      dbh_min = dbh_min, ht_min = ht_min, &
-                                      dbh_max_out = unused1, ht_max_out = unused2) ! Not in order.
-    ! All these parameters could be used at least in the first call so there is no need to discar them.
+    ! call validate_size_specifications(dbh_min_out = the_dbh_min, ht_min_out = the_ht_min, &
+!                                       dbh_min = dbh_min, ht_min = ht_min, &
+!                                       dbh_max_out = unused1, ht_max_out = unused2) ! Not in order.
+    ! All these parameters could be used at least in the first call so there is no need to discard them.
+    call validate_size_specifications(dbh_min_out = the_dbh_min, dbh_max_out = the_dbh_max, &
+                                      ht_min_out = the_ht_min, ht_max_out = the_ht_max, &
+                                      dbh_min = dbh_min, ht_min = ht_min)
     
     ! Validate the patch fraction:
     if (present(patch_fraction)) then
       the_patch_fraction = patch_fraction
     else
-      the_patch_fraction = 1.0_r8 ! Use it!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      the_patch_fraction = 1.0_r8
     endif
     
     if (the_patch_fraction <= 0.0_r8 .or. the_patch_fraction > 1.0_r8) then
@@ -4640,22 +4646,21 @@ contains
     endif
     
     ! Temporary reporting:
-    if (debug) then
-      write(fates_log(), *) 'pfts: ', pfts
-      write(fates_log(), *) 'the_pfts: ', the_pfts
-      write(fates_log(), *) 'the_dbh_min: ', the_dbh_min
-      write(fates_log(), *) 'the_ht_min: ', the_ht_min
-      write(fates_log(), *) 'dbh_max_out: ', unused1
-      write(fates_log(), *) 'ht_max_out: ', unused2
-      write(fates_log(), *) 'the_patch_fraction: ', the_patch_fraction
-    endif
+!     if (debug) then
+!       write(fates_log(), *) 'pfts: ', pfts
+!       write(fates_log(), *) 'the_pfts: ', the_pfts
+!       write(fates_log(), *) 'the_dbh_min: ', the_dbh_min
+!       write(fates_log(), *) 'the_ht_min: ', the_ht_min
+!       write(fates_log(), *) 'dbh_max_out: ', unused1
+!       write(fates_log(), *) 'ht_max_out: ', unused2
+!       write(fates_log(), *) 'the_patch_fraction: ', the_patch_fraction
+!     endif
     
     ! Harvest the appropriate trees:
     call kill_patch(patch = patch, flux_profile = bole_harvest, pfts = pfts, &
-                    !dbh_min = the_dbh_min, dbh_max = the_dbh_max, &
-                    !ht_min = the_ht_min, ht_max = the_ht_max, &
-                    dbh_min = the_dbh_min, ht_min = the_ht_min, &
-                    kill_fraction = 1.0_r8, area_fraction = 1.0_r8)
+                    dbh_min = the_dbh_min, dbh_max = the_dbh_max, &
+                    ht_min = the_ht_min, ht_max = the_ht_max, &
+                    kill_fraction = 1.0_r8, area_fraction = the_patch_fraction)
     
     ! Kill everything else in place:
     if (debug) write(fates_log(), *) 'Start kill in place:'
@@ -4664,15 +4669,14 @@ contains
     ! Assume those were killed in the process of harvest but were left on site:
     if (present(dbh_min)) then
       call kill_patch(patch = patch, flux_profile = in_place, pfts = pfts, dbh_max = the_dbh_min, &
-                      kill_fraction = 1.0_r8, area_fraction = 1.0_r8)
+                      kill_fraction = 1.0_r8, area_fraction = the_patch_fraction)
       
     else if (present(ht_min)) then
       call kill_patch(patch = patch, flux_profile = in_place, pfts = pfts, ht_max = the_ht_min, &
-                      kill_fraction = 1.0_r8, area_fraction = 1.0_r8)
+                      kill_fraction = 1.0_r8, area_fraction = the_patch_fraction)
     endif
     
     ! Kill the unharvested PFTs and leave them on site:
-    ! It might be more realistic to leave some fraction of plants, especially grasses, alive.
     
     ! Get the reciprocal PFTs:
     j = 0
@@ -4728,8 +4732,6 @@ contains
     do while (associated(current_patch))
       
       call clearcut_patch(current_patch, pfts, dbh_min, ht_min)
-      ! Temporary hack:
-      !call clearcut_patch(current_patch, pfts, dbh_min)
       
       current_patch => current_patch%younger
     end do ! Patch loop.
@@ -5198,7 +5200,8 @@ contains
     ! This routine takes a set of size specifications, performs validity checks on the values and 
     ! combinations passed, and returns appropriate defaults for any missing arguments.
     !
-    ! The main purpose of this routine is to reduce code repetition...
+    ! Size specification need to be individually valid and consistent as a group.  This makes
+    ! validation a bit involved and this routine centralizes the logic to reduce code repetition.
     !
     ! The arguments and argument order may seem a bit strange due to the optional nature of the
     ! arguments. It would be most elegant to have the four size specifications as inout but it is
@@ -5207,18 +5210,14 @@ contains
     !
     ! All size specifications are returned.  Rather that trying to determine if DBH or height is
     ! being used the calling code should just compare if a cohort meets all the criteria. Inclusive
-    ! values are given for the unused specifications so only the used specification will actually
-    ! matter.
+    ! values are given for the unused specifications so only the used specification (DBH or height)
+    ! will actually matter.  This greatly simplifies the logic in the calling code.
     ! [Add example?????]
     ! ----------------------------------------------------------------------------------------------
     
     ! Uses: None
     
     ! Arguments:
-!     real(r8), intent(out), optional :: dbh_min_out
-!     real(r8), intent(out), optional :: dbh_max_out
-!     real(r8), intent(out), optional :: ht_min_out
-!     real(r8), intent(out), optional :: ht_max_out
     real(r8), intent(out) :: dbh_min_out
     real(r8), intent(out) :: dbh_max_out
     real(r8), intent(out) :: ht_min_out
@@ -5230,6 +5229,7 @@ contains
     real(r8), intent(in), optional :: dbh_max
     real(r8), intent(in), optional :: ht_min
     real(r8), intent(in), optional :: ht_max
+    ! Consider changing the names to dbh_min_in etc.
     
     ! Locals:
     real(r8), parameter :: impossibly_small = 0.0_r8 ! Impossibly small value
@@ -5240,38 +5240,7 @@ contains
     
     ! ----------------------------------------------------------------------------------------------
     
-    ! Convert 'empty' values from driver events:
-    ! if (present(dbh_min) .and. (dbh_min == vm_empty_real)) then
-!       dbh_min = impossibly_small
-!     end if
-!     
-!     if (present(ht_min) .and. (ht_min == vm_empty_real)) then
-!       ht_min = impossibly_small
-!     end if
-    
-    ! Only allow specification of harvest size by DBH or height:
-    ! Note: For a single PFT it would be acceptable to specify a size range using a single DBH value
-    ! and a single height value.  However, for a mix of PFTs differing allometries means a DBH can
-    ! not be mapped uniquely to height and it becomes imposible to perform comparisons safely.
-    ! if ((present(dbh_min) .or. present(dbh_max)) .and. (present(ht_min) .or. present(ht_max))) then
-!       
-!       ! Only allow a mix of DBH and height if the values for one essentially include all possible
-!       ! values.  It is pretty safe to assume that this will only be the case when the values have
-!       ! already been set by this routine.
-!       
-!       ! The logic above does not quite hold now!!!!!
-!       
-!       if (.not. ((dbh_min == impossibly_small .and. dbh_max == dbh_massive) .or. &
-!                  (ht_min == impossibly_small .and. ht_max == ht_massive))) then
-!         write(fates_log(),*) 'Cannot specify harvest range as a mix of DBH and height.'
-!         call endrun(msg = errMsg(__FILE__, __LINE__))
-!       else if (debug) then
-!         write(fates_log(),*) 'It appears these size specifications have been validated previously.'
-!       end if
-!     endif
-    
     ! Check validity of values that are present and provide sensible defaults for the missing ones:
-    !if (present(dbh_min)) then
     if (present(dbh_min) .and. (dbh_min /= vm_empty_real)) then
       if (dbh_min < 0) then
         write(fates_log(),*) 'dbh_min cannot be less than 0. Leave blank for no lower limit.'
@@ -5282,7 +5251,6 @@ contains
       dbh_min_out = impossibly_small ! Impossibly small value.
     endif
     
-    !if (present(dbh_max)) then
     if (present(dbh_max) .and. (dbh_max /= vm_empty_real)) then
       if (dbh_max > dbh_massive) then
         write(fates_log(),*) 'dbh_max is unrealistically large. Leave blank for no upper limit.'
@@ -5294,7 +5262,6 @@ contains
       dbh_max_out = dbh_massive ! Impossibly large value.
     endif
     
-    !if (present(ht_min)) then
     if (present(ht_min) .and. (ht_min /= vm_empty_real)) then
       if (ht_min < 0) then
         write(fates_log(),*) 'ht_min cannot be less than 0. Leave blank for no lower limit.'
@@ -5305,7 +5272,6 @@ contains
       ht_min_out = impossibly_small ! Impossibly small value.
     endif
     
-    !if (present(ht_max)) then
     if (present(ht_max) .and. (ht_max /= vm_empty_real)) then
       if (ht_max > ht_massive) then
         write(fates_log(),*) 'ht_max is unrealistically large. Leave blank for no upper limit.'
@@ -5316,17 +5282,16 @@ contains
       ht_max_out = ht_massive ! Impossibly large value.
     endif
     
-    
-    
-    ! Redux:
-    ! Instead of checking the incoming values first check the adjusted values after ...:
-    ! This allow 'empty' values to be present...
+    ! Only allow specification of harvest size by DBH or height:
+    ! Instead of checking the incoming values we check the size specifications after adjustment.
+    ! This allow resolution of 'empty' values from driver file events.
+    ! Note: For a single PFT it would be acceptable to specify a size range using a single DBH value
+    ! and a single height value.  However, for a mix of PFTs differing allometries means a DBH can
+    ! not be mapped uniquely to height and it becomes imposible to perform comparisons safely.
     if ((present(dbh_min) .or. present(dbh_max)) .and. (present(ht_min) .or. present(ht_max))) then
       ! Only allow a mix of DBH and height if the values for one essentially include all possible
-      ! values.  This will be the case when:
-      ! - The values have been previously set by this routine.
-      ! - Or they were converted in the steps above.
-      ! We can't tell which is which so ...
+      ! values.  The down side of checking this after the presence checking is that we can't tell
+      ! if this routine was likely called previously on the sizes.
       
       if (.not. ((dbh_min_out == impossibly_small .and. dbh_max_out == dbh_massive) .or. &
                  (ht_min_out == impossibly_small .and. ht_max_out == ht_massive))) then
@@ -5336,8 +5301,6 @@ contains
         write(fates_log(),*) 'Size was specified as both DBH and height but one is inclusive.'
       end if
     endif
-    
-    
     
     ! Check that values define valid ranges:
     if (dbh_min_out > dbh_max_out) then
