@@ -3622,6 +3622,7 @@ contains
     else
       the_patch_fraction = 1.0_r8
     end if
+    ! the_patch_fraction is not actually used below!!!!!
     
     ! Determine the basal area and stem densities for the relavant PFTs:
     patch_bai = disturbed_basal_area(patch, thin_pfts)
@@ -3651,6 +3652,18 @@ contains
     else
       write(fates_log(),*) 'thin_patch_low_perfect(): Must provide thinning fraction, basal area index, or stem density.'
       call endrun(msg = errMsg(__FILE__, __LINE__))
+    endif
+    
+    ! Temporary reporting:
+    if (debug) then
+      write(fates_log(), *) 'thin_pfts:              ', thin_pfts
+      write(fates_log(), *) 'the_patch_fraction:     ', the_patch_fraction
+      write(fates_log(), *) 'thin_fraction:          ', thin_fraction
+      write(fates_log(), *) 'patch_bai:              ', patch_bai
+      write(fates_log(), *) 'final_basal_area:       ', final_basal_area
+      write(fates_log(), *) 'patch_sd:               ', patch_sd
+      write(fates_log(), *) 'the_final_stem_density: ', the_final_stem_density
+      write(fates_log(), *) 'use_bai:                ', use_bai
     endif
     
     ! If the stand is above the goal value (BAI or stem density) start thinning:
@@ -3712,7 +3725,7 @@ contains
         end do ! Cohort loop.
         
       else ! Thin to a goal stem density:
-        if (debug) write(fates_log(), *) 'thin_patch_low_perfect() starting row by stem density.'
+        if (debug) write(fates_log(), *) 'thin_patch_low_perfect() starting low thinning by stem density.'
         
         ! This loop is identically structured to the above so the two could be combined by
         ! generalizing the comparator variables.
