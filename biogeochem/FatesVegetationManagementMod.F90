@@ -3660,7 +3660,9 @@ contains
       write(fates_log(), *) 'the_patch_fraction:     ', the_patch_fraction
       write(fates_log(), *) 'thin_fraction:          ', thin_fraction
       write(fates_log(), *) 'patch_bai:              ', patch_bai
-      write(fates_log(), *) 'final_basal_area:       ', final_basal_area
+      if (present(final_basal_area)) then
+        write(fates_log(), *) 'final_basal_area:       ', final_basal_area
+      endif
       write(fates_log(), *) 'patch_sd:               ', patch_sd
       write(fates_log(), *) 'the_final_stem_density: ', the_final_stem_density
       write(fates_log(), *) 'use_bai:                ', use_bai
