@@ -3547,6 +3547,7 @@ contains
     
     ! Uses:
     use FatesInterfaceTypesMod, only : numpft
+    use EDTypesMod, only : dump_cohort ! Temporary.
     
     ! Arguments:
     type(ed_patch_type), intent(inout), target :: patch
@@ -3739,7 +3740,7 @@ contains
         current_cohort => patch%shortest
         do while(patch_sd > the_final_stem_density)
           
-          call dump_cohort(current_cohort)
+          call dump_cohort(current_cohort) ! Temporary.
           
           if (any(thin_pfts == current_cohort%pft)) then
             ! Get the effective number of stems in cohort and determine if they can be removed in
