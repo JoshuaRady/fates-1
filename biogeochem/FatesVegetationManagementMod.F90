@@ -3537,6 +3537,7 @@ contains
     ! thinning.  thin_row_low() should probably be rewritten to use this routine.
     !
     ! ! Add handling for 'empty' PFTs!!!!!
+    ! patch_fraction is currently ignored!!!!!
     !
     !-----------------------------------------------------------------------------------------------
     ! Operation Type: Thinnning
@@ -3658,7 +3659,9 @@ contains
     if (debug) then
       write(fates_log(), *) 'thin_pfts:              ', thin_pfts
       write(fates_log(), *) 'the_patch_fraction:     ', the_patch_fraction
-      write(fates_log(), *) 'thin_fraction:          ', thin_fraction
+      if (present(final_basal_area)) then
+        write(fates_log(), *) 'thin_fraction:          ', thin_fraction
+      end if
       write(fates_log(), *) 'patch_bai:              ', patch_bai
       if (present(final_basal_area)) then
         write(fates_log(), *) 'final_basal_area:       ', final_basal_area
@@ -3686,9 +3689,9 @@ contains
         current_cohort => patch%shortest
         do while(associated(current_cohort) .and. patch_bai > final_basal_area)
           
-          if (any(pfts == current_cohort%pft)) then
-            ! Get the effective (after row thinning) basal area of the cohort and determine if it
-            ! can be removed in part or in whole:
+          if (any(thin_pfts == current_cohort%pft)) then
+            ! Get the effective basal area (after any staged removals) of the cohort and determine
+            ! if it can be removed in part or in whole:
             cohort_ba = disturbed_basal_area(current_cohort)
             
             ! Remaining basal area:
@@ -3719,9 +3722,10 @@ contains
             
             ! The harvest estimate and BAI only needs to be updated if we harvested something:
             ! Accumulate harvest estimate:
+            ! This is wrong isn't it!  This will count all cohort regardless of harvest extent!!!!!
             harvest = harvest + cohort_harvestable_biomass(current_cohort) ! staged = true!!!!
             patch_bai = disturbed_basal_area(patch, thin_pfts) ! Update the BAI calculation.
-          end if ! (any(pfts == current_cohort%pft))
+          end if ! (any(thin_pfts == current_cohort%pft))
           
           current_cohort => current_cohort%taller
         end do ! Cohort loop.
@@ -3735,13 +3739,17 @@ contains
         current_cohort => patch%shortest
         do while(patch_sd > the_final_stem_density)
           
-          if (any(pfts == current_cohort%pft)) then
+          call dump_cohort(current_cohort)
+          
+          if (any(thin_pfts == current_cohort%pft)) then
             ! Get the effective number of stems in cohort and determine if they can be removed in
             ! part or in whole.  Because n is per nominal hectare n = stem density (n/ha):
             cohort_stems = cohort_disturbed_n(current_cohort)
+            if (debug) write(fates_log(), *) "cohort_stems: ", cohort_stems ! Temporary.
             
             ! Remaining stems to remove:
             thin_sd_remaining = patch_sd - the_final_stem_density
+            if (debug) write(fates_log(), *) "thin_sd_remaining: ", thin_sd_remaining ! Temporary.
             
             ! If the cohort stem count is less that what still needs to be removed kill all of it:
             if (cohort_stems <= thin_sd_remaining) then
@@ -3763,7 +3771,8 @@ contains
             ! Accumulate harvest estimate:
             harvest = harvest + cohort_harvestable_biomass(current_cohort) ! staged = true!!!!
             patch_sd = patch_disturbed_n(patch, thin_pfts) ! disturbed_stem_density(patch, thin_pfts) ! Update the stem density.
-          end if ! (any(pfts == current_cohort%pft))
+            if (debug) write(fates_log(), *) "patch_sd: ", patch_sd ! Temporary.
+          end if ! (any(thin_pfts == current_cohort%pft))
           
           current_cohort => current_cohort%taller
         end do ! Cohort loop.
