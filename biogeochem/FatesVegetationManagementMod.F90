@@ -3532,11 +3532,15 @@ contains
     ! or a goal (stem density or basal area).
     ! The low thinning is 'perfect' because only exact number of the smallest trees are removed,
     ! which is not terrible realistic in most cases.
+    ! 
+    ! Calling this routine with the thin_fraction argument may not produce the expected results when
+    ! the stand is multi-age.  If there a lot of small recruits a thinning can a large fraction of
+    ! the stems with little discernable effect.  A size or canopy postion cutoff in the thinning
+    ! calculations could remedy this but requires some thought.
     !
     ! This routine duplicates and expands much of the code from thin_row_low(), except the row
     ! thinning.  thin_row_low() should probably be rewritten to use this routine.
     !
-    ! ! Add handling for 'empty' PFTs!!!!!
     ! patch_fraction is currently ignored!!!!!
     !
     !-----------------------------------------------------------------------------------------------
@@ -3572,8 +3576,10 @@ contains
     real(r8) :: the_final_stem_density ! Stem density goal possibly converted from thin_fraction.
     
     logical :: use_bai ! If true use basal area index as the criteria, otherwise use stem density.
-    real(r8) :: patch_bai ! Basal area of the patch (including only PFTs in pfts)
-    real(r8) :: patch_sd ! Stem density of the patch (including only PFTs in pfts)
+    !real(r8) :: patch_bai ! Basal area of the patch (including only PFTs in pfts)
+    real(r8) :: pfts_bai ! Basal area of the patch, including only PFTs in pfts.
+    !real(r8) :: patch_sd ! Stem density of the patch (including only PFTs in pfts)
+    real(r8) :: pfts_sd ! Stem density of the patch, including only PFTs in pfts.
     real(r8) :: cohort_ba ! Basal area of a cohort
     real(r8) :: cohort_stems
     real(r8) :: thin_ba_remaining
@@ -3627,8 +3633,8 @@ contains
     ! the_patch_fraction is not actually used below!!!!!
     
     ! Determine the basal area and stem densities for the relavant PFTs:
-    patch_bai = disturbed_basal_area(patch, thin_pfts)
-    patch_sd = patch_disturbed_n(patch, thin_pfts) !disturbed_stem_density(patch, thin_pfts)
+    pfts_bai = disturbed_basal_area(patch, thin_pfts)
+    pfts_sd = patch_disturbed_n(patch, thin_pfts) !disturbed_stem_density(patch, thin_pfts)
     
     ! Only thin_fraction, final_basal_area, or final_stem_density should be provided:
     if ((present(thin_fraction) .and. present(final_basal_area)) .or. &
@@ -3650,36 +3656,36 @@ contains
       
       ! Convert the thinning fraction to a stem density goal:
       use_bai = .false.
-      the_final_stem_density = patch_sd * (1.0_r8 - thin_fraction)
+      the_final_stem_density = pfts_sd * (1.0_r8 - thin_fraction)
     else
       write(fates_log(),*) 'thin_patch_low_perfect(): Must provide thinning fraction, basal area index, or stem density.'
       call endrun(msg = errMsg(__FILE__, __LINE__))
     endif
     
     ! Temporary reporting:
-    if (debug) then
-      write(fates_log(), *) 'thin_pfts:              ', thin_pfts
-      write(fates_log(), *) 'the_patch_fraction:     ', the_patch_fraction
-      if (present(final_basal_area)) then
-        write(fates_log(), *) 'thin_fraction:          ', thin_fraction
-      end if
-      write(fates_log(), *) 'patch_bai:              ', patch_bai
-      if (present(final_basal_area)) then
-        write(fates_log(), *) 'final_basal_area:       ', final_basal_area
-      endif
-      write(fates_log(), *) 'patch_sd:               ', patch_sd
-      write(fates_log(), *) 'the_final_stem_density: ', the_final_stem_density
-      write(fates_log(), *) 'use_bai:                ', use_bai
-    endif
+!     if (debug) then
+!       write(fates_log(), *) 'thin_pfts:              ', thin_pfts
+!       write(fates_log(), *) 'the_patch_fraction:     ', the_patch_fraction
+!       if (present(thin_fraction)) then
+!         write(fates_log(), *) 'thin_fraction:          ', thin_fraction
+!       end if
+!       write(fates_log(), *) 'pfts_bai:              ', pfts_bai
+!       if (present(final_basal_area)) then
+!         write(fates_log(), *) 'final_basal_area:       ', final_basal_area
+!       endif
+!       write(fates_log(), *) 'pfts_sd:               ', pfts_sd
+!       write(fates_log(), *) 'the_final_stem_density: ', the_final_stem_density
+!       write(fates_log(), *) 'use_bai:                ', use_bai
+!     endif
     
     ! If the stand is above the goal value (BAI or stem density) start thinning:
-    if ((use_bai .and. (patch_bai > final_basal_area)) .or. &
-        ((.not. use_bai) .and. (patch_sd > the_final_stem_density))) then
+    if ((use_bai .and. (pfts_bai > final_basal_area)) .or. &
+        ((.not. use_bai) .and. (pfts_sd > the_final_stem_density))) then
       
       ! There may be previously staged mortality. Therefore we need to keep track of the changes to
       ! BAI, density, and plant number's:
-      patch_bai = disturbed_basal_area(patch, thin_pfts)
-      patch_sd = patch_disturbed_n(patch, thin_pfts) !disturbed_stem_density(patch, thin_pfts)
+      pfts_bai = disturbed_basal_area(patch, thin_pfts)
+      pfts_sd = patch_disturbed_n(patch, thin_pfts) !disturbed_stem_density(patch, thin_pfts)
       
       ! Cull the smallest trees (low thinning) recursively until the goal has been reached:
       
@@ -3696,7 +3702,7 @@ contains
             cohort_ba = disturbed_basal_area(current_cohort)
             
             ! Remaining basal area:
-            thin_ba_remaining = patch_bai - final_basal_area
+            thin_ba_remaining = pfts_bai - final_basal_area
             
             ! If the cohort basal area is less that what still needs to be removed kill all of it:
             if (cohort_ba <= thin_ba_remaining) then
@@ -3725,7 +3731,7 @@ contains
             ! Accumulate harvest estimate:
             ! This is wrong isn't it!  This will count all cohort regardless of harvest extent!!!!!
             harvest = harvest + cohort_harvestable_biomass(current_cohort) ! staged = true!!!!
-            patch_bai = disturbed_basal_area(patch, thin_pfts) ! Update the BAI calculation.
+            pfts_bai = disturbed_basal_area(patch, thin_pfts) ! Update the BAI calculation.
           end if ! (any(thin_pfts == current_cohort%pft))
           
           current_cohort => current_cohort%taller
@@ -3738,19 +3744,19 @@ contains
         ! generalizing the comparator variables.
         
         current_cohort => patch%shortest
-        do while(patch_sd > the_final_stem_density)
+        do while(pfts_sd > the_final_stem_density)
           
-          call dump_cohort(current_cohort) ! Temporary.
+          !if (debug) call dump_cohort(current_cohort) ! Temporary.
           
           if (any(thin_pfts == current_cohort%pft)) then
             ! Get the effective number of stems in cohort and determine if they can be removed in
             ! part or in whole.  Because n is per nominal hectare n = stem density (n/ha):
             cohort_stems = cohort_disturbed_n(current_cohort)
-            if (debug) write(fates_log(), *) "cohort_stems: ", cohort_stems ! Temporary.
+            !if (debug) write(fates_log(), *) "cohort_stems: ", cohort_stems ! Temporary.
             
             ! Remaining stems to remove:
-            thin_sd_remaining = patch_sd - the_final_stem_density
-            if (debug) write(fates_log(), *) "thin_sd_remaining: ", thin_sd_remaining ! Temporary.
+            thin_sd_remaining = pfts_sd - the_final_stem_density
+            !if (debug) write(fates_log(), *) "thin_sd_remaining: ", thin_sd_remaining ! Temporary.
             
             ! If the cohort stem count is less that what still needs to be removed kill all of it:
             if (cohort_stems <= thin_sd_remaining) then
@@ -3771,8 +3777,8 @@ contains
             ! The harvest estimate and stem density only need to updated if we harvested something:
             ! Accumulate harvest estimate:
             harvest = harvest + cohort_harvestable_biomass(current_cohort) ! staged = true!!!!
-            patch_sd = patch_disturbed_n(patch, thin_pfts) ! disturbed_stem_density(patch, thin_pfts) ! Update the stem density.
-            if (debug) write(fates_log(), *) "patch_sd: ", patch_sd ! Temporary.
+            pfts_sd = patch_disturbed_n(patch, thin_pfts) ! disturbed_stem_density(patch, thin_pfts) ! Update the stem density.
+            !if (debug) write(fates_log(), *) "pfts_sd: ", pfts_sd ! Temporary.
           end if ! (any(thin_pfts == current_cohort%pft))
           
           current_cohort => current_cohort%taller
