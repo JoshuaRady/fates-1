@@ -57,6 +57,7 @@ module FatesVegetationManagementMod
   ! Management Operations:
   private :: plant_site
   private :: understory_control
+  private :: hardwood_control
   private :: thin_row_low
   private :: thinnable_patch
   !private :: thin_low
@@ -139,6 +140,7 @@ module FatesVegetationManagementMod
   integer(i4), target, public :: tree_pfts(6) = [1,2,3,4,5,6] ! Temporarily public
   ! Shrubs?
   integer(i4), target, private :: understory_pfts(6) = [7,8,9,10,11,12]
+  integer(i4),  target, private :: broadloeaf_pfts(6) = [1,4,5,6,7,8,9] ! 'Hardwood' trees and shrubs
   
   ! Understory control modes:
   ! Note: The order an value of these have no significance and are subject to change.  Use the
@@ -171,6 +173,7 @@ module FatesVegetationManagementMod
       real(r8) :: dbh_min
       real(r8) :: ht_min
       real(r8) :: patch_fraction
+      real(r8) :: efficiency
     contains
       procedure :: zero
       procedure :: load
@@ -185,11 +188,13 @@ module FatesVegetationManagementMod
   ! VM event codes:
   integer, parameter, private :: vm_event_null = 0 ! No event
   integer, parameter, private :: vm_event_plant = 1
-  integer, parameter, private :: vm_event_thin_test1 = 2 ! In progress, currently wraps thin_row_low() to do perfect low thinning.
-  integer, parameter, private :: vm_event_thin_proportional = 3
-  integer, parameter, private :: vm_event_thin_low_perfect = 4
-  integer, parameter, private :: vm_event_thin_low_probabilistic = 5
-  integer, parameter, private :: vm_event_clearcut = 6
+  integer, parameter, private :: vm_event_understory_control = 2 ! Not yet plumbed in.
+  integer, parameter, private :: vm_event_hardwood_control = 3
+  integer, parameter, private :: vm_event_thin_test1 = 4 ! In progress, currently wraps thin_row_low() to do perfect low thinning.
+  integer, parameter, private :: vm_event_thin_proportional = 5
+  integer, parameter, private :: vm_event_thin_low_perfect = 6
+  integer, parameter, private :: vm_event_thin_low_probabilistic = 7
+  integer, parameter, private :: vm_event_clearcut = 8
   !integer, parameter, private :: vm_event_XXXXX = X
 
   integer, parameter, private :: vm_event_generative_max = vm_event_plant
@@ -624,6 +629,9 @@ contains
             current_patch => current_patch%younger
           end do
           
+        case (vm_event_hardwood_control)
+          call hardwood_control(site = site_in, efficiency = vm_mortality_event%efficiency)
+        
         case (vm_event_thin_proportional)
           call thin_proportional(site = site_in, pfts = vm_mortality_event%pfts, &
                                  thin_fraction = vm_mortality_event%thin_fraction)
@@ -3104,6 +3112,65 @@ contains
 !     call understory_control(patch, method_mow)
 !     
 !   end subroutine understory_mow
+
+  !=================================================================================================
+
+  subroutine hardwood_control(site, efficiency) ! method, where, area/patch_fraction
+    ! ----------------------------------------------------------------------------------------------
+    ! Kill hardwood (shrub and tree) PFTs for the site passed.
+    !
+    ! Hardwood control is typically done with targeted or global herbicide application, but it could
+    ! also be done mechanically.  Without a standing dead pool these two methods are equivalent so
+    ! for now we do not provide a method argument.
+    !
+    ! The default behavior of routine is both perfectly instantaneous and perfectly efficient,
+    ! neither of which is realistic.  The later can be addressed using the efficiency parameter but
+    ! if data is available to inform it.  The former would be far harder to address.
+    !
+    !-----------------------------------------------------------------------------------------------
+    ! Operation Type: Hardwood Control AKA Woody Release, Mid-rotation Brush Control (MRBC)
+    ! Operation Level: Site
+    ! Regime: Multiple
+    !
+    ! VM Event Interface hardwood_control([efficiency])
+    ! ----------------------------------------------------------------------------------------------
+   
+    ! Uses: NA
+    
+    ! Arguments:
+    type(ed_site_type), intent(in), target :: site ! The current site object.
+    real(r8), intent(in), optional :: efficiency ! What fraction of hardwoods to kill? Defaults to 1.
+    ! method
+    ! Add 'where' argument.
+    
+    ! Locals:
+    type(ed_patch_type), pointer :: current_patch
+    type(ed_cohort_type), pointer :: current_cohort
+    
+    ! Locals:
+    real(r8), intent(in), optional :: the_efficiency
+    
+    ! ----------------------------------------------------------------------------------------------
+    if (debug) write(fates_log(), *) 'hardwood_control() beginning.'
+    
+    if (present(efficiency)  .and. efficiency /= vm_empty_real) then
+      the_efficiency = efficiency
+    else
+      the_efficiency = 1.0_r8
+    endif
+    
+    current_patch => site%oldest_patch
+    do while (associated(current_patch))
+      current_cohort => current_patch%shortest
+      
+      ! Treat broadleaf woody PFTs as 'hardwoods', spare needleleaf PFTs, kill all sizes, for the whole patch:
+      call kill_patch(patch = current_patch, flux_profile = in_place, pfts = broadloeaf_pfts, &
+                      kill_fraction = the_efficiency)
+      
+      current_patch => current_patch%younger
+    end do ! Patch loop.
+    
+  end subroutine hardwood_control
 
   !=================================================================================================
   ! Thinning Subroutines:
@@ -5921,6 +5988,7 @@ contains
     this%dbh_min = vm_empty_real
     this%ht_min = vm_empty_real
     this%patch_fraction = vm_empty_real
+    this%efficiency = vm_empty_real
     
   end subroutine zero
 
@@ -6002,6 +6070,8 @@ contains
     select case (event_type_str)
       case ('plant')
         this%code = vm_event_plant
+      case ('hardwood_control')
+        this%code = vm_event_hardwood_control
       case ('thin_row_low') ! Name will probably change!!!!!
         this%code = vm_event_thin_test1
       case ('thin_proportional')
@@ -6101,7 +6171,8 @@ contains
           read(param_value, *) this%ht_min
         case ('patch_fraction') ! clearcut()
           read(param_value, *) this%patch_fraction
-        !More to come:
+        case ('efficiency') ! hardwood_control()
+          read(param_value, *) this%patch_fraction
         !case ('')
         !case ('where')
         case default
@@ -6179,6 +6250,7 @@ contains
     write(fates_log(), *) 'dbh_min:          ', this%dbh_min
     write(fates_log(), *) 'ht_min:           ', this%ht_min
     write(fates_log(), *) 'patch_fraction:   ', this%patch_fraction
+    write(fates_log(), *) 'efficiency:        ', this%efficiency
     
   end subroutine dump
 
