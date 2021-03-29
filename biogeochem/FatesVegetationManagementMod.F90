@@ -140,7 +140,7 @@ module FatesVegetationManagementMod
   integer(i4), target, public :: tree_pfts(6) = [1,2,3,4,5,6] ! Temporarily public
   ! Shrubs?
   integer(i4), target, private :: understory_pfts(6) = [7,8,9,10,11,12]
-  integer(i4),  target, private :: broadloeaf_pfts(6) = [1,4,5,6,7,8,9] ! 'Hardwood' trees and shrubs
+  integer(i4),  target, private :: broadloeaf_pfts(7) = [1,4,5,6,7,8,9] ! 'Hardwood' trees and shrubs
   
   ! Understory control modes:
   ! Note: The order an value of these have no significance and are subject to change.  Use the
@@ -3148,7 +3148,7 @@ contains
     type(ed_cohort_type), pointer :: current_cohort
     
     ! Locals:
-    real(r8), intent(in), optional :: the_efficiency
+    real(r8) :: the_efficiency
     
     ! ----------------------------------------------------------------------------------------------
     if (debug) write(fates_log(), *) 'hardwood_control() beginning.'
@@ -3165,7 +3165,7 @@ contains
       
       ! Treat broadleaf woody PFTs as 'hardwoods', spare needleleaf PFTs, kill all sizes, for the whole patch:
       call kill_patch(patch = current_patch, flux_profile = in_place, pfts = broadloeaf_pfts, &
-                      kill_fraction = the_efficiency)
+                      area_fraction = 1.0_r8, kill_fraction = the_efficiency)
       
       current_patch => current_patch%younger
     end do ! Patch loop.
@@ -3761,7 +3761,7 @@ contains
         
         ! Given the fixed allometry this will also give us cohorts from the lowest DBH:
         current_cohort => patch%shortest
-        do while(associated(current_cohort) .and. patch_bai > final_basal_area)
+        do while(associated(current_cohort) .and. pfts_bai > final_basal_area)
           
           if (any(thin_pfts == current_cohort%pft)) then
             ! Get the effective basal area (after any staged removals) of the cohort and determine
