@@ -2926,17 +2926,17 @@ contains
                                       dbh_min, dbh_max, ht_min, ht_max)
     
     ! Temporary reporting:
-    if (debug) then
-      write(fates_log(), *) 'kill_patch():'
-      write(fates_log(), *) 'pfts:          ', pfts
-      write(fates_log(), *) 'the_dbh_min:   ', the_dbh_min
-      write(fates_log(), *) 'the_dbh_max:   ', the_dbh_max
-      write(fates_log(), *) 'the_ht_min:    ', the_ht_min
-      write(fates_log(), *) 'the_ht_max:    ', the_ht_max
-      write(fates_log(), *) 'kill_fraction: ', kill_fraction
-      write(fates_log(), *) 'area_fraction: ', area_fraction
-      write(fates_log(), *) 'flux_profile:  ', flux_profile
-    endif
+!     if (debug) then
+!       write(fates_log(), *) 'kill_patch():'
+!       write(fates_log(), *) 'pfts:          ', pfts
+!       write(fates_log(), *) 'the_dbh_min:   ', the_dbh_min
+!       write(fates_log(), *) 'the_dbh_max:   ', the_dbh_max
+!       write(fates_log(), *) 'the_ht_min:    ', the_ht_min
+!       write(fates_log(), *) 'the_ht_max:    ', the_ht_max
+!       write(fates_log(), *) 'kill_fraction: ', kill_fraction
+!       write(fates_log(), *) 'area_fraction: ', area_fraction
+!       write(fates_log(), *) 'flux_profile:  ', flux_profile
+!     endif
     
     ! Similar to understory_control?????
     current_cohort => patch%shortest
@@ -2945,8 +2945,6 @@ contains
       if (any(pfts == current_cohort%pft) .and. &
           current_cohort%dbh >= the_dbh_min .and. current_cohort%dbh <= the_dbh_max .and. &
           current_cohort%hite >= the_ht_min .and. current_cohort%hite <= the_ht_max) then
-        
-        if (debug) write(fates_log(), *) 'kill_patch() cohort match.'
         
         call kill(cohort = current_cohort, flux_profile = flux_profile, &
                   kill_fraction = kill_fraction, area_fraction = area_fraction)
@@ -4702,7 +4700,6 @@ contains
     real(r8) :: the_dbh_max ! Not passed in, receives default.
     real(r8) :: the_ht_min
     real(r8) :: the_ht_max ! Not passed in, receives default.
-    !real(r8) :: unused1, unused2 ! The maximum values are not used here.
     
     real(r8) :: the_patch_fraction
     
@@ -4714,7 +4711,6 @@ contains
     if (debug) write(fates_log(), *) 'clearcut_patch() entering.'
     
     ! Validate the PFTs:
-    !if (present(pfts) .and. (pfts /= vm_empty_array)) then
     if (present(pfts) .and. all(pfts /= vm_empty_integer)) then
       ! Confirm PFTs to harvest are all trees:
       do i = 1, size(pfts)
@@ -4729,19 +4725,9 @@ contains
       the_pfts => pfts
     else
       the_pfts => tree_pfts
-    endif ! present(dbh)...
+    endif ! present(pfts)...
     
     ! Validate the size specifications:
-    ! call validate_size_specifications(dbh_min_out = the_dbh_min, ht_min_out = the_ht_min, &
-!                                       dbh_min = dbh_min, ht_min = ht_min)
-    ! Hack:
-    !the_dbh_min = 10.0_r8
-    !the_ht_min = 0.0_r8
-    ! We have to use names for all since dbh_min and dbh_min are not in order! 
-    ! call validate_size_specifications(dbh_min_out = the_dbh_min, ht_min_out = the_ht_min, &
-!                                       dbh_min = dbh_min, ht_min = ht_min, &
-!                                       dbh_max_out = unused1, ht_max_out = unused2) ! Not in order.
-    ! All these parameters could be used at least in the first call so there is no need to discard them.
     call validate_size_specifications(dbh_min_out = the_dbh_min, dbh_max_out = the_dbh_max, &
                                       ht_min_out = the_ht_min, ht_max_out = the_ht_max, &
                                       dbh_min = dbh_min, ht_min = ht_min)
@@ -4763,9 +4749,9 @@ contains
 !       write(fates_log(), *) 'pfts: ', pfts
 !       write(fates_log(), *) 'the_pfts: ', the_pfts
 !       write(fates_log(), *) 'the_dbh_min: ', the_dbh_min
+!       write(fates_log(), *) 'the_dbh_max: ', the_dbh_max
 !       write(fates_log(), *) 'the_ht_min: ', the_ht_min
-!       write(fates_log(), *) 'dbh_max_out: ', unused1
-!       write(fates_log(), *) 'ht_max_out: ', unused2
+!       write(fates_log(), *) 'the_ht_max: ', the_ht_max
 !       write(fates_log(), *) 'the_patch_fraction: ', the_patch_fraction
 !     endif
     
@@ -4781,7 +4767,7 @@ contains
     ! If there were size limits set for the harvested PFTs then there may be some trees remaining.
     ! Assume those were killed in the process of harvest but were left on site:
     ! Note: This is not entirely safe since dbh_max and ht_max are inclusive. This could lead to a
-    ! cohort being hit twice.
+    ! cohort being hit twice, above and here.
     if (present(dbh_min)) then
       call kill_patch(patch = patch, flux_profile = in_place, pfts = the_pfts, dbh_max = the_dbh_min, &
                       kill_fraction = 1.0_r8, area_fraction = the_patch_fraction)
