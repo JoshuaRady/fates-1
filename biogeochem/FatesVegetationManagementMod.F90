@@ -2925,6 +2925,17 @@ contains
     call validate_size_specifications(the_dbh_min, the_dbh_max, the_ht_min, the_ht_max, &
                                       dbh_min, dbh_max, ht_min, ht_max)
     
+    ! Temporary reporting:
+    if (debug) then
+      write(fates_log(), *) 'pfts:          ', pfts
+      write(fates_log(), *) 'the_dbh_min:   ', the_dbh_min
+      write(fates_log(), *) 'the_dbh_max:   ', the_dbh_max
+      write(fates_log(), *) 'the_ht_min:    ', the_ht_min
+      write(fates_log(), *) 'the_ht_max:    ', the_ht_max
+      write(fates_log(), *) 'kill_fraction: ', kill_fraction
+      write(fates_log(), *) 'area_fraction: ', area_fraction
+    endif
+    
     ! Similar to understory_control?????
     current_cohort => patch%shortest
     do while(associated(current_cohort))
@@ -2934,7 +2945,7 @@ contains
           current_cohort%hite >= the_ht_min .and. current_cohort%hite <= the_ht_max) then
         
         call kill(cohort = current_cohort, flux_profile = flux_profile, &
-                  kill_fraction = kill_fraction, & area_fraction = area_fraction)
+                  kill_fraction = kill_fraction, area_fraction = area_fraction)
         endif
       current_cohort => current_cohort%taller
     end do ! Cohort loop.
@@ -3153,7 +3164,7 @@ contains
     ! ----------------------------------------------------------------------------------------------
     if (debug) write(fates_log(), *) 'hardwood_control() beginning.'
     
-    if (present(efficiency)  .and. efficiency /= vm_empty_real) then
+    if (present(efficiency) .and. efficiency /= vm_empty_real) then
       the_efficiency = efficiency
     else
       the_efficiency = 1.0_r8
@@ -4755,22 +4766,24 @@ contains
 !     endif
     
     ! Harvest the appropriate trees:
-    call kill_patch(patch = patch, flux_profile = bole_harvest, pfts = pfts, &
+    call kill_patch(patch = patch, flux_profile = bole_harvest, pfts = the_pfts, &
                     dbh_min = the_dbh_min, dbh_max = the_dbh_max, &
                     ht_min = the_ht_min, ht_max = the_ht_max, &
                     kill_fraction = 1.0_r8, area_fraction = the_patch_fraction)
     
-    ! Kill everything else in place:
+    ! Kill the other sizes of the harvested PFTs in place:
     if (debug) write(fates_log(), *) 'Start kill in place:'
     
     ! If there were size limits set for the harvested PFTs then there may be some trees remaining.
     ! Assume those were killed in the process of harvest but were left on site:
+    ! Note: This is not entirely safe since dbh_max and ht_max are inclusive. This could lead to a
+    ! cohort being hit twice.
     if (present(dbh_min)) then
-      call kill_patch(patch = patch, flux_profile = in_place, pfts = pfts, dbh_max = the_dbh_min, &
+      call kill_patch(patch = patch, flux_profile = in_place, pfts = the_pfts, dbh_max = the_dbh_min, &
                       kill_fraction = 1.0_r8, area_fraction = the_patch_fraction)
       
     else if (present(ht_min)) then
-      call kill_patch(patch = patch, flux_profile = in_place, pfts = pfts, ht_max = the_ht_min, &
+      call kill_patch(patch = patch, flux_profile = in_place, pfts = the_pfts, ht_max = the_ht_min, &
                       kill_fraction = 1.0_r8, area_fraction = the_patch_fraction)
     endif
     
@@ -4779,7 +4792,7 @@ contains
     ! Get the reciprocal PFTs:
     j = 0
     do i = 1, size(all_pfts)
-      if (.not. any(all_pfts(i) == pfts)) then
+      if (.not. any(all_pfts(i) == the_pfts)) then
         j = j + 1
         other_pfts(j) = all_pfts(i)
       endif
