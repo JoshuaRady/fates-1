@@ -2927,6 +2927,7 @@ contains
     
     ! Temporary reporting:
     if (debug) then
+      write(fates_log(), *) 'kill_patch():'
       write(fates_log(), *) 'pfts:          ', pfts
       write(fates_log(), *) 'the_dbh_min:   ', the_dbh_min
       write(fates_log(), *) 'the_dbh_max:   ', the_dbh_max
@@ -2934,6 +2935,7 @@ contains
       write(fates_log(), *) 'the_ht_max:    ', the_ht_max
       write(fates_log(), *) 'kill_fraction: ', kill_fraction
       write(fates_log(), *) 'area_fraction: ', area_fraction
+      write(fates_log(), *) 'flux_profile:  ', flux_profile
     endif
     
     ! Similar to understory_control?????
@@ -2943,6 +2945,8 @@ contains
       if (any(pfts == current_cohort%pft) .and. &
           current_cohort%dbh >= the_dbh_min .and. current_cohort%dbh <= the_dbh_max .and. &
           current_cohort%hite >= the_ht_min .and. current_cohort%hite <= the_ht_max) then
+        
+        if (debug) write(fates_log(), *) 'kill_patch() cohort match.'
         
         call kill(cohort = current_cohort, flux_profile = flux_profile, &
                   kill_fraction = kill_fraction, area_fraction = area_fraction)
