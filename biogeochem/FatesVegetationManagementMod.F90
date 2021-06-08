@@ -357,7 +357,7 @@ contains
     use EDTypesMod, only : dump_patch, dump_cohort
     use EDTypesMod, only : nclmax, ican_upper
     use FatesConstantsMod, only : fates_tiny
-    use FatesConstantsMod, only : nearzero
+    use FatesConstantsMod, only : nearzero, rsnbl_math_prec
     
     ! Arguments:
     type(ed_site_type), intent(inout), target :: site_in
@@ -392,6 +392,7 @@ contains
     real(r8) :: c_1st, c_2nd ! Temporary: Used for temporary harvest implementation.
     
     !integer(i4) :: pft_int_temp(1) ! Temporary
+    real(r8), parameter :: tolerance = rsnbl_math_prec ! float_tolerance?
     
     ! ----------------------------------------------------------------------------------------------
     if (debug) write(fates_log(), *) 'managed_mortality() entering.'
@@ -882,14 +883,14 @@ contains
         end do ! Cohort loop.
         
         ! Check the canopy layer disturbances are valid.  This will catch > 1 errors as well:
-        if (overstory_mort_d > patch_disturbance) then
+        if (overstory_mort_d > patch_disturbance + tolerance) then
           write(fates_log(),*) 'Overstory mortality disturbance is > patch disturbance:'
           write(fates_log(),*) 'Overstory mortality disturbance = ', & overstory_mort_d
           write(fates_log(),*) 'Patch disturbance =               ', & patch_disturbance
           call endrun(msg = errMsg(__FILE__, __LINE__))
         end if
         
-        if (understory_mort_d > patch_disturbance) then
+        if (understory_mort_d > patch_disturbance + tolerance) then
           write(fates_log(),*) 'Understory mortality disturbance is > patch disturbance:'
           write(fates_log(),*) 'Understory mortality disturbance = ', & understory_mort_d
           write(fates_log(),*) 'Patch disturbance =               ', & patch_disturbance
