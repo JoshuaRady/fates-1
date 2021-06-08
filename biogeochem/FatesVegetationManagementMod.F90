@@ -355,6 +355,7 @@ contains
     use EDLoggingMortalityMod, only : LoggingMortality_frac
     use EDTypesMod, only : dtype_ilog
     use EDTypesMod, only : dump_patch, dump_cohort
+    use EDTypesMod, only : nclmax, ican_upper
     use FatesConstantsMod, only : fates_tiny
     use FatesConstantsMod, only : nearzero
     
@@ -380,14 +381,17 @@ contains
     real(r8) :: dist_rate_ldist_notharvested
     real(r8) :: harvest_rate
     
-    real(r8) :: patch_disturbance ! Accumulator
-    real(r8) :: cohort_disturbance ! Accumulator
-    real(r8) :: cohort_mort ! Mortality rate at the cohort level.
-    real(r8) :: patch_mort_d ! The patchwide disturbed area fraction resulting directly from mortality.
+    real(r8) :: patch_disturbance ! The fraction of the patch area being disturbed.  VM only accumulator.
+    real(r8) :: cohort_disturbance ! The fraction of the cohort area being disturbed.  VM only.
+    !real(r8) :: cohort_mort ! Mortality rate (fraction of plants dying) at the cohort level. WRONG!
+    real(r8) :: cohort_mort_d ! The patch area fraction disturbed due to mortality in this cohort.
+    real(r8) :: overstory_mort_d ! Accumulator: The fraction of overstory canopy area affected by mortality.
+    real(r8) :: understory_mort_d ! Accumulator: The fraction of understory canopy area affected by mortality.
+    real(r8) :: patch_mort_d ! The patch-wide disturbed area fraction resulting directly from mortality.
     
     real(r8) :: c_1st, c_2nd ! Temporary: Used for temporary harvest implementation.
     
-    integer(i4) :: pft_int_temp(1) ! Temporary
+    !integer(i4) :: pft_int_temp(1) ! Temporary
     
     ! ----------------------------------------------------------------------------------------------
     if (debug) write(fates_log(), *) 'managed_mortality() entering.'
@@ -785,7 +789,7 @@ contains
       ! What is a managed disturbance?:
       !   Given that some management activities happen 'in place' is possible to consider them
       ! non-disturbing.  For example, thinning reduces the density of trees evenly everywhere and no
-      ! 'new' patch is seeming needed.  When the patch fraction is 1 this may be more or less true.
+      ! 'new' patch is seemingly needed.  When the patch fraction is 1 this may be more or less true.
       ! However, there are times when we want to thin an area smaller than an existing patch.  In
       ! these case the patch fraction is less than 1 whether or not thinning matches our internal
       ! definition of a disturbance, the event requires a patch splitting and therefore is
@@ -796,7 +800,7 @@ contains
       ! the disturbance philosophy.
       !   However, while this decision doesn't effect the patch composition it does effect the patch
       ! age.  It is a reasonable question as to whether the anthro-disturbance flag should be set
-      ! for all activities and whether intermediate opperations should not reset the patch age.
+      ! for all activities and whether intermediate operations should not reset the patch age.
       !
       ! Calculating disturbance:
       !   While the mortality fractions are essentially rates (dead plants / total plants / event,
@@ -805,17 +809,24 @@ contains
       ! Mortality Primitives section.  In short, with one management mode / flux profile we expect
       ! that some cohorts may be unaffected (patch fraction = 0) while others are (0 < patch
       ! fraction <= 1).  The effected cohorts should all have the same patch fraction.  More than
-      ! one value implies more that one activities, and while that is potentially resolvable we are
+      ! one value implies more that one activity, and while that is potentially resolvable we are
       ! not ready to handle that yet.  A single non-zero patch fraction(s) gives us the disturbance
       ! rate directly without an need for accumulation.
       
+      ! The following assumes that there are 2 canopy layers and may not work properly if not:
+      if (nclmax > 2) then
+        write(fates_log(),*) 'Vegetation Management expect there to be two canopy layers and there are:', nclmax
+      end if
+      
       ! Loop over the cohorts in each patch and find the largest patch fraction while checking
-      ! values for valid combinations:
+      ! values for valid combinations and calculating the mortality disturbance fraction:
       current_patch => site_in%oldest_patch
       do while (associated(current_patch))
         
         current_patch%disturbance_rates(dtype_ilog) = 0.0_r8
         patch_disturbance = 0.0_r8
+        overstory_mort_d = 0.0_r8
+        understory_mort_d = 0.0_r8
         patch_mort_d = 0.0_r8
         
         current_cohort => current_patch%shortest
@@ -839,28 +850,72 @@ contains
               call dump_patch(current_patch)
               call dump_cohort(current_cohort)
               call endrun(msg = errMsg(__FILE__, __LINE__))
-             endif
-           endif
+            endif
+          endif
           
           ! Calculate the total patch wide mortality rate:
           ! With more than one activity we would sum them...
-          cohort_mort = max(current_cohort%vm_mort_bole_harvest, &
-                            current_cohort%vm_mort_in_place) * &
-                        current_cohort%c_area / current_patch%area
+!           cohort_mort = max(current_cohort%vm_mort_bole_harvest, &
+!                             current_cohort%vm_mort_in_place) * &
+!                         current_cohort%c_area / current_patch%area
+          ! Calculate the patch area fraction disturbed due to mortality in this cohort:
+          ! The vm_mort_XXXXX rates are fractions of plants at the whole patch level.  While the
+          ! cohort is theoretically spread through the whole patch it has a footprint dictated by
+          ! its total canopy area.  Thus the calculations is:
+          ! cohort mortality fraction * fraction of patch area occupied by the cohort's canopy
+          cohort_mort_d = max(current_cohort%vm_mort_bole_harvest, &
+                              current_cohort%vm_mort_in_place) * &
+                          current_cohort%c_area / current_patch%area
           
           ! Calculate the patch wide mortality disturbance by weighing the mortality of each cohort
           ! by its canopy area:
-          patch_mort_d = patch_mort_d + (cohort_mort * current_cohort%c_area / current_patch%area)
+          !patch_mort_d = patch_mort_d + (cohort_mort * current_cohort%c_area / current_patch%area)
+          
+          ! Accumulate the fractional canopy area effected by mortality for each canopy level:
+          if (current_cohort%canopy_layer == ican_upper) then
+            overstory_mort_d = overstory_mort_d + cohort_mort_d
+          else
+            understory_mort_d = understory_mort_d + cohort_mort_d
+          end if
           
           current_cohort => current_cohort%taller
         end do ! Cohort loop.
         
+        ! Check the canopy layer disturbances are valid.  This will catch > 1 errors as well:
+        if (overstory_mort_d > patch_disturbance) then
+          write(fates_log(),*) 'Overstory mortality disturbance is > patch disturbance:'
+          write(fates_log(),*) 'Overstory mortality disturbance = ', & overstory_mort_d
+          write(fates_log(),*) 'Patch disturbance =               ', & patch_disturbance
+          call endrun(msg = errMsg(__FILE__, __LINE__))
+        end if
+        
+        if (understory_mort_d > patch_disturbance) then
+          write(fates_log(),*) 'Understory mortality disturbance is > patch disturbance:'
+          write(fates_log(),*) 'Understory mortality disturbance = ', & understory_mort_d
+          write(fates_log(),*) 'Patch disturbance =               ', & patch_disturbance
+          call endrun(msg = errMsg(__FILE__, __LINE__))
+        end if
+        ! Consider combining the two above checks.
+        
+        ! Combine the overstory and understory fractional canopy areas:
+        ! We assume that the area pattern of mortality in the two layers is homogeneous and
+        ! independent.  Some of the mortality in the two layers will overlap in area and some will
+        ! not.  We count any area where mortality occurs towards the total, i.e the  union of
+        ! overstory_mort_d & understory_mort_d =
+        ! Os U Us = Os + (Us \ Os) = Os + (Us * surviving fraction of overstory) = 
+        patch_mort_d = overstory_mort_d + &
+                       (understory_mort_d * (patch_disturbance - overstory_mort_d))
+        
         ! Error checking:
+        ! Needs work. See notes below.
         if (patch_mort_d > patch_disturbance) then ! Add a tolerance and adjust?????
           write(fates_log(),*) 'Patch level mortality is > patch disturbance:'
           write(fates_log(),*) 'Patch level mortality = ', & patch_mort_d
           write(fates_log(),*) 'Patch disturbance = ', & patch_disturbance
           call endrun(msg = errMsg(__FILE__, __LINE__))
+        
+        ! This checks that patch_mort_d is a valid value allowing for floating point error.
+        ! However, currently the check above will always prevent us from getting here.
         else if (patch_mort_d > 1.0_r8 + nearzero) then
           write(fates_log(),*) 'Patch level mortality is > 1, = ', & patch_mort_d
           call endrun(msg = errMsg(__FILE__, __LINE__))
@@ -884,7 +939,7 @@ contains
         ! Should this be recorded in all cases or just for harvest types?????
         if (current_patch%disturbance_rates(dtype_ilog) > nearzero) then
           current_patch%fract_ldist_not_harvested = (patch_disturbance - patch_mort_d) / &
-                                                   patch_disturbance
+                                                     patch_disturbance
           
           ! Checking the resulting value:
           if (current_patch%fract_ldist_not_harvested > 1.0_r8 + nearzero) then
@@ -900,7 +955,14 @@ contains
           current_patch%fract_ldist_not_harvested = 0.0_r8
         endif ! (current_patch%disturbance_rates(dtype_ilog) > nearzero)
         
-        if (debug) then ! Temp reporting:
+        if (debug) then ! Temporary reporting:
+          write(fates_log(), *) 'patch_disturbance ', patch_disturbance
+          write(fates_log(), *) 'cohort_disturbance', cohort_disturbance ! Unlikely to be very informative.
+          write(fates_log(), *) 'cohort_mort_d     ', cohort_mort_d ! Unlikely to be very informative.
+          write(fates_log(), *) 'overstory_mort_d  ', overstory_mort_d
+          write(fates_log(), *) 'understory_mort_d ', understory_mort_d
+          write(fates_log(), *) 'patch_mort_d      ', patch_mort_d
+          
           write(fates_log(), *) 'managed_mortality(): %disturbance_rates(dtype_ilog) = ', &
                                  current_patch%disturbance_rates(dtype_ilog)
           write(fates_log(), *) 'managed_mortality(): %fract_ldist_not_harvested) = ', &
