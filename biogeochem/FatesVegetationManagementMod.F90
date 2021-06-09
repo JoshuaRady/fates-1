@@ -842,8 +842,7 @@ contains
             if (patch_disturbance == 0.0_r8) then
               patch_disturbance = cohort_disturbance
               
-            ! Switch to a constant!!!!! nearzero is too small.  rsnbl_math_prec maybe?:
-            else if (abs(patch_disturbance - cohort_disturbance) > 1.0e-13_r8) then
+            else if (abs(patch_disturbance - cohort_disturbance) > tolerance) then
               ! Don't allow multiple (different) management activities to co-occur:
               write(fates_log(),*) 'More than one disturbance rate was detected in this patch.'
               write(fates_log(),*) 'patch_disturbance  = ', patch_disturbance
@@ -882,21 +881,39 @@ contains
           current_cohort => current_cohort%taller
         end do ! Cohort loop.
         
-        ! Check the canopy layer disturbances are valid.  This will catch > 1 errors as well:
-        if (overstory_mort_d > patch_disturbance + tolerance) then
-          write(fates_log(),*) 'Overstory mortality disturbance is > patch disturbance:'
-          write(fates_log(),*) 'Overstory mortality disturbance = ', & overstory_mort_d
-          write(fates_log(),*) 'Patch disturbance =               ', & patch_disturbance
-          call endrun(msg = errMsg(__FILE__, __LINE__))
-        end if
+        ! This may be possible since we aren't filtering by canopy layer and would probably be bad:
+        if (patch_disturbance > 1.0_r8 + tolerance) then
+          write(fates_log(),*) 'patch_disturbance > 1, = ', & patch_disturbance
+        endif
         
-        if (understory_mort_d > patch_disturbance + tolerance) then
-          write(fates_log(),*) 'Understory mortality disturbance is > patch disturbance:'
-          write(fates_log(),*) 'Understory mortality disturbance = ', & understory_mort_d
+        ! Store the accumulated disturbance:
+        current_patch%disturbance_rates(dtype_ilog) = patch_disturbance
+        
+        ! Check the canopy layer disturbances are valid.  This will catch > 1 errors as well:
+!         if (overstory_mort_d > patch_disturbance + tolerance) then
+!           write(fates_log(),*) 'Overstory mortality disturbance is > patch disturbance:'
+!           write(fates_log(),*) 'Overstory mortality disturbance = ', & overstory_mort_d
+!           write(fates_log(),*) 'Patch disturbance =               ', & patch_disturbance
+!           call endrun(msg = errMsg(__FILE__, __LINE__))
+!         end if
+!         
+!         if (understory_mort_d > patch_disturbance + tolerance) then
+!           write(fates_log(),*) 'Understory mortality disturbance is > patch disturbance:'
+!           write(fates_log(),*) 'Understory mortality disturbance = ', & understory_mort_d
+!           write(fates_log(),*) 'Patch disturbance =               ', & patch_disturbance
+!           call endrun(msg = errMsg(__FILE__, __LINE__))
+!         end if
+        ! Consider combining the two above checks.
+        
+        !if (patch_disturbance > 1.0_r8 + tolerance .or. &
+        if (overstory_mort_d > patch_disturbance + tolerance .or. &
+            understory_mort_d > patch_disturbance + tolerance) then
+          write(fates_log(),*) 'A canopy mortality disturbance is > the patch disturbance:'
           write(fates_log(),*) 'Patch disturbance =               ', & patch_disturbance
+          write(fates_log(),*) 'Overstory mortality disturbance = ', & overstory_mort_d
+          write(fates_log(),*) 'Understory mortality disturbance =', & understory_mort_d
           call endrun(msg = errMsg(__FILE__, __LINE__))
         end if
-        ! Consider combining the two above checks.
         
         ! Combine the overstory and understory fractional canopy areas:
         ! We assume that the area pattern of mortality in the two layers is homogeneous and
@@ -917,7 +934,7 @@ contains
         
         ! This checks that patch_mort_d is a valid value allowing for floating point error.
         ! However, currently the check above will always prevent us from getting here.
-        else if (patch_mort_d > 1.0_r8 + nearzero) then
+        else if (patch_mort_d > 1.0_r8 + tolerance) then
           write(fates_log(),*) 'Patch level mortality is > 1, = ', & patch_mort_d
           call endrun(msg = errMsg(__FILE__, __LINE__))
         else if (patch_mort_d > 1.0_r8) then
@@ -928,10 +945,10 @@ contains
         ! Store the accumulated disturbance:
         current_patch%disturbance_rates(dtype_ilog) = patch_disturbance
         ! This may be possible since we aren't filtering by canopy layer and would probably be bad.
-        if (patch_disturbance > 1.0_r8 + nearzero) then
-          write(fates_log(),*) 'current_patch%disturbance_rates(dtype_ilog) > 1, = ', &
-                                current_patch%disturbance_rates(dtype_ilog)
-        endif
+!         if (patch_disturbance > 1.0_r8 + nearzero) then
+!           write(fates_log(),*) 'current_patch%disturbance_rates(dtype_ilog) > 1, = ', &
+!                                 current_patch%disturbance_rates(dtype_ilog)
+!         endif
         
         ! Calculate the unharvested fraction:
         ! patch_mort_d is the mortality area at the whole patch level.  Subtracting that from the
@@ -943,26 +960,26 @@ contains
                                                      patch_disturbance
           
           ! Checking the resulting value:
-          if (current_patch%fract_ldist_not_harvested > 1.0_r8 + nearzero) then
+          if (current_patch%fract_ldist_not_harvested > 1.0_r8 + tolerance) then
           ! %fract_ldist_not_harvested is not currently in dump_patch():
             write(fates_log(),*) 'patch%fract_ldist_not_harvested is > 1, = ', &
                                   current_patch%fract_ldist_not_harvested
             call endrun(msg = errMsg(__FILE__, __LINE__))
           else if (current_patch%fract_ldist_not_harvested > 1.0_r8) then
             current_patch%fract_ldist_not_harvested = 1.0_r8
-          endif ! (current_patch%fract_ldist_not_harvested > 1.0_r8 + nearzero)
+          endif ! (current_patch%fract_ldist_not_harvested > 1.0_r8 + tolerance)
           
         else
           current_patch%fract_ldist_not_harvested = 0.0_r8
         endif ! (current_patch%disturbance_rates(dtype_ilog) > nearzero)
         
         if (debug) then ! Temporary reporting:
-          write(fates_log(), *) 'patch_disturbance ', patch_disturbance
-          write(fates_log(), *) 'cohort_disturbance', cohort_disturbance ! Unlikely to be very informative.
-          write(fates_log(), *) 'cohort_mort_d     ', cohort_mort_d ! Unlikely to be very informative.
-          write(fates_log(), *) 'overstory_mort_d  ', overstory_mort_d
-          write(fates_log(), *) 'understory_mort_d ', understory_mort_d
-          write(fates_log(), *) 'patch_mort_d      ', patch_mort_d
+          write(fates_log(), *) 'patch_disturbance: ', patch_disturbance
+          write(fates_log(), *) 'cohort_disturbance:', cohort_disturbance ! Unlikely to be very informative.
+          write(fates_log(), *) 'cohort_mort_d:     ', cohort_mort_d ! Unlikely to be very informative.
+          write(fates_log(), *) 'overstory_mort_d:  ', overstory_mort_d
+          write(fates_log(), *) 'understory_mort_d: ', understory_mort_d
+          write(fates_log(), *) 'patch_mort_d:      ', patch_mort_d
           
           write(fates_log(), *) 'managed_mortality(): %disturbance_rates(dtype_ilog) = ', &
                                  current_patch%disturbance_rates(dtype_ilog)
