@@ -853,12 +853,8 @@ contains
             endif
           endif
           
-          ! Calculate the total patch wide mortality rate:
-          ! With more than one activity we would sum them...
-!           cohort_mort = max(current_cohort%vm_mort_bole_harvest, &
-!                             current_cohort%vm_mort_in_place) * &
-!                         current_cohort%c_area / current_patch%area
           ! Calculate the patch area fraction disturbed due to mortality in this cohort:
+          ! (With more than one activity we would sum them.)
           ! The vm_mort_XXXXX rates are fractions of plants at the whole patch level.  While the
           ! cohort is theoretically spread through the whole patch it has a footprint dictated by
           ! its total canopy area.  Thus the calculations is:
@@ -866,10 +862,6 @@ contains
           cohort_mort_d = max(current_cohort%vm_mort_bole_harvest, &
                               current_cohort%vm_mort_in_place) * &
                           current_cohort%c_area / current_patch%area
-          
-          ! Calculate the patch wide mortality disturbance by weighing the mortality of each cohort
-          ! by its canopy area:
-          !patch_mort_d = patch_mort_d + (cohort_mort * current_cohort%c_area / current_patch%area)
           
           ! Accumulate the fractional canopy area effected by mortality for each canopy level:
           if (current_cohort%canopy_layer == ican_upper) then
@@ -890,22 +882,6 @@ contains
         current_patch%disturbance_rates(dtype_ilog) = patch_disturbance
         
         ! Check the canopy layer disturbances are valid.  This will catch > 1 errors as well:
-!         if (overstory_mort_d > patch_disturbance + tolerance) then
-!           write(fates_log(),*) 'Overstory mortality disturbance is > patch disturbance:'
-!           write(fates_log(),*) 'Overstory mortality disturbance = ', & overstory_mort_d
-!           write(fates_log(),*) 'Patch disturbance =               ', & patch_disturbance
-!           call endrun(msg = errMsg(__FILE__, __LINE__))
-!         end if
-!         
-!         if (understory_mort_d > patch_disturbance + tolerance) then
-!           write(fates_log(),*) 'Understory mortality disturbance is > patch disturbance:'
-!           write(fates_log(),*) 'Understory mortality disturbance = ', & understory_mort_d
-!           write(fates_log(),*) 'Patch disturbance =               ', & patch_disturbance
-!           call endrun(msg = errMsg(__FILE__, __LINE__))
-!         end if
-        ! Consider combining the two above checks.
-        
-        !if (patch_disturbance > 1.0_r8 + tolerance .or. &
         if (overstory_mort_d > patch_disturbance + tolerance .or. &
             understory_mort_d > patch_disturbance + tolerance) then
           write(fates_log(),*) 'A canopy mortality disturbance is > the patch disturbance:'
@@ -940,21 +916,15 @@ contains
         else if (patch_mort_d > 1.0_r8) then
           patch_mort_d = 1.0_r8 ! Correct for floating point math.
         endif
-        ! Move patch_disturbance error checking up?
         
-        ! Store the accumulated disturbance:
-        current_patch%disturbance_rates(dtype_ilog) = patch_disturbance
-        ! This may be possible since we aren't filtering by canopy layer and would probably be bad.
-!         if (patch_disturbance > 1.0_r8 + nearzero) then
-!           write(fates_log(),*) 'current_patch%disturbance_rates(dtype_ilog) > 1, = ', &
-!                                 current_patch%disturbance_rates(dtype_ilog)
-!         endif
-        
-        ! Calculate the unharvested fraction:
+        ! Calculate the 'unharvested' fraction:
         ! patch_mort_d is the mortality area at the whole patch level.  Subtracting that from the
         ! disturbance fraction gives us the unharmed fraction of the original patch that will be
         ! transfered (potentially) to a new patch.  We convert that to a fraction of the new patch.
-        ! Should this be recorded in all cases or just for harvest types?????
+        ! Should this be recorded in all cases or just for harvest types?  For management we area
+        ! are not strictly interpreting these terms.  We are use patch%disturbance_rates for all
+        ! management induced mortality and patch%fract_ldist_not_harvested as the rest, whether
+        ! the management mortality is truly harvested or not.
         if (current_patch%disturbance_rates(dtype_ilog) > nearzero) then
           current_patch%fract_ldist_not_harvested = (patch_disturbance - patch_mort_d) / &
                                                      patch_disturbance
@@ -974,6 +944,7 @@ contains
         endif ! (current_patch%disturbance_rates(dtype_ilog) > nearzero)
         
         if (debug) then ! Temporary reporting:
+          write(fates_log(), *) 'managed_mortality() Disturbance Summary:----------'
           write(fates_log(), *) 'patch_disturbance: ', patch_disturbance
           write(fates_log(), *) 'cohort_disturbance:', cohort_disturbance ! Unlikely to be very informative.
           write(fates_log(), *) 'cohort_mort_d:     ', cohort_mort_d ! Unlikely to be very informative.
