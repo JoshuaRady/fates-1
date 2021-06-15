@@ -720,7 +720,7 @@ contains
       ! reflect this.
       
       current_patch => site_in%oldest_patch
-      do while (associated(current_patch))   
+      do while (associated(current_patch))
       
         current_patch%disturbance_rates(dtype_ilog)  = 0.0_r8
         dist_rate_ldist_notharvested = 0.0_r8
@@ -774,11 +774,24 @@ contains
         current_patch => current_patch%younger
       enddo ! Patch loop
       
-    else
+    !else Old Comments:!!!!!
       ! Note: This block is now being executed whenever logging_time is false, not when other
       ! vegetation management is occurring.  This is almost certainly wrong.  It doesn't seem to
       ! be breaking anything.  Consider something like:
       ! else if (thinning_needed .or. harvest_needed .or. control_needed) then
+      
+      ! It is only necessary to calculate the disturbance rate if a management event has occurred.
+      ! Running the following code at every time step will not cause any problems.  It will yield
+      ! a value of 0 when no management has occurred.  However, doing so is probably inefficient,
+      ! though I haven't quantified this.
+      !
+      ! The logic to determine if vegetation management has occurred here is likely to change.
+      ! Currently we check some legacy flags, that will probably go away soon, and whether an event
+      ! came in via the VM driver file.  It is not clear yet whether heuristics will execute events
+      ! via the VM event globals or using some other method.
+      ! If the conditional gets more complicated it might be better to wrap this in a function call.
+    else if (thinning_needed .or. harvest_needed .or. control_needed .or. & ! Testing conditionals.
+             vm_mortality_event%code /= vm_event_null) then ! VM event has be schedule via input.
       
       ! Other vegetation management activities:
       !   When mortality for other vegetation management activities is calculated the two values are
@@ -816,7 +829,7 @@ contains
       
       ! The following assumes that there are 2 canopy layers and may not work properly if not:
       if (nclmax > 2) then
-        write(fates_log(),*) 'Vegetation Management expect there to be two canopy layers and there are:', nclmax
+        write(fates_log(),*) 'Vegetation Management expects there to be two canopy layers and there are:', nclmax
       end if
       
       ! Loop over the cohorts in each patch and find the largest patch fraction while checking
@@ -960,6 +973,12 @@ contains
         end if
         
         current_patch => current_patch%younger
+      end do ! Patch loop.
+      
+    else
+      ! If management hasn't occurred just set disturbance to 0:
+      do while (associated(current_patch))
+        current_patch%disturbance_rates(dtype_ilog) = 0.0_r8
       end do ! Patch loop.
       
     endif ! (logging_time)
