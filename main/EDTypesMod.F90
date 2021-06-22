@@ -1096,7 +1096,7 @@ module EDTypesMod
 !      write(fates_log(),*) 'co%vm_mort_bole_harvest   = ', ccohort%vm_mort_bole_harvest
 !      write(fates_log(),*) 'co%vm_pfrac_in_place      = ', ccohort%vm_pfrac_in_place
 !      write(fates_log(),*) 'co%vm_pfrac_bole_harvest  = ', ccohort%vm_pfrac_bole_harvest
-     write(fates_log(),*) 'co%vm_mort                = ', ccohort%vm_mort
+     write(fates_log(),*) 'co%vm_mortfrac              = ', ccohort%vm_mort
      write(fates_log(),*) 'co%vm_pfrac               = ', ccohort%vm_pfrac
 
      write(fates_log(),*) 'co%isnew                  = ', ccohort%isnew
