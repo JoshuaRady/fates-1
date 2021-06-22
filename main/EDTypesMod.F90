@@ -179,6 +179,8 @@ module EDTypesMod
   ! special mode to cause PFTs to create seed mass of all currently-existing PFTs
   logical, parameter, public :: homogenize_seed_pfts  = .false.
 
+  ! Vegetation Management Parameters:
+  integer, parameter, public :: vm_num_flux_profiles = 2 ! The number of flux profiles.
   
   ! Global identifier of how nutrients interact with the host land model
   ! either they are fully coupled, or they generate uptake rates synthetically
@@ -359,13 +361,9 @@ module EDTypesMod
                                                          ! (i.e. they are moved to newly-anthro-disturbed secondary 
                                                          !  forest patch).  fraction /per logging activity
 
-     ! Vegetation Management: Add notes!!!!!
-     !real(r8) :: vm_mort_in_place
-     !real(r8) :: vm_mort_bole_harvest
-     real(r8) :: vm_mortfrac(2) ! Change use to constant.  vm_num_flux_profiles?
-     !real(r8) :: vm_pfrac_in_place
-     !real(r8) :: vm_pfrac_bole_harvest
-     real(r8) :: vm_pfrac(2)
+     ! Vegetation Management:
+     real(r8) :: vm_mortfrac(vm_num_flux_profiles)
+     real(r8) :: vm_pfrac(vm_num_flux_profiles)
 
      real(r8) :: seed_prod                               ! diagnostic seed production rate [kgC/plant/day]
 
@@ -1092,11 +1090,7 @@ module EDTypesMod
      write(fates_log(),*) 'co%lmort_collateral       = ', ccohort%lmort_collateral
      write(fates_log(),*) 'co%lmort_infra            = ', ccohort%lmort_infra
      write(fates_log(),*) 'co%l_degrad               = ', ccohort%l_degrad
-!      write(fates_log(),*) 'co%vm_mort_in_place       = ', ccohort%vm_mort_in_place
-!      write(fates_log(),*) 'co%vm_mort_bole_harvest   = ', ccohort%vm_mort_bole_harvest
-!      write(fates_log(),*) 'co%vm_pfrac_in_place      = ', ccohort%vm_pfrac_in_place
-!      write(fates_log(),*) 'co%vm_pfrac_bole_harvest  = ', ccohort%vm_pfrac_bole_harvest
-     write(fates_log(),*) 'co%vm_mortfrac              = ', ccohort%vm_mortfrac
+     write(fates_log(),*) 'co%vm_mortfrac            = ', ccohort%vm_mortfrac
      write(fates_log(),*) 'co%vm_pfrac               = ', ccohort%vm_pfrac
 
      write(fates_log(),*) 'co%isnew                  = ', ccohort%isnew

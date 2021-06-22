@@ -595,10 +595,6 @@ contains
     currentCohort%l_degrad           = nan
     
     ! Vegetation management:
-!     currentCohort%vm_mort_in_place      = nan
-!     currentCohort%vm_mort_bole_harvest  = nan
-!     currentCohort%vm_pfrac_in_place     = nan
-!     currentCohort%vm_pfrac_bole_harvest = nan
     currentCohort%vm_mortfrac           = nan
     currentCohort%vm_pfrac              = nan
     
@@ -673,10 +669,6 @@ contains
     currentCohort%lmort_direct       = 0._r8
     currentCohort%lmort_infra        = 0._r8
     currentCohort%lmort_collateral   = 0._r8
-!     currentCohort%vm_mort_in_place      = 0.0_r8
-!     currentCohort%vm_mort_bole_harvest  = 0.0_r8
-!     currentCohort%vm_pfrac_in_place     = 0.0_r8
-!     currentCohort%vm_pfrac_bole_harvest = 0.0_r8
     currentCohort%vm_mortfrac        = 0.0_r8
     currentCohort%vm_pfrac           = 0.0_r8
     currentCohort%l_degrad           = 0._r8    
@@ -1450,18 +1442,6 @@ contains
                                            nextc%n*nextc%l_degrad)/newn
                                       
                                       ! Vegetation management:
-!                                       currentCohort%vm_mort_in_place = &
-!                                                (currentCohort%n * currentCohort%vm_mort_in_place + &
-!                                                 nextc%n * nextc%vm_mort_in_place) / newn
-!                                       currentCohort%vm_mort_bole_harvest  = &
-!                                            (currentCohort%n * currentCohort%vm_mort_bole_harvest + &
-!                                             nextc%n * nextc%vm_mort_bole_harvest) / newn
-!                                       currentCohort%vm_pfrac_in_place = &
-!                                               (currentCohort%n * currentCohort%vm_pfrac_in_place + &
-!                                                nextc%n * nextc%vm_pfrac_in_place) / newn
-!                                       currentCohort%vm_pfrac_bole_harvest = &
-!                                           (currentCohort%n * currentCohort%vm_pfrac_bole_harvest + &
-!                                            nextc%n * nextc%vm_pfrac_bole_harvest) / newn
                                       currentCohort%vm_mortfrac = &
                                                     (currentCohort%n * currentCohort%vm_mortfrac + &
                                                     nextc%n * nextc%vm_mortfrac) / newn
@@ -1900,10 +1880,6 @@ contains
     n%l_degrad         =o%l_degrad    
     
     ! Vegetation management:
-!     n%vm_mort_in_place      = o%vm_mort_in_place
-!     n%vm_mort_bole_harvest  = o%vm_mort_bole_harvest
-!     n%vm_pfrac_in_place     = o%vm_pfrac_in_place
-!     n%vm_pfrac_bole_harvest = o%vm_pfrac_bole_harvest
     n%vm_mortfrac  = o%vm_mortfrac
     n%vm_pfrac     = o%vm_pfrac
 

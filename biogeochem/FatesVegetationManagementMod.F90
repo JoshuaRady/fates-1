@@ -16,6 +16,7 @@
 module FatesVegetationManagementMod
   
   use EDTypesMod, only : ed_site_type, ed_patch_type, ed_cohort_type
+  use EDTypesMod, only : vm_num_flux_profiles ! Linked parameter.
   use EDPftvarcon, only : EDPftvarcon_inst
   use FatesAllometryMod, only : h2d_allom, h_allom
   use FatesConstantsMod, only : pi_const
@@ -132,7 +133,7 @@ module FatesVegetationManagementMod
   
   real(r8), parameter, private :: float_tolerance = rsnbl_math_prec ! Floating point math tolerance.
   
-  ! PFTs:
+  ! PFTs:-------------------------------------------------------------------------------------------
   ! These class definitions should be determined dynamically. The following definitions assume the
   ! default 16 pft parameter set.  We need a better way to get the classes of PFTs. The woody flag
   ! (EDPftvarcon_inst%woody) includes shrubs.
@@ -152,17 +153,24 @@ module FatesVegetationManagementMod
   integer, parameter, private :: method_herbicide = 2
   integer, parameter, private :: method_burn = 3
   
-  ! Mode / flux profiles:
-  ! There are may be more practices than flux or harvest profiles.  logging_traditional -> bole_harvest
+  ! Mode / flux profiles:---------------------------------------------------------------------------
+  !   These codes are used to specify the appropriate fluxes that accompany mortality inducing
+  ! management events of different types.  See the Managed Mortality Primitives section below for
+  ! more information on flux profiles.
+  !
+  ! Values:
+  ! - null_profile indicates that a profile has not yet been set.
+  ! - Values greater than 0 represent true flux profiles and identify the corresponding indexes of
+  ! ed_cohort_type%vm_mortfrac and ed_cohort_type%vm_pfrac.
+  ! - logging_traditional is used for logging module events but is not a unique profile and
+  ! currently maps to bole_harvest.
+  !
+  !   The related parameter vm_num_flux_profiles is defined in EDTypesMod to avoid a circular
+  ! reference.  It must be kept in sync with the number of flux profiles defined here.
   integer, parameter, private :: null_profile = 0
-!   integer, parameter, private :: logging_traditional = 1 ! logging_module, logging_legacy, logginng_classic
-!   integer, parameter, private :: bole_harvest = 2 ! harvest_bole ! better namespacing
-!   integer, parameter, private :: in_place = 3
   integer, parameter, private :: logging_traditional = -1 ! logging_module, logging_legacy, logginng_classic
-  integer, parameter, private :: in_place = 1
-  integer, parameter, private :: bole_harvest = 2 ! harvest_bole ! better namespacing
-  ! Probably should move to EDTypesMod!!!!!
-  integer, parameter, private :: vm_num_flux_profiles = 2 ! Must be kept in sync...
+  integer, parameter, private :: in_place = 1 ! Necromass remains on site entering the litter pools.
+  integer, parameter, private :: bole_harvest = 2 ! harvest_bole = better namespacing?
   
   ! String length specifier: (After FatesInventoryInitMod)
   ! This is longer than what Fortran will likely allow for a line from read(). Consider shortening.
@@ -399,9 +407,6 @@ contains
     
     real(r8) :: c_1st, c_2nd ! Temporary: Used for temporary harvest implementation.
     
-    !integer(i4) :: pft_int_temp(1) ! Temporary
-    !real(r8), parameter :: tolerance = rsnbl_math_prec ! float_tolerance?
-    
     ! ----------------------------------------------------------------------------------------------
     if (debug) write(fates_log(), *) 'managed_mortality() entering.'
     
@@ -599,8 +604,7 @@ contains
     ! Note:  I haven't figured out how heuristic / land use time series events will work yet so this
     ! logic will likely be revised again.
     !
-    ! Currently we have only implemented a single event type that is used to call thin_row_low().
-    ! This is more less a place holder.  More robust set of behaviors will be added in near future.
+    ! The list of event type here is under development with more behaviors to be added.
     ! ----------------------------------------------------------------------------------------------
     
     if (debug) then
@@ -782,16 +786,10 @@ contains
         current_patch => current_patch%younger
       enddo ! Patch loop
       
-    !else Old Comments:!!!!!
-      ! Note: This block is now being executed whenever logging_time is false, not when other
-      ! vegetation management is occurring.  This is almost certainly wrong.  It doesn't seem to
-      ! be breaking anything.  Consider something like:
-      ! else if (thinning_needed .or. harvest_needed .or. control_needed) then
-      
       ! It is only necessary to calculate the disturbance rate if a management event has occurred.
       ! Running the following code at every time step will not cause any problems.  It will yield
-      ! a value of 0 when no management has occurred.  However, doing so is probably inefficient,
-      ! though I haven't quantified this.
+      ! a value of 0 when no management has occurred.  However, doing so is inefficient although
+      ! informal tests show it has little effect on performance.
       !
       ! The logic to determine if vegetation management has occurred here is likely to change.
       ! Currently we check some legacy flags, that will probably go away soon, and whether an event
@@ -856,7 +854,6 @@ contains
           
           ! Checking for more than one mortality type was previous checked in ?????
           
-!           cohort_disturbance = max(current_cohort%vm_pfrac_in_place, current_cohort%vm_pfrac_bole_harvest)
           cohort_disturbance = maxval(current_cohort%vm_pfrac)
           
           ! Make sure the disturbance is consistant across cohorts:
@@ -877,12 +874,10 @@ contains
           
           ! Calculate the patch area fraction disturbed due to mortality in this cohort:
           ! (With more than one activity we would sum them.)
-          ! The vm_mort_XXXXX rates are fractions of plants at the whole patch level.  While the
+          ! The vm_mortfrac rates are fractions of plants at the whole patch level.  While the
           ! cohort is theoretically spread through the whole patch it has a footprint dictated by
           ! its total canopy area.  Thus the calculations is:
           ! cohort mortality fraction * fraction of patch area occupied by the cohort's canopy
-!           cohort_mort_d = max(current_cohort%vm_mort_bole_harvest, &
-!                               current_cohort%vm_mort_in_place) * &
           cohort_mort_d = maxval(current_cohort%vm_mortfrac) * &
                           current_cohort%c_area / current_patch%area
           
@@ -1105,7 +1100,7 @@ contains
     if (debug) write(fates_log(), *) 'managed_fecundity() entering.'
     
     ! Manual Testing:-------------------------------------------------------------------------------
-    ! Manually trigger planting on a date:
+    ! Manually trigger planting on a date: Temporary!!!!!
     if (hlm_current_year == 2250 .and. hlm_current_month == 1 .and. hlm_current_day == 1) then
       
       if (debug) then
@@ -1217,7 +1212,6 @@ contains
     use EDtypesMod,   only : ed_cohort_type
     use FatesAllometryMod, only : carea_allom
     use FatesAllometryMod, only : set_root_fraction
-    !use FatesConstantsMod, only : rsnbl_math_prec
     use FatesInterfaceTypesMod, only : hlm_use_planthydro
     use FatesLitterMod, only : ncwd ! The number of coarse woody debris pools.
     use FatesLitterMod, only : ndcmpy
@@ -1404,7 +1398,6 @@ contains
           ! Currently only one management activity should be applied at a time, i.e. only one should
           ! be non-zero, but in the future more than one may be.  Fractional mortalties are additive
           ! so the following is theoretically future safe:
-!          direct_dead = (current_cohort%vm_mort_in_place + current_cohort%vm_mort_bole_harvest) * &
           direct_dead = sum(current_cohort%vm_mortfrac) * &
                         current_cohort%n ! Check this, effective_n()?????, cohort area adjustment?
           indirect_dead = 0.0_r8 ! May be added in the future for some modes.
@@ -1785,10 +1778,6 @@ contains
            new_cohort%lmort_infra      = 0.0_r8
            ! JMR_MOD_START:
            ! There could be trouble above!!!!!
-!            new_cohort%vm_mort_in_place = 0.0_r8
-!            new_cohort%vm_mort_bole_harvest = 0.0_r8
-!            new_cohort%vm_pfrac_in_place = 0.0_r8
-!            new_cohort%vm_pfrac_bole_harvest = 0.0_r8
            new_cohort%vm_mortfrac = 0.0_r8
            new_cohort%vm_pfrac = 0.0_r8
            ! JMR_MOD_END.
@@ -1849,10 +1838,6 @@ contains
               new_cohort%lmort_collateral = donor_cohort%lmort_collateral
               new_cohort%lmort_infra      = donor_cohort%lmort_infra
               ! JMR_MOD_START:
-!               new_cohort%vm_mort_in_place = donor_cohort%vm_mort_in_place
-!               new_cohort%vm_mort_bole_harvest = donor_cohort%vm_mort_bole_harvest
-!               new_cohort%vm_pfrac_in_place = donor_cohort%vm_pfrac_in_place
-!               new_cohort%vm_pfrac_bole_harvest = donor_cohort%vm_pfrac_bole_harvest
               new_cohort%vm_mortfrac= donor_cohort%vm_mortfrac
               new_cohort%vm_pfrac = donor_cohort%vm_pfrac
               ! JMR_MOD_END.
@@ -1881,10 +1866,6 @@ contains
               new_cohort%lmort_collateral = donor_cohort%lmort_collateral
               new_cohort%lmort_infra      = donor_cohort%lmort_infra
               ! JMR_MOD_START:
-!               new_cohort%vm_mort_in_place = donor_cohort%vm_mort_in_place
-!               new_cohort%vm_mort_bole_harvest = donor_cohort%vm_mort_bole_harvest
-!               new_cohort%vm_pfrac_in_place = donor_cohort%vm_pfrac_in_place
-!               new_cohort%vm_pfrac_bole_harvest = donor_cohort%vm_pfrac_bole_harvest
               new_cohort%vm_mortfrac= donor_cohort%vm_mortfrac
               new_cohort%vm_pfrac = donor_cohort%vm_pfrac
               ! JMR_MOD_END
@@ -1897,8 +1878,6 @@ contains
         
         ! This is almost identical to bole_harvest and should be combined!
         
-!        if (abs(parent_patch%disturbance_rate - donor_cohort%vm_pfrac_in_place) > 1.0e-10_r8) then
-!          write(fates_log(),*) 'parent_patch%disturbance_rate /= donor_cohort%vm_pfrac_in_place'
         if (abs(parent_patch%disturbance_rate - donor_cohort%vm_pfrac(in_place)) > &
             float_tolerance) then
           write(fates_log(),*) 'parent_patch%disturbance_rate /= donor_cohort%vm_pfrac(in_place)'
@@ -1911,7 +1890,6 @@ contains
         ! Give the new patch the proportional number of trees for its area fraction:
         new_cohort%n = donor_cohort%n * (patch_site_areadis / parent_patch%area)
         ! Then apply all the mortality to it.
-!        new_cohort%n = new_cohort%n - (donor_cohort%n * donor_cohort%vm_mort_in_place)
         new_cohort%n = new_cohort%n - (donor_cohort%n * donor_cohort%vm_mortfrac(in_place))
         
         ! The old patch has no management mortality, its just smaller:
@@ -1932,10 +1910,6 @@ contains
         new_cohort%lmort_collateral = 0.0_r8
         new_cohort%lmort_infra      = 0.0_r8
         
-!         new_cohort%vm_mort_in_place      = 0.0_r8
-!         new_cohort%vm_mort_bole_harvest  = 0.0_r8
-!         new_cohort%vm_pfrac_in_place     = 0.0_r8
-!         new_cohort%vm_pfrac_bole_harvest = 0.0_r8
         new_cohort%vm_mortfrac      = 0.0_r8
         new_cohort%vm_pfrac         = 0.0_r8
         
@@ -1945,10 +1919,6 @@ contains
         donor_cohort%lmort_collateral = 0.0_r8
         donor_cohort%lmort_infra      = 0.0_r8
         
-!         donor_cohort%vm_mort_in_place      = 0.0_r8
-!         donor_cohort%vm_mort_bole_harvest  = 0.0_r8
-!         donor_cohort%vm_pfrac_in_place     = 0.0_r8
-!         donor_cohort%vm_pfrac_bole_harvest = 0.0_r8
         donor_cohort%vm_mortfrac      = 0.0_r8
         donor_cohort%vm_pfrac         = 0.0_r8
         
@@ -1963,16 +1933,13 @@ contains
           !call dump_cohort(donor_cohort)
           !write(fates_log(), *) 'donor_cohort%n = ', donor_cohort%n
           !write(fates_log(), *) 'donor_cohort%lmort_direct = ', donor_cohort%lmort_direct
-          !write(fates_log(), *) 'donor_cohort%vm_mort_bole_harvest = ', donor_cohort%vm_mort_bole_harvest
-          !write(fates_log(), *) 'donor_cohort%vm_pfrac_bole_harvest = ', donor_cohort%vm_pfrac_bole_harvest
+!          !write(fates_log(), *) 'donor_cohort%vm_mort_bole_harvest = ', donor_cohort%vm_mort_bole_harvest
+!          !write(fates_log(), *) 'donor_cohort%vm_pfrac_bole_harvest = ', donor_cohort%vm_pfrac_bole_harvest
           ! Revised:
           write(fates_log(), *) 'Initial donor_cohort%n = ', donor_cohort%n
         end if
         
         ! Check the area:
-        ! I don't know what a reasonable tolerance is.
-!        if (abs(parent_patch%disturbance_rate - donor_cohort%vm_pfrac_bole_harvest) > 1.0e-10_r8) then
-!         write(fates_log(),*) 'parent_patch%disturbance_rate /= donor_cohort%vm_pfrac_bole_harvest'
         if (abs(parent_patch%disturbance_rate - donor_cohort%vm_pfrac(bole_harvest)) > &
             float_tolerance) then
           write(fates_log(),*) 'parent_patch%disturbance_rate /= donor_cohort%vm_pfrac(bole_harvest)'
@@ -1985,7 +1952,6 @@ contains
         ! Give the new patch the proportional number of trees for its area fraction:
         new_cohort%n = donor_cohort%n * (patch_site_areadis / parent_patch%area)
         ! Then apply all the mortality to it.
-!        new_cohort%n = new_cohort%n - (donor_cohort%n * donor_cohort%vm_mort_bole_harvest)
         new_cohort%n = new_cohort%n - (donor_cohort%n * donor_cohort%vm_mortfrac(bole_harvest))
         
         ! The old patch has no management mortality, it's just smaller:
@@ -2006,10 +1972,6 @@ contains
         new_cohort%lmort_collateral = 0.0_r8
         new_cohort%lmort_infra      = 0.0_r8
         
-!         new_cohort%vm_mort_in_place      = 0.0_r8
-!         new_cohort%vm_mort_bole_harvest  = 0.0_r8
-!         new_cohort%vm_pfrac_in_place     = 0.0_r8
-!         new_cohort%vm_pfrac_bole_harvest = 0.0_r8
         new_cohort%vm_mortfrac      = 0.0_r8
         new_cohort%vm_pfrac         = 0.0_r8
          
@@ -2020,10 +1982,6 @@ contains
         donor_cohort%lmort_collateral = 0.0_r8
         donor_cohort%lmort_infra      = 0.0_r8
         
-!         donor_cohort%vm_mort_in_place      = 0.0_r8
-!         donor_cohort%vm_mort_bole_harvest  = 0.0_r8
-!         donor_cohort%vm_pfrac_in_place     = 0.0_r8
-!         donor_cohort%vm_pfrac_bole_harvest = 0.0_r8
         donor_cohort%vm_mortfrac      = 0.0_r8
         donor_cohort%vm_pfrac         = 0.0_r8
         
@@ -2062,10 +2020,6 @@ contains
         new_cohort%lmort_direct     = donor_cohort%lmort_direct
         new_cohort%lmort_collateral = donor_cohort%lmort_collateral
         new_cohort%lmort_infra      = donor_cohort%lmort_infra
-!         new_cohort%vm_mort_in_place      = donor_cohort%vm_mort_in_place
-!         new_cohort%vm_mort_bole_harvest  = donor_cohort%vm_mort_bole_harvest
-!         new_cohort%vm_pfrac_in_place     = donor_cohort%vm_pfrac_in_place
-!         new_cohort%vm_pfrac_bole_harvest = donor_cohort%vm_pfrac_bole_harvest
         new_cohort%vm_mortfrac      = donor_cohort%vm_mortfrac
         new_cohort%vm_pfrac         = donor_cohort%vm_pfrac
         
@@ -2788,8 +2742,6 @@ contains
     endif
     
     num_mortalities = 0 ! Optional...
-!     prev_mortalities = [cohort%lmort_direct, cohort%vm_pfrac_in_place, &
-!                         cohort%vm_pfrac_bole_harvest]
     prev_mortalities = [cohort%lmort_direct, cohort%vm_pfrac]
     
     ! Check that the fractions are valid values:
@@ -2840,25 +2792,23 @@ contains
       case (in_place)
         
         ! Draft multi-mortality code:
-!         if (cohort%vm_mort_in_place == 0)
-!           cohort%vm_mort_in_place = kill_fraction
+!         if (cohort%vm_mort(in_place) == 0)
+!           cohort%vm_mort(in_place) = kill_fraction
 !         else
-!           cohort%vm_mort_in_place = (1 - cohort%vm_mort_in_place) * kill_fraction
-!           ! if cohort%vm_mort_in_place = 1 then it will be impossible to kill more, which should
+!           cohort%vm_mort(in_place) = (1 - cohort%vm_mort(in_place)) * kill_fraction
+!           ! if cohort%vm_mort(in_place) = 1 then it will be impossible to kill more, which should
 !           ! probably generate and error.
 !         endif
 !         
-!         if (cohort%vm_pfrac_in_place == 0.0_r8 .or. cohort%vm_pfrac_in_place == 1.0_r8)
-!           cohort%vm_pfrac_in_place = the_area_fraction
+!         if (cohort%vm_pfrac(in_place) == 0.0_r8 .or. cohort%vm_pfrac(in_place) == 1.0_r8)
+!           cohort%vm_pfrac(in_place) = the_area_fraction
 !         else if (the_area_fraction /= 1.0_r8)
 !           ! The previous mortality and this mortality both effect an area less than one, which
 !           ! presents and ambiguous result. 
 !         endif
-        ! if (the_area_fraction == 1.0_r8) leave cohort%vm_pfrac_in_place unchanged.
+        ! if (the_area_fraction == 1.0_r8) leave cohort%vm_pfrac(in_place) unchanged.
         
-!         cohort%vm_mort_in_place = kill_fraction
-!         cohort%vm_pfrac_in_place = the_area_fraction
-        ! Note: This revised implementation my allow multiple fluxes to be combined.
+        ! Note: This revised implementation may allow multiple fluxes to be combined.
         cohort%vm_mortfrac(in_place) = kill_fraction
         cohort%vm_pfrac(in_place) = the_area_fraction
         
@@ -2866,8 +2816,6 @@ contains
         ! We may be able to use cohort%lmort_direct here but that will require care.
         ! For now use a new profile.
         
-!         cohort%vm_mort_bole_harvest = kill_fraction
-!         cohort%vm_pfrac_bole_harvest = the_area_fraction
         cohort%vm_mortfrac(bole_harvest) = kill_fraction
         cohort%vm_pfrac(bole_harvest) = the_area_fraction
         
@@ -2912,8 +2860,6 @@ contains
     ! ----------------------------------------------------------------------------------------------
     
     num_mortalities = 0 ! Optional...
-!     prev_vm_mortalities = [cohort%vm_mort_in_place, cohort%vm_mort_bole_harvest]
-!     prev_area_fractions = [cohort%vm_pfrac_in_place, cohort%vm_pfrac_bole_harvest]
     prev_vm_mortalities = cohort%vm_mortfrac
     prev_area_fractions = cohort%vm_pfrac
     
@@ -2977,13 +2923,9 @@ contains
         write(fates_log(), *) 'prev_pfrac = ', prev_pfrac
         write(fates_log(), *) 'total_mortality = ', total_mortality
         
-!         write(fates_log(), *) 'cohort%vm_mort_in_place = ', cohort%vm_mort_in_place
-!         write(fates_log(), *) 'cohort%vm_mort_bole_harvest = ', cohort%vm_mort_bole_harvest
         write(fates_log(), *) 'cohort%vm_mortfrac(in_place) = ', cohort%vm_mortfrac(in_place)
         write(fates_log(), *) 'cohort%vm_mortfrac(bole_harvest) = ', cohort%vm_mortfrac(bole_harvest)
         write(fates_log(), *) 'prev_vm_mortalities = ', prev_vm_mortalities
-!         write(fates_log(), *) 'cohort%vm_pfrac_in_place = ', cohort%vm_pfrac_in_place
-!         write(fates_log(), *) 'cohort%vm_pfrac_bole_harvest = ', cohort%vm_pfrac(in_place)
         write(fates_log(), *) 'cohort%vm_pfrac(in_place) = ', cohort%vm_pfrac(in_place)
         write(fates_log(), *) 'cohort%vm_pfrac(bole_harvest) = ', cohort%vm_pfrac(bole_harvest)
         write(fates_log(), *) 'prev_area_fractions = ', prev_area_fractions
@@ -4758,7 +4700,6 @@ contains
     if (present(staged) .and. staged == .true.) then ! If staged is not passed in default to false.
       ! Get the harvest rate (assumes only one, which should be safe):
       ! Also assumes only two potential harvest types which is probably not safe!!!!!
-!      harvest_fraction = max(cohort%lmort_direct, cohort%vm_mort_bole_harvest)
       harvest_fraction = max(cohort%lmort_direct, cohort%vm_mortfrac(bole_harvest))
       
 !       if (harvest_fraction == 0.0_r8) then
@@ -5107,14 +5048,12 @@ contains
       call endrun(msg = errMsg(__FILE__, __LINE__))
     endif
     
-!    if (cohort%vm_mort_bole_harvest > 0.0_r8 .and. cohort%vm_mort_in_place > 0.0_r8) then
     if (count(cohort%vm_mortfrac >= 0.0_r8) > 1) then
       write(fates_log(),*) 'effective_n(): more than one management mortality type staged.'
       call dump_cohort(cohort)
       call endrun(msg = errMsg(__FILE__, __LINE__))
     endif
     
-!    staged_mortality = max(cohort%vm_mort_bole_harvest, cohort%vm_mort_in_place)
     staged_mortality = maxval(cohort%vm_mortfrac)
     if (staged_mortality == 0.0_r8) then
       cohort_effective_n = cohort%n
@@ -5192,16 +5131,13 @@ contains
       !call endrun(msg = errMsg(__FILE__, __LINE__))
     endif
     
-!    if (cohort%vm_mort_bole_harvest > 0.0_r8 .and. cohort%vm_mort_in_place > 0.0_r8) then
     if (count(cohort%vm_mortfrac > 0.0_r8) > 1) then
       write(fates_log(),*) 'disturbed_n(): more than one management mortality type staged.'
       call dump_cohort(cohort)
       call endrun(msg = errMsg(__FILE__, __LINE__))
     endif
     
-!    staged_mortality = max(cohort%vm_mort_bole_harvest, cohort%vm_mort_in_place)
     staged_mortality = maxval(cohort%vm_mortfrac)
-!    staged_pfrac = max(cohort%vm_pfrac_bole_harvest, cohort%vm_pfrac_in_place)
     staged_pfrac = maxval(cohort%vm_pfrac)
     if (staged_mortality == 0.0_r8) then
       disturbed_n = cohort%n
@@ -5347,8 +5283,6 @@ contains
     ! because some are calculated without mortality rates stored in the cohort.  Work is ongoing to
     ! solve this issue. 
     !
-    ! Note: If we changed vm_mort_in_place etc. into arrays using indexes matching the flux profile
-    ! IDs these values might be easier to manipulate and extend.  In progress!!!!!
     ! ----------------------------------------------------------------------------------------------
     
     ! Uses:
