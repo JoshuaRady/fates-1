@@ -24,6 +24,7 @@ module FatesVegetationManagementMod
   ! explicitly sizing them.
   use FatesConstantsMod, only : i4 => fates_int
   use FatesConstantsMod, only : itrue, ifalse
+  use FatesConstantsMod, only : rsnbl_math_prec
   use FatesGlobals, only : endrun => fates_endrun 
   use FatesInterfaceTypesMod, only : bc_in_type
   use PRTGenericMod, only : prt_vartypes
@@ -128,6 +129,8 @@ module FatesVegetationManagementMod
   
   ! Debugging flag / switch for module:
   logical, parameter, private :: debug = .true.
+  
+  real(r8), parameter, private :: float_tolerance = rsnbl_math_prec ! Floating point math tolerance.
   
   ! PFTs:
   ! These class definitions should be determined dynamically. The following definitions assume the
@@ -362,7 +365,7 @@ contains
     use EDTypesMod, only : dump_patch, dump_cohort
     use EDTypesMod, only : nclmax, ican_upper
     use FatesConstantsMod, only : fates_tiny
-    use FatesConstantsMod, only : nearzero, rsnbl_math_prec
+    use FatesConstantsMod, only : nearzero!, rsnbl_math_prec
     
     ! Arguments:
     type(ed_site_type), intent(inout), target :: site_in
@@ -397,7 +400,7 @@ contains
     real(r8) :: c_1st, c_2nd ! Temporary: Used for temporary harvest implementation.
     
     !integer(i4) :: pft_int_temp(1) ! Temporary
-    real(r8), parameter :: tolerance = rsnbl_math_prec ! float_tolerance?
+    !real(r8), parameter :: tolerance = rsnbl_math_prec ! float_tolerance?
     
     ! ----------------------------------------------------------------------------------------------
     if (debug) write(fates_log(), *) 'managed_mortality() entering.'
@@ -861,7 +864,7 @@ contains
             if (patch_disturbance == 0.0_r8) then
               patch_disturbance = cohort_disturbance
               
-            else if (abs(patch_disturbance - cohort_disturbance) > tolerance) then
+            else if (abs(patch_disturbance - cohort_disturbance) > float_tolerance) then
               ! Don't allow multiple (different) management activities to co-occur:
               write(fates_log(),*) 'More than one disturbance rate was detected in this patch.'
               write(fates_log(),*) 'patch_disturbance  = ', patch_disturbance
@@ -894,7 +897,7 @@ contains
         end do ! Cohort loop.
         
         ! This may be possible since we aren't filtering by canopy layer and would probably be bad:
-        if (patch_disturbance > 1.0_r8 + tolerance) then
+        if (patch_disturbance > 1.0_r8 + float_tolerance) then
           write(fates_log(),*) 'patch_disturbance > 1, = ', & patch_disturbance
         endif
         
@@ -902,8 +905,8 @@ contains
         current_patch%disturbance_rates(dtype_ilog) = patch_disturbance
         
         ! Check the canopy layer disturbances are valid.  This will catch > 1 errors as well:
-        if (overstory_mort_d > patch_disturbance + tolerance .or. &
-            understory_mort_d > patch_disturbance + tolerance) then
+        if (overstory_mort_d > patch_disturbance + float_tolerance .or. &
+            understory_mort_d > patch_disturbance + float_tolerance) then
           write(fates_log(),*) 'A canopy mortality disturbance is > the patch disturbance:'
           write(fates_log(),*) 'Patch disturbance =               ', & patch_disturbance
           write(fates_log(),*) 'Overstory mortality disturbance = ', & overstory_mort_d
@@ -930,7 +933,7 @@ contains
         
         ! This checks that patch_mort_d is a valid value allowing for floating point error.
         ! However, currently the check above will always prevent us from getting here.
-        else if (patch_mort_d > 1.0_r8 + tolerance) then
+        else if (patch_mort_d > 1.0_r8 + float_tolerance) then
           write(fates_log(),*) 'Patch level mortality is > 1, = ', & patch_mort_d
           call endrun(msg = errMsg(__FILE__, __LINE__))
         else if (patch_mort_d > 1.0_r8) then
@@ -950,14 +953,14 @@ contains
                                                      patch_disturbance
           
           ! Checking the resulting value:
-          if (current_patch%fract_ldist_not_harvested > 1.0_r8 + tolerance) then
+          if (current_patch%fract_ldist_not_harvested > 1.0_r8 + float_tolerance) then
           ! %fract_ldist_not_harvested is not currently in dump_patch():
             write(fates_log(),*) 'patch%fract_ldist_not_harvested is > 1, = ', &
                                   current_patch%fract_ldist_not_harvested
             call endrun(msg = errMsg(__FILE__, __LINE__))
           else if (current_patch%fract_ldist_not_harvested > 1.0_r8) then
             current_patch%fract_ldist_not_harvested = 1.0_r8
-          endif ! (current_patch%fract_ldist_not_harvested > 1.0_r8 + tolerance)
+          endif ! (current_patch%fract_ldist_not_harvested > 1.0_r8 + float_tolerance)
           
         else
           current_patch%fract_ldist_not_harvested = 0.0_r8
@@ -1214,7 +1217,7 @@ contains
     use EDtypesMod,   only : ed_cohort_type
     use FatesAllometryMod, only : carea_allom
     use FatesAllometryMod, only : set_root_fraction
-    use FatesConstantsMod, only : rsnbl_math_prec
+    !use FatesConstantsMod, only : rsnbl_math_prec
     use FatesInterfaceTypesMod, only : hlm_use_planthydro
     use FatesLitterMod, only : ncwd ! The number of coarse woody debris pools.
     use FatesLitterMod, only : ndcmpy
@@ -1896,7 +1899,8 @@ contains
         
 !        if (abs(parent_patch%disturbance_rate - donor_cohort%vm_pfrac_in_place) > 1.0e-10_r8) then
 !          write(fates_log(),*) 'parent_patch%disturbance_rate /= donor_cohort%vm_pfrac_in_place'
-        if (abs(parent_patch%disturbance_rate - donor_cohort%vm_pfrac(in_place)) > tolerance) then
+        if (abs(parent_patch%disturbance_rate - donor_cohort%vm_pfrac(in_place)) > &
+           float_tolerance) then
           write(fates_log(),*) 'parent_patch%disturbance_rate /= donor_cohort%vm_pfrac(in_place)'
           ! call endrun(msg = errMsg(__FILE__, __LINE__))
         endif
@@ -1969,8 +1973,9 @@ contains
         ! I don't know what a reasonable tolerance is.
 !        if (abs(parent_patch%disturbance_rate - donor_cohort%vm_pfrac_bole_harvest) > 1.0e-10_r8) then
 !         write(fates_log(),*) 'parent_patch%disturbance_rate /= donor_cohort%vm_pfrac_bole_harvest'
-        if (abs(parent_patch%disturbance_rate - donor_cohort%vm_pfrac_bole_harvest) > tolerance then
-         write(fates_log(),*) 'parent_patch%disturbance_rate /= donor_cohort%vm_pfrac(bole_harvest)'
+        if (abs(parent_patch%disturbance_rate - donor_cohort%vm_pfrac(bole_harvest)) > &
+           float_tolerance then
+          write(fates_log(),*) 'parent_patch%disturbance_rate /= donor_cohort%vm_pfrac(bole_harvest)'
           ! call endrun(msg = errMsg(__FILE__, __LINE__))
         endif
         
@@ -2979,7 +2984,7 @@ contains
         write(fates_log(), *) 'prev_vm_mortalities = ', prev_vm_mortalities
 !         write(fates_log(), *) 'cohort%vm_pfrac_in_place = ', cohort%vm_pfrac_in_place
 !         write(fates_log(), *) 'cohort%vm_pfrac_bole_harvest = ', cohort%vm_pfrac(in_place)
-        write(fates_log(), *) 'cohort%vm_pfrac(in_place) = ', cohort%vm_pfrac_in_place
+        write(fates_log(), *) 'cohort%vm_pfrac(in_place) = ', cohort%vm_pfrac(in_place)
         write(fates_log(), *) 'cohort%vm_pfrac(bole_harvest) = ', cohort%vm_pfrac(bole_harvest)
         write(fates_log(), *) 'prev_area_fractions = ', prev_area_fractions
       end if
