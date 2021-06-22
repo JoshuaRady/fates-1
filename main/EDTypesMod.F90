@@ -360,10 +360,12 @@ module EDTypesMod
                                                          !  forest patch).  fraction /per logging activity
 
      ! Vegetation Management: Add notes!!!!!
-     real(r8) :: vm_mort_in_place
-     real(r8) :: vm_mort_bole_harvest
-     real(r8) :: vm_pfrac_in_place
-     real(r8) :: vm_pfrac_bole_harvest
+     !real(r8) :: vm_mort_in_place
+     !real(r8) :: vm_mort_bole_harvest
+     real(r8) :: vm_mortfrac(2) ! Change use to constant.  vm_num_flux_profiles?
+     !real(r8) :: vm_pfrac_in_place
+     !real(r8) :: vm_pfrac_bole_harvest
+     real(r8) :: vm_pfrac(2)
 
      real(r8) :: seed_prod                               ! diagnostic seed production rate [kgC/plant/day]
 
