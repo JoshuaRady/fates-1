@@ -395,10 +395,12 @@ contains
                 currentCohort%lmort_infra      = 0.0_r8
                 currentCohort%l_degrad         = 0.0_r8
                 ! JMR_MOD_START:
-                currentCohort%vm_mort_in_place = 0.0_r8
-                currentCohort%vm_mort_bole_harvest = 0.0_r8
-                currentCohort%vm_pfrac_in_place = 0.0_r8
-                currentCohort%vm_pfrac_bole_harvest = 0.0_r8
+!                 currentCohort%vm_mort_in_place = 0.0_r8
+!                 currentCohort%vm_mort_bole_harvest = 0.0_r8
+!                 currentCohort%vm_pfrac_in_place = 0.0_r8
+!                 currentCohort%vm_pfrac_bole_harvest = 0.0_r8
+                currentCohort%vm_mortfrac = 0.0_r8
+                currentCohort%vm_pfrac = 0.0_r8
                 ! JMR_MOD_END.
              end if
  
@@ -426,10 +428,12 @@ contains
                 currentCohort%lmort_infra      = 0.0_r8
                 currentCohort%l_degrad         = 0.0_r8
                 ! JMR_MOD_START:
-                currentCohort%vm_mort_in_place = 0.0_r8
-                currentCohort%vm_mort_bole_harvest = 0.0_r8
-                currentCohort%vm_pfrac_in_place = 0.0_r8
-                currentCohort%vm_pfrac_bole_harvest = 0.0_r8
+!                 currentCohort%vm_mort_in_place = 0.0_r8
+!                 currentCohort%vm_mort_bole_harvest = 0.0_r8
+!                 currentCohort%vm_pfrac_in_place = 0.0_r8
+!                 currentCohort%vm_pfrac_bole_harvest = 0.0_r8
+                currentCohort%vm_mortfrac = 0.0_r8
+                currentCohort%vm_pfrac = 0.0_r8
                 ! JMR_MOD_END.
              end if
              currentCohort => currentCohort%taller
@@ -752,10 +756,12 @@ contains
                       nc%lmort_infra      = nan
                       nc%l_degrad         = nan
                       ! JMR_MOD_START:
-                      nc%vm_mort_in_place = nan
-                      nc%vm_mort_bole_harvest = nan
-                      nc%vm_pfrac_in_place = nan
-                      nc%vm_pfrac_bole_harvest = nan
+!                       nc%vm_mort_in_place = nan
+!                       nc%vm_mort_bole_harvest = nan
+!                       nc%vm_pfrac_in_place = nan
+!                       nc%vm_pfrac_bole_harvest = nan
+                      nc%vm_mortfrac= nan
+                      nc%vm_pfrac  = nan
                       ! JMR_MOD_END.
                       
                    else
@@ -812,10 +818,12 @@ contains
                          nc%lmort_collateral = currentCohort%lmort_collateral
                          nc%lmort_infra      = currentCohort%lmort_infra
                          ! JMR_MOD_START:
-                         nc%vm_mort_in_place = currentCohort%vm_mort_in_place
-                         nc%vm_mort_bole_harvest = currentCohort%vm_mort_bole_harvest
-                         nc%vm_pfrac_in_place = currentCohort%vm_pfrac_in_place
-                         nc%vm_pfrac_bole_harvest = currentCohort%vm_pfrac_bole_harvest
+!                          nc%vm_mort_in_place = currentCohort%vm_mort_in_place
+!                          nc%vm_mort_bole_harvest = currentCohort%vm_mort_bole_harvest
+!                          nc%vm_pfrac_in_place = currentCohort%vm_pfrac_in_place
+!                          nc%vm_pfrac_bole_harvest = currentCohort%vm_pfrac_bole_harvest
+                         nc%vm_mortfrac = currentCohort%vm_mortfrac
+                         nc%vm_pfrac = currentCohort%vm_pfrac
                          ! JMR_MOD_END.
                          
                          ! understory trees that might potentially be knocked over in the disturbance. 
@@ -844,10 +852,12 @@ contains
                          nc%lmort_collateral = currentCohort%lmort_collateral
                          nc%lmort_infra      = currentCohort%lmort_infra
                          ! JMR_MOD_START:
-                         nc%vm_mort_in_place = currentCohort%vm_mort_in_place
-                         nc%vm_mort_bole_harvest = currentCohort%vm_mort_bole_harvest
-                         nc%vm_pfrac_in_place = currentCohort%vm_pfrac_in_place
-                         nc%vm_pfrac_bole_harvest = currentCohort%vm_pfrac_bole_harvest
+!                          nc%vm_mort_in_place = currentCohort%vm_mort_in_place
+!                          nc%vm_mort_bole_harvest = currentCohort%vm_mort_bole_harvest
+!                          nc%vm_pfrac_in_place = currentCohort%vm_pfrac_in_place
+!                          nc%vm_pfrac_bole_harvest = currentCohort%vm_pfrac_bole_harvest
+                         nc%vm_mortfrac = currentCohort%vm_mortfrac
+                         nc%vm_pfrac = currentCohort%vm_pfrac
                          ! JMR_MOD_END.
                          
                       endif
@@ -907,10 +917,12 @@ contains
                    nc%lmort_collateral = currentCohort%lmort_collateral
                    nc%lmort_infra      = currentCohort%lmort_infra
                    ! JMR_MOD_START:
-                   nc%vm_mort_in_place = currentCohort%vm_mort_in_place
-                   nc%vm_mort_bole_harvest = currentCohort%vm_mort_bole_harvest
-                   nc%vm_pfrac_in_place = currentCohort%vm_pfrac_in_place
-                   nc%vm_pfrac_bole_harvest = currentCohort%vm_pfrac_bole_harvest
+!                    nc%vm_mort_in_place = currentCohort%vm_mort_in_place
+!                    nc%vm_mort_bole_harvest = currentCohort%vm_mort_bole_harvest
+!                    nc%vm_pfrac_in_place = currentCohort%vm_pfrac_in_place
+!                    nc%vm_pfrac_bole_harvest = currentCohort%vm_pfrac_bole_harvest
+                   nc%vm_mortfrac = currentCohort%vm_mortfrac
+                   nc%vm_pfrac = currentCohort%vm_pfrac
                    ! JMR_MOD_END.
 
 
