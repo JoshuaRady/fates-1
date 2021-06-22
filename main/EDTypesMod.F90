@@ -1092,10 +1092,12 @@ module EDTypesMod
      write(fates_log(),*) 'co%lmort_collateral       = ', ccohort%lmort_collateral
      write(fates_log(),*) 'co%lmort_infra            = ', ccohort%lmort_infra
      write(fates_log(),*) 'co%l_degrad               = ', ccohort%l_degrad
-     write(fates_log(),*) 'co%vm_mort_in_place       = ', ccohort%vm_mort_in_place
-     write(fates_log(),*) 'co%vm_mort_bole_harvest   = ', ccohort%vm_mort_bole_harvest
-     write(fates_log(),*) 'co%vm_pfrac_in_place      = ', ccohort%vm_pfrac_in_place
-     write(fates_log(),*) 'co%vm_pfrac_bole_harvest  = ', ccohort%vm_pfrac_bole_harvest
+!      write(fates_log(),*) 'co%vm_mort_in_place       = ', ccohort%vm_mort_in_place
+!      write(fates_log(),*) 'co%vm_mort_bole_harvest   = ', ccohort%vm_mort_bole_harvest
+!      write(fates_log(),*) 'co%vm_pfrac_in_place      = ', ccohort%vm_pfrac_in_place
+!      write(fates_log(),*) 'co%vm_pfrac_bole_harvest  = ', ccohort%vm_pfrac_bole_harvest
+     write(fates_log(),*) 'co%vm_mort                = ', ccohort%vm_mort
+     write(fates_log(),*) 'co%vm_pfrac               = ', ccohort%vm_pfrac
 
      write(fates_log(),*) 'co%isnew                  = ', ccohort%isnew
      write(fates_log(),*) 'co%dndt                   = ', ccohort%dndt
