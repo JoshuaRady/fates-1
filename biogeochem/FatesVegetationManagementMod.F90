@@ -5193,7 +5193,7 @@ contains
     endif
     
 !    if (cohort%vm_mort_bole_harvest > 0.0_r8 .and. cohort%vm_mort_in_place > 0.0_r8) then
-    if (count(cohort%vm_mortfrac >= 0.0_r8) > 1) then
+    if (count(cohort%vm_mortfrac > 0.0_r8) > 1) then
       write(fates_log(),*) 'disturbed_n(): more than one management mortality type staged.'
       call dump_cohort(cohort)
       call endrun(msg = errMsg(__FILE__, __LINE__))
