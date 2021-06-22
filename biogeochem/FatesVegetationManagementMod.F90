@@ -1900,7 +1900,7 @@ contains
 !        if (abs(parent_patch%disturbance_rate - donor_cohort%vm_pfrac_in_place) > 1.0e-10_r8) then
 !          write(fates_log(),*) 'parent_patch%disturbance_rate /= donor_cohort%vm_pfrac_in_place'
         if (abs(parent_patch%disturbance_rate - donor_cohort%vm_pfrac(in_place)) > &
-           float_tolerance) then
+            float_tolerance) then
           write(fates_log(),*) 'parent_patch%disturbance_rate /= donor_cohort%vm_pfrac(in_place)'
           ! call endrun(msg = errMsg(__FILE__, __LINE__))
         endif
@@ -1974,7 +1974,7 @@ contains
 !        if (abs(parent_patch%disturbance_rate - donor_cohort%vm_pfrac_bole_harvest) > 1.0e-10_r8) then
 !         write(fates_log(),*) 'parent_patch%disturbance_rate /= donor_cohort%vm_pfrac_bole_harvest'
         if (abs(parent_patch%disturbance_rate - donor_cohort%vm_pfrac(bole_harvest)) > &
-           float_tolerance then
+            float_tolerance) then
           write(fates_log(),*) 'parent_patch%disturbance_rate /= donor_cohort%vm_pfrac(bole_harvest)'
           ! call endrun(msg = errMsg(__FILE__, __LINE__))
         endif
