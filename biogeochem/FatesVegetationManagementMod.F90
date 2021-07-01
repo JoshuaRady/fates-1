@@ -3066,8 +3066,8 @@ contains
     ! Arguments:
     type(ed_site_type), intent(inout), target :: site
     type(bc_in_type), intent(in) :: bc_in
-    ! The PFT index number to plant.  Allows an array but only on will be used (see pft_index):
-    integer(i4), intent(in), target :: pfts(:)
+    ! The PFT index number to plant.  Allows an array but only one will be used (see pft_index):
+    integer(i4), dimension(:), intent(in), target :: pfts
     
     ! Optional parameters:
     ! If called due to a VM driver file event 'empty' values may be passed for these parameters.
@@ -3312,7 +3312,7 @@ contains
     ! Which tree PFTs are harvestable trees?  If omitted all woody trees will be used.  Otherwise
     ! any omitted will be ignored for the purpose of calculating BAI and stem density.
     ! Be careful when excluding PFTs that may compete in the canopy.
-    integer(i4), intent(in), optional, target :: pfts(:) ! An array of PFT IDs to thin.
+    integer(i4), dimension(:), intent(in), optional, target :: pfts ! An array of PFT IDs to thin.
     real(r8), intent(in), optional :: row_fraction       ! The fraction of rows to initially thin,
                                                          ! e.g. every 5th row = 0.2, often every 4th or 5th row...
                                                          ! Alternatively, supply as a row frequency?
@@ -3325,7 +3325,7 @@ contains
     real(r8), intent(out), optional :: harvest_estimate  ! The wood harvested by this operation.
     
     ! Locals:
-    integer(i4), pointer, dimension(:) :: thin_pfts ! Holds the PFTs to thin, computed from arguments.
+    integer(i4), dimension(:), pointer :: thin_pfts ! Holds the PFTs to thin, computed from arguments.
     real(r8) :: the_row_fraction ! Or change row_fraction -> row_fraction_in or row_fraction_opt
     real(r8) :: the_patch_fraction
     
@@ -3611,7 +3611,7 @@ contains
     type(ed_site_type), intent(in), target :: site ! The current site object.
     !integer(i4), dimension(:), intent(in) :: pfts ! Make optional?
     !integer(i4), dimension(:), intent(in), optional :: pfts
-    integer(i4), intent(in), optional, target :: pfts(:) ! An array of PFT IDs to thin.
+    integer(i4), intent(in), dimension(:), optional, target :: pfts ! An array of PFT IDs to thin.
     real(r8), intent(in) :: thin_fraction
     ! Add where
     
@@ -3698,7 +3698,7 @@ contains
     ! Which tree PFTs are harvestable trees.  If omitted all woody trees will be used.  Otherwise
     ! any omitted will be ignored for the purpose of calculating BAI and stem density.
     ! Be careful when excluding PFTs that may compete in the canopy.
-    integer(i4), intent(in), optional, target :: pfts(:) ! An array of PFT IDs to thin.
+    integer(i4), dimension(:), intent(in), optional, target :: pfts ! An array of PFT IDs to thin.
     real(r8), intent(in), optional :: patch_fraction     ! The fraction of the patch to thin.
                                                          ! Defaults to 1.0 / whole patch.
                                                          ! Values > 1 result in the patch being 
@@ -4744,7 +4744,7 @@ contains
     ! Arguments:
     type(ed_patch_type), intent(inout), target :: patch
     ! Which tree PFTs are harvestable trees?  If omitted all woody trees will be used:
-    integer(i4), intent(in), optional, target :: pfts(:)
+    integer(i4), dimension(:), intent(in), optional, target :: pfts
     
     ! Size specification:
     ! Minimum size of to trees to harvest.  Only provide a minimum DBH or height, not both:
