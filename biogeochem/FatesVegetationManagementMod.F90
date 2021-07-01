@@ -135,8 +135,10 @@ module FatesVegetationManagementMod
   
   ! PFTs:-------------------------------------------------------------------------------------------
   ! These class definitions should be determined dynamically. The following definitions assume the
-  ! default 16 pft parameter set.  We need a better way to get the classes of PFTs. The woody flag
+  ! default 12 pft parameter set.  We need a better way to get the classes of PFTs. The woody flag
   ! (EDPftvarcon_inst%woody) includes shrubs.
+  integer(i4), parameter, private :: num_pfts = 12 ! Temporary:  I haven't found where this is defined yet.
+  integer(i4), target, private :: all_pfts(num_pfts) = (/ (k, k = 1, num_pfts) /)
   !integer(i4), allocatable, dimension(:), target, private :: woody_pfts
   !integer(i4), parameter, private :: woody_pfts(9) = [1,2,3,4,5,6,7,8,9]
   !integer(i4), parameter, private :: tree_pfts(6) = [1,2,3,4,5,6]
@@ -179,7 +181,7 @@ module FatesVegetationManagementMod
   ! VM Events:--------------------------------------------------------------------------------------
   type, private :: vm_event
       integer(i4) :: code ! The event code.
-      integer, dimension(1) :: pfts ! Change to array (16 in length?)
+      integer, dimension(num_pfts) :: pfts ! Change to array (16 in length?)
       real(r8) :: density ! planting_density?
       real(r8) :: dbh
       real(r8) :: height
@@ -4770,8 +4772,8 @@ contains
     real(r8) :: the_patch_fraction
     
     integer :: i, j, k ! Iterators and counters
-    integer:: all_pfts(12) = (/ (k, k = 1, 12) /) ! Generalize and make global!!!!!
-    integer:: other_pfts(12)
+    !integer:: all_pfts(12) = (/ (k, k = 1, 12) /) ! Generalize and make global!!!!!
+    integer:: other_pfts(num_pfts)
     
     ! ----------------------------------------------------------------------------------------------
     if (debug) write(fates_log(), *) 'clearcut_patch() entering.'
