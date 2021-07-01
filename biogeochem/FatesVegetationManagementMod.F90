@@ -3356,6 +3356,8 @@ contains
     if (present(pfts)) then
       ! Check if PFTs to thin are valid:
       do i = 1, size(pfts)
+        if (pfts(i) == vm_empty_integer) cycle ! Ignore empty entries.
+        
         if (.not. any(pfts(i) == tree_pfts)) then
           write(fates_log(),*) 'thin_row_low(): Cannot thin non-tree PFTs.'
           write(fates_log(),*) 'Tree PFTs =    ', tree_pfts
@@ -3628,6 +3630,8 @@ contains
     if (present(pfts) .and. all(pfts /= vm_empty_integer)) then
       ! Check if PFTs to thin are valid:
       do i = 1, size(pfts)
+        if (pfts(i) == vm_empty_integer) cycle ! Ignore empty entries.
+        
         if (.not. any(pfts(i) == tree_pfts)) then
           write(fates_log(),*) 'thin_proportional(): Cannot thin non-tree PFTs.'
           write(fates_log(),*) 'Tree PFTs =    ', tree_pfts
@@ -3745,6 +3749,8 @@ contains
     if (present(pfts) .and. all(pfts /= vm_empty_integer)) then
       ! Check if PFTs to thin are valid:
       do i = 1, size(pfts)
+        if (pfts(i) == vm_empty_integer) cycle ! Ignore empty entries.
+        
         if (.not. any(pfts(i) == tree_pfts)) then
           write(fates_log(),*) 'thin_patch_low_perfect(): Cannot thin non-tree PFTs.'
           write(fates_log(),*) 'Tree PFTs =    ', tree_pfts
@@ -4774,6 +4780,8 @@ contains
     if (present(pfts) .and. all(pfts /= vm_empty_integer)) then
       ! Confirm PFTs to harvest are all trees:
       do i = 1, size(pfts)
+        if (pfts(i) == vm_empty_integer) cycle ! Ignore empty entries.
+        
         if (.not. any(pfts(i) == tree_pfts)) then
           write(fates_log(),*) 'clearcut_patch(): Only tree PFTs are expected.'
           write(fates_log(),*) 'Tree PFTs =    ', tree_pfts
@@ -4842,6 +4850,8 @@ contains
     ! Get the reciprocal PFTs:
     j = 0
     do i = 1, size(all_pfts)
+      if (pfts(i) == vm_empty_integer) cycle ! Ignore empty entries.
+    
       if (.not. any(all_pfts(i) == the_pfts)) then
         j = j + 1
         other_pfts(j) = all_pfts(i)
