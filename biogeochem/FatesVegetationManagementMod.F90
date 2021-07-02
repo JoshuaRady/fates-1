@@ -5896,7 +5896,7 @@ contains
     ! ----------------------------------------------------------------------------------------------
     
     array_out = vm_empty_integer ! Initialize the array since all indexes may not be filled.
-    array_index = 1
+    i = 1
     
     ! Detect the brackets:
     array_open = index(arguments_string, '[')
