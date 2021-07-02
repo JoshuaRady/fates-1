@@ -5759,32 +5759,43 @@ contains
 
   !=================================================================================================
 
-  function field_pop(line_str) result(field_str) ! field_pop_str()?
+  !function field_pop(line_str) result(field_str) ! field_pop_str()?
+  function field_pop(line_str, delimiter) result(field_str) ! field_pop_str()?
     ! ----------------------------------------------------------------------------------------------
     ! Pop the first field off the front (left) of a line of fields encoded as text.
     ! Returns the field as the return value and removes it from the line string passed in.
     !
-    ! The delimiter between fields is one or more spaces.
-    ! Note: We could add an optional delimiter argument to expand the utility of this routine.
+    ! By default the delimiter between fields is one or more spaces.  If an alternative character
+    ! is provided the delimiter will be...
+    !          In testing -> Note: We could add an optional delimiter argument to expand the utility of this routine.
     ! ----------------------------------------------------------------------------------------------
     
     ! Uses: NA
     
     ! Arguments:
     character(len = *), intent(inout) :: line_str
+    character(len = 1), intent(in), optional :: delimiter ! delimiter_char?
     
     ! Locals:
     character(len = line_strlen) :: field_str ! Return value
+    character(len = 1) :: the_delimiter
     integer :: delim_index
     
     ! ----------------------------------------------------------------------------------------------
+    
+    ! Set the delimiter:
+    if (present(delimiter)) then
+      the_delimiter = delimiter
+    else
+      the_delimiter = " "
+    endif
     
     ! Trim any leading (and trailing) whitespace:
     line_str = adjustl(line_str) ! This pushes whitespace to the end of the line, which we remove.
     line_str = trim(line_str)
     
     ! Find the the following delimiting block of 1 or more spaces:
-    delim_index = index(line_str, " ")
+    delim_index = index(line_str, the_delimiter)
     
     ! If 0 this could be the last field, make sure something is there:
     if (delim_index == 0) then
@@ -5807,7 +5818,7 @@ contains
 
   !=================================================================================================
 
-  function field_pop_int(line_str) result(field_int)
+  function field_pop_int(line_str, delimiter) result(field_int)
     ! ----------------------------------------------------------------------------------------------
     ! Pop the first field off the front (left) of a line and return it as an integer.
     ! ----------------------------------------------------------------------------------------------
@@ -5816,6 +5827,7 @@ contains
     
     ! Arguments:
     character(len = *), intent(inout) :: line_str
+    character(len = 1), intent(in), optional :: delimiter ! delimiter_char?
     
     ! Locals:
     character(len = line_strlen) :: field_str ! Intermediate
@@ -5823,14 +5835,14 @@ contains
     
     ! ----------------------------------------------------------------------------------------------
     
-    field_str = field_pop(line_str)
+    field_str = field_pop(line_str, delimiter)
     read(field_str, *) field_int
     
   end function field_pop_int
 
   !=================================================================================================
 
-  function field_pop_real(line_str) result(field_real)
+  function field_pop_real(line_str, delimiter) result(field_real)
     ! ----------------------------------------------------------------------------------------------
     ! Pop the first field off the front (left) of a line and return it as a real.
     ! ----------------------------------------------------------------------------------------------
@@ -5839,6 +5851,7 @@ contains
     
     ! Arguments:
     character(len = *), intent(inout) :: line_str
+    character(len = 1), intent(in), optional :: delimiter ! delimiter_char?
     
     ! Locals:
     character(len = line_strlen) :: field_str ! Intermediate
@@ -5846,10 +5859,83 @@ contains
     
     ! ----------------------------------------------------------------------------------------------
     
-    field_str = field_pop(line_str)
+    field_str = field_pop(line_str, delimiter)
     read(field_str, *) field_real
     
   end function field_pop_real
+
+  !=================================================================================================
+
+  subroutine parse_array(array_str, array_out) ! parse_int_array?
+    ! ----------------------------------------------------------------------------------------------
+    ! Read a string representing a integer array and return an array with the values.
+    ! Format:
+    !   Arrays are modern Fortran / C style with square bounding square bracket and values separated
+    ! by commas.  White space is optional but the style suggestion is to lead with single spaces,
+    ! and avoid spaces prior to commas.
+    !   For robustness and ease of use single unbracketed values are handled appropriately but
+    ! missing values are an error.
+    !
+    ! Extend to handle floats?
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Uses: NA
+    
+    ! Arguments:
+    character(len = *), intent(in) :: array_str
+    integer, dimension(:), intent(inout) :: array_out ! Must be big enough the hold the result.
+    
+    ! Locals:
+    character(len = len(array_str)) :: arguments_string ! Intermediate
+    !integer :: delim_index
+    integer :: array_open
+    integer :: array_close
+    integer :: array_index
+    
+    ! ----------------------------------------------------------------------------------------------
+    
+    array_out = vm_empty_integer ! Initialize the array since all indexes may not be filled.
+    array_index = 1
+    
+    ! Detect the brackets:
+    array_open = index(arguments_string, '[')
+    array_close = index(arguments_string, ']')
+    
+    ! Error checking:
+    ! Only one bracket is present or they are in the wrong order:
+    if ((array_open == 0 .or. array_close == 0) .or. (array_open > array_close) then
+      write(fates_log(),*) 'parse_array(): Malformed array notation.'
+      call endrun(msg = errMsg(__FILE__, __LINE__))
+    endif
+    
+    if (array_open == 0 .and. array_close == 0) then
+      ! If there are no brackets then there should only be a single value (an array of one):
+      if (len_trim(array_str) == 0 .or. index(array_str, ',') /= 0) then
+        write(fates_log(),*) 'parse_array(): Unbracketed string is empty or has more that one value.'
+        call endrun(msg = errMsg(__FILE__, __LINE__))
+      endif
+      
+      read(array_str, *) array_out[1]
+      
+    else
+      ! Remove the brackets:
+      arguments_string = array_str(array_open + 1, array_close -1)
+      ! Remove any whitespace inside the brackets:
+      arguments_string = adjustl(arguments_string)
+      arguments_string = trim(arguments_string)
+      
+      ! Remove each value in turn and record them:
+      do while (len_trim(arguments_string) /= 0)
+        
+        !delim_index = index(arguments_string, ',')
+        array_out[i] = field_pop_int(arguments_string, delimiter = ',')
+        i = i + 1
+        
+      enddo ! (len_trim(arguments_string) /= 0)
+    end if
+    
+    if (debug) write(fates_log(), *) 'parse_array() output: ', array_out
+  end subroutine parse_array
 
   !=================================================================================================
 
@@ -6121,8 +6207,13 @@ contains
     character(len = len(event_str)) :: event_type_str, arguments_string, param_string, param_name, param_value, end_string
     integer :: i ! Iterator
     integer :: delim_index
-
+    integer :: array_open
+    integer :: array_close
+    
     ! ----------------------------------------------------------------------------------------------
+    
+    array_open = 0
+    array_close = 0 ! Allows array_close to indicated if an array was found in the current argument.
     
     ! Some of the following could all be simplified with field_pop() if it took a delimiter.
     
@@ -6188,21 +6279,35 @@ contains
     do while (len_trim(arguments_string) /= 0)
       
       ! Get the next name value pair:
+      ! The name value pairs are separated by commas but may also contain commas if the argument is
+      ! an array.  Therefore we  check for arrays and then look for the argument terminating comma
+      ! in the appropriate place
       delim_index = index(arguments_string, ',')
-      ! If there is no comma then we are on the last argument:
+      array_open = index(arguments_string, '[')
+      
+      ! If no arrays are present or the next array starts after the next comma then we have found
+      ! the end of the argument.  Otherwise we need to look for the first comma after the array:
+      ! Note: This assumes that arrays are properly formated and closed.
+      if (array_open /= 0 .and. array_open < delim_index) then
+        array_close = index(arguments_string, ']') ! Find the end of the array.
+        delim_index = index(arguments_string(array_close+1:), ',') ! Find the following comma.
+      end if
+      
+      ! If arguments remain:
       if (delim_index /= 0) then
         param_string = arguments_string(:delim_index-1)
         arguments_string = arguments_string(delim_index+1:) ! Remove the processed argument.
-      else
+      else ! If there is no comma then we are on the last argument:
         param_string = arguments_string
         arguments_string = ''
       endif
       
       !if (debug) write(fates_log(),*) 'param_string: ', trim(param_string) ! Temporary!!!!!
       
-      ! Parse:
+      ! Parse name value pair:
       ! The argument name value pairs are separated by equals signs.  A variable amount of
-      ! whitespace may also present between these elements.  Arrays may be passed as values using square brackets.
+      ! whitespace may also present between these elements.  Arrays may be passed as values using
+      ! square brackets.
       ! name = value or name = [value1, value2]
       delim_index = index(param_string, '=')
       param_name = param_string(:delim_index-1)
@@ -6223,8 +6328,9 @@ contains
         case ('pfts') ! Many...
           ! This may be a single value or array but for now we assume there is only one (array of 1).
           ! We also should allow group names.
-          read(param_value, *) this%pfts
+          !read(param_value, *) this%pfts
           !pfts = parse_array(param_value)
+          parse_array(param_value, this%pfts)
         
         case ('density') ! plant()
           read(param_value, *) this%density  
