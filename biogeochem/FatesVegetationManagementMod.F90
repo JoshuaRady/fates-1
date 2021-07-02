@@ -138,10 +138,11 @@ module FatesVegetationManagementMod
   ! default 12 pft parameter set.  We need a better way to get the classes of PFTs. The woody flag
   ! (EDPftvarcon_inst%woody) includes shrubs.
   integer(i4), parameter, private :: num_pfts = 12 ! Temporary:  I haven't found where this is defined yet.
-  integer(i4), target, private :: all_pfts(num_pfts) = (/ (k, k = 1, num_pfts) /)
+  ! This works if we define k but since we are not defining any of our other arrays dynamically wait to use it:
+  !integer(i4), target, private :: all_pfts(num_pfts) = (/ (k, k = 1, num_pfts) /)
+  integer(i4), target, private :: all_pfts(num_pfts) = [1,2,3,4,5,6,7,8,9,10,11,12]
   !integer(i4), allocatable, dimension(:), target, private :: woody_pfts
   !integer(i4), parameter, private :: woody_pfts(9) = [1,2,3,4,5,6,7,8,9]
-  !integer(i4), parameter, private :: tree_pfts(6) = [1,2,3,4,5,6]
   integer(i4), target, private :: woody_pfts(9) = [1,2,3,4,5,6,7,8,9]
   integer(i4), target, public :: tree_pfts(6) = [1,2,3,4,5,6] ! Temporarily public
   ! Shrubs?
@@ -4771,7 +4772,7 @@ contains
     
     real(r8) :: the_patch_fraction
     
-    integer :: i, j, k ! Iterators and counters
+    integer :: i, j!, k ! Iterators and counters
     !integer:: all_pfts(12) = (/ (k, k = 1, 12) /) ! Generalize and make global!!!!!
     integer:: other_pfts(num_pfts)
     
@@ -5883,14 +5884,14 @@ contains
     
     ! Arguments:
     character(len = *), intent(in) :: array_str
-    integer, dimension(:), intent(inout) :: array_out ! Must be big enough the hold the result.
+    integer, dimension(:), intent(out) :: array_out ! Must be big enough the hold the result.
     
     ! Locals:
     character(len = len(array_str)) :: arguments_string ! Intermediate
     !integer :: delim_index
     integer :: array_open
     integer :: array_close
-    integer :: array_index
+    integer :: i
     
     ! ----------------------------------------------------------------------------------------------
     
@@ -5903,7 +5904,7 @@ contains
     
     ! Error checking:
     ! Only one bracket is present or they are in the wrong order:
-    if ((array_open == 0 .or. array_close == 0) .or. (array_open > array_close) then
+    if ((array_open == 0 .or. array_close == 0) .or. (array_open > array_close)) then
       write(fates_log(),*) 'parse_array(): Malformed array notation.'
       call endrun(msg = errMsg(__FILE__, __LINE__))
     endif
@@ -5915,11 +5916,11 @@ contains
         call endrun(msg = errMsg(__FILE__, __LINE__))
       endif
       
-      read(array_str, *) array_out[1]
+      read(array_str, *) array_out(1)
       
     else
       ! Remove the brackets:
-      arguments_string = array_str(array_open + 1, array_close -1)
+      arguments_string = array_str(array_open + 1:array_close -1)
       ! Remove any whitespace inside the brackets:
       arguments_string = adjustl(arguments_string)
       arguments_string = trim(arguments_string)
@@ -5928,7 +5929,7 @@ contains
       do while (len_trim(arguments_string) /= 0)
         
         !delim_index = index(arguments_string, ',')
-        array_out[i] = field_pop_int(arguments_string, delimiter = ',')
+        array_out(i) = field_pop_int(arguments_string, delimiter = ',')
         i = i + 1
         
       enddo ! (len_trim(arguments_string) /= 0)
@@ -6330,7 +6331,7 @@ contains
           ! We also should allow group names.
           !read(param_value, *) this%pfts
           !pfts = parse_array(param_value)
-          parse_array(param_value, this%pfts)
+          call parse_array(param_value, this%pfts)
         
         case ('density') ! plant()
           read(param_value, *) this%density  
