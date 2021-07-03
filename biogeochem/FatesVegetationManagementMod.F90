@@ -68,6 +68,7 @@ module FatesVegetationManagementMod
   private :: thin_low_perfect
   private :: thin_patch_low_probabilistic
   private :: thin_low_probabilistic
+  private :: wood_harvest
   private :: harvest_mass_min_area
   private :: plant_harvestable_biomass
   private :: cohort_harvestable_biomass
@@ -91,6 +92,7 @@ module FatesVegetationManagementMod
   private :: field_pop
   private :: field_pop_int
   private :: field_pop_real
+  private :: parse_array
   private :: is_now
   private :: is_here
 
@@ -189,8 +191,11 @@ module FatesVegetationManagementMod
       real(r8) :: row_fraction
       real(r8) :: final_basal_area
       real(r8) :: thin_fraction
+      real(r8) :: harvest_fraction ! Combine with thin_fraction as just fraction?
       real(r8) :: dbh_min
+      real(r8) :: dbh_max
       real(r8) :: ht_min
+      real(r8) :: ht_max
       real(r8) :: patch_fraction
       real(r8) :: efficiency
     contains
@@ -205,6 +210,7 @@ module FatesVegetationManagementMod
   type(vm_event), private :: vm_generative_event, vm_mortality_event
 
   ! VM event codes:
+  ! Does FATES support Fortran 2003 enumerated types?
   integer, parameter, private :: vm_event_null = 0 ! No event
   integer, parameter, private :: vm_event_plant = 1
   integer, parameter, private :: vm_event_understory_control = 2 ! Not yet plumbed in.
@@ -213,7 +219,8 @@ module FatesVegetationManagementMod
   integer, parameter, private :: vm_event_thin_proportional = 5
   integer, parameter, private :: vm_event_thin_low_perfect = 6
   integer, parameter, private :: vm_event_thin_low_probabilistic = 7
-  integer, parameter, private :: vm_event_clearcut = 8
+  integer, parameter, private :: vm_event_wood_harvest = 8
+  integer, parameter, private :: vm_event_clearcut = 9
   !integer, parameter, private :: vm_event_XXXXX = X
 
   integer, parameter, private :: vm_event_generative_max = vm_event_plant
@@ -648,26 +655,34 @@ contains
             endif
             current_patch => current_patch%younger
           end do
-          
+        
         case (vm_event_hardwood_control)
           call hardwood_control(site = site_in, efficiency = vm_mortality_event%efficiency)
         
         case (vm_event_thin_proportional)
           call thin_proportional(site = site_in, pfts = vm_mortality_event%pfts, &
                                  thin_fraction = vm_mortality_event%thin_fraction)
-          
+        
         case (vm_event_thin_low_perfect)
           call thin_low_perfect(site = site_in, pfts = vm_mortality_event%pfts, &
                                 thin_fraction = vm_mortality_event%thin_fraction)
-          
+        
         case (vm_event_thin_low_probabilistic)
           call thin_low_probabilistic(site = site_in, pfts = vm_mortality_event%pfts, &
                                       thin_fraction = vm_mortality_event%thin_fraction)
-          
+        
+        case (vm_event_wood_harvest)
+          call wood_harvest(site = site_in, pfts = vm_mortality_event%pfts, &
+                            dbh_min = vm_mortality_event%dbh_min,
+                            dbh_max = vm_mortality_event%dbh_max,
+                            ht_min = vm_mortality_event%ht_min,
+                            ht_max = vm_mortality_event%ht_max,
+                            thin_fraction = vm_mortality_event%thin_fraction)
+        
         case (vm_event_clearcut)
           call clearcut(site = site_in, pfts = vm_mortality_event%pfts, &
                         dbh_min = vm_mortality_event%dbh_min, ht_min = vm_mortality_event%ht_min)
-          
+        
         case default
           write(fates_log(),*) 'Unrecognized event code:', vm_mortality_event%code
           call endrun(msg = errMsg(__FILE__, __LINE__))
@@ -4261,7 +4276,7 @@ contains
   ! Harvest Subroutines:
   ! ...
   !
-  ! We may want to provide a non-disturbing harvest routines for continuous cover forestry and
+  ! We may want to provide non-disturbing harvest routines for continuous cover forestry and
   ! agriculture.
   !
   !=================================================================================================
@@ -4270,22 +4285,66 @@ contains
   ! Site level: Preferred species, preferred land type...
   ! What is the correct most generic harvest function?????
 
+  !Make a version similar to a logging module harvest...
   !subroutine harvest(patch, pfts, dbh_min, dbh_max, ht_min, ht_max, fraction) ! log()??????
+  ! The name may change timber_harvest()? harvest_wood()? Logging()?
+  subroutine wood_harvest(site_in, pfts, dbh_min, dbh_max, ht_min, ht_max, harvest_fraction)
     ! ----------------------------------------------------------------------------------------------
-    ! 
+    ! A generic site level harvest routine...
+    !
+    !-----------------------------------------------------------------------------------------------
+    ! Operation Type: Harvest
+    ! Operation Level: Site
+    ! Regime: Genteric
+    !
+    ! VM Event Interface:
+    ! wood_harvest(site_in, pfts, [dbh_min], [dbh_max], [ht_min], [ht_max], harvest_fraction)
     ! ----------------------------------------------------------------------------------------------
     
-    ! Uses:
+    ! Uses: NA
     
     ! Arguments:
+    type(ed_site_type), intent(inout), target :: site_in
+    integer(i4), dimension(:), intent(in) :: pfts ! Make optional and default to woody!!!!!
+    ! Size range of to trees to harvest.  Defaults to everything, otherwise some range of sizes,
+    ! e.g. > 10cm DBH, < 15 m in height, etc.
+    real(r8), intent(in), optional :: dbh_min
+    real(r8), intent(in), optional :: dbh_max
+    real(r8), intent(in), optional :: ht_min
+    real(r8), intent(in), optional :: ht_max
+    real(r8), intent(in) :: harvest_fraction ! The fraction of 'trees' to harvest.
     
     ! Locals:
+    type(ed_patch_type), pointer :: current_patch
+    !type(ed_cohort_type), pointer :: current_cohort
     
     ! ----------------------------------------------------------------------------------------------
     
+    current_patch => site_in%oldest_patch
+    do while (associated(current_patch))
+      current_cohort => current_patch%shortest
+
+!       do while(associated(current_cohort))
+!           
+!           if (current_cohort%pft == 4 .or. current_cohort%pft == 12) then
+!             call kill(cohort = current_cohort, flux_profile = bole_harvest, kill_fraction = 0.5_r8, &
+!                       area_fraction = 1.0_r8) ! Leaving out the area_fraction right now won't work.  Fix that.
+!           endif
+!           
+!         current_cohort => current_cohort%taller
+!       end do ! Cohort loop.
+      
     ! This may end up being a convenience wrapper of a patch level kill function.
+      kill_patch(patch = current_patch, flux_profile = bole_harvest, pfts = pfts,
+                 dbh_min = dbh_min, dbh_max = dbh_max, ht_min = ht_min, ht_max = ht_max, &
+                 kill_fraction = harvest_fraction, area_fraction = 1.0_r8)
+      
+      current_patch => current_patch%younger
+    end do ! Patch loop.
+      
+      ! Estimate the woodproduct (trunk_product_site) if not done already. !!!!!
     
-  !end subroutine harvest
+  end subroutine harvest
 
   !=================================================================================================
 
@@ -6145,8 +6204,11 @@ contains
     this%row_fraction = vm_empty_real
     this%final_basal_area = vm_empty_real
     this%thin_fraction = vm_empty_real
+    this%harvest_fraction = vm_empty_real
     this%dbh_min = vm_empty_real
+    this%dbh_max = vm_empty_real
     this%ht_min = vm_empty_real
+    this%ht_max = vm_empty_real
     this%patch_fraction = vm_empty_real
     this%efficiency = vm_empty_real
     
@@ -6245,6 +6307,8 @@ contains
         this%code = vm_event_thin_low_perfect
       case ('thin_low_probabilistic')
         this%code = vm_event_thin_low_probabilistic
+      case ('wood_harvest')
+        this%code = vm_event_wood_harvest
       case ('clearcut')
         this%code = vm_event_clearcut
       !case ()
@@ -6345,14 +6409,20 @@ contains
           read(param_value, *) this%final_basal_area
         case ('thin_fraction') ! thin_proportional(), thin_patch_low_probabilistic()
           read(param_value, *) this%thin_fraction
-        case ('dbh_min') ! clearcut()
+        case ('harvest_fraction') ! wood_harvest()
+          read(param_value, *) this%harvest_fraction
+        case ('dbh_min') ! wood_harvest(), clearcut()
           read(param_value, *) this%dbh_min
-        case ('ht_min') ! clearcut()
+        case ('dbh_max') ! wood_harvest()
+          read(param_value, *) this%dbh_max
+        case ('ht_min') ! wood_harvest(), clearcut()
           read(param_value, *) this%ht_min
+        case ('ht_max') ! wood_harvest()
+          read(param_value, *) this%ht_max
         case ('patch_fraction') ! clearcut()
           read(param_value, *) this%patch_fraction
         case ('efficiency') ! hardwood_control()
-          read(param_value, *) this%patch_fraction
+          read(param_value, *) this%efficiency
         !case ('')
         !case ('where')
         case default
@@ -6427,10 +6497,13 @@ contains
     write(fates_log(), *) 'row_fraction:     ', this%row_fraction
     write(fates_log(), *) 'final_basal_area: ', this%final_basal_area
     write(fates_log(), *) 'thin_fraction:    ', this%thin_fraction
+    write(fates_log(), *) 'harvest_fraction: ', this%harvest_fraction
     write(fates_log(), *) 'dbh_min:          ', this%dbh_min
+    write(fates_log(), *) 'dbh_max:          ', this%dbh_max
     write(fates_log(), *) 'ht_min:           ', this%ht_min
+    write(fates_log(), *) 'ht_max:           ', this%ht_max
     write(fates_log(), *) 'patch_fraction:   ', this%patch_fraction
-    write(fates_log(), *) 'efficiency:        ', this%efficiency
+    write(fates_log(), *) 'efficiency:       ', this%efficiency
     
   end subroutine dump
 
