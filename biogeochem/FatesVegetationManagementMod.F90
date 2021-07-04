@@ -5898,6 +5898,13 @@ contains
     ! ----------------------------------------------------------------------------------------------
     
     field_str = field_pop(line_str, delimiter)
+    
+    if (debug) write(fates_log(), *) 'field_str: ', field_str
+    
+    ! Remove any surrounding whitespace:
+    field_str = adjustl(field_str)
+    field_str = trim(field_str)
+    
     read(field_str, *) field_int
     
   end function field_pop_int
@@ -5973,7 +5980,7 @@ contains
     endif
     
     if (debug) then ! Temporary!!!!!
-      write(fates_log(),*) 'array_str: ', array_str
+      write(fates_log(),*) 'array_str: ', trim(array_str)
       write(fates_log(),*) 'array_open: ', array_open
       write(fates_log(),*) 'array_close: ', array_close
     endif
