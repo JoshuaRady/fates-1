@@ -5899,13 +5899,17 @@ contains
     
     field_str = field_pop(line_str, delimiter)
     
-    if (debug) write(fates_log(), *) 'field_str: ', field_str
+    !if (debug) write(fates_log(), *) 'field_str: ', field_str
     
     ! Remove any surrounding whitespace:
     field_str = adjustl(field_str)
     field_str = trim(field_str)
     
+    if (debug) write(fates_log(), *) 'field_str: ', field_str
+    
     read(field_str, *) field_int
+    
+    if (debug) write(fates_log(), *) 'field_int: ', field_int
     
   end function field_pop_int
 
@@ -6004,9 +6008,13 @@ contains
       ! Remove each value in turn and record them:
       do while (len_trim(arguments_string) /= 0)
         
+        if (debug) write(fates_log(), *) 'arguments_string: ', arguments_string
+        
         !delim_index = index(arguments_string, ',')
         array_out(i) = field_pop_int(arguments_string, delimiter = ',')
         i = i + 1
+        
+        if (debug) write(fates_log(), *) 'array_out: ', array_out
         
       enddo ! (len_trim(arguments_string) /= 0)
     end if
