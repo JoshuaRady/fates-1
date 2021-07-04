@@ -5968,6 +5968,7 @@ contains
     if ((array_open == 0 .and. array_close /= 0) .or. &
         (array_open /= 0 .and. array_close == 0) .or. & (array_open > array_close)) then
       write(fates_log(),*) 'parse_array(): Malformed array notation.'
+      write(fates_log(),*) 'Assay string:', array_str
       call endrun(msg = errMsg(__FILE__, __LINE__))
     endif
     
