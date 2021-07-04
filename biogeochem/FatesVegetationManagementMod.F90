@@ -4288,7 +4288,7 @@ contains
   !Make a version similar to a logging module harvest...
   !subroutine harvest(patch, pfts, dbh_min, dbh_max, ht_min, ht_max, fraction) ! log()??????
   ! The name may change timber_harvest()? harvest_wood()? Logging()?
-  subroutine wood_harvest(site_in, pfts, dbh_min, dbh_max, ht_min, ht_max, harvest_fraction)
+  subroutine wood_harvest(site, pfts, dbh_min, dbh_max, ht_min, ht_max, harvest_fraction)
     ! ----------------------------------------------------------------------------------------------
     ! A generic site level harvest routine...
     !
@@ -4304,7 +4304,7 @@ contains
     ! Uses: NA
     
     ! Arguments:
-    type(ed_site_type), intent(inout), target :: site_in
+    type(ed_site_type), intent(inout), target :: site
     integer(i4), dimension(:), intent(in) :: pfts ! Make optional and default to woody!!!!!
     ! Size range of to trees to harvest.  Defaults to everything, otherwise some range of sizes,
     ! e.g. > 10cm DBH, < 15 m in height, etc.
@@ -4335,9 +4335,9 @@ contains
 !       end do ! Cohort loop.
       
     ! This may end up being a convenience wrapper of a patch level kill function.
-      kill_patch(patch = current_patch, flux_profile = bole_harvest, pfts = pfts, &
-                 dbh_min = dbh_min, dbh_max = dbh_max, ht_min = ht_min, ht_max = ht_max, &
-                 kill_fraction = harvest_fraction, area_fraction = 1.0_r8)
+      call kill_patch(patch = current_patch, flux_profile = bole_harvest, pfts = pfts, &
+                      dbh_min = dbh_min, dbh_max = dbh_max, ht_min = ht_min, ht_max = ht_max, &
+                      kill_fraction = harvest_fraction, area_fraction = 1.0_r8)
       
       current_patch => current_patch%younger
     end do ! Patch loop.
