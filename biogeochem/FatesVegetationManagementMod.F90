@@ -4320,6 +4320,8 @@ contains
     
     ! ----------------------------------------------------------------------------------------------
     
+    ! Need to add catching for optional VM arguments?
+    
     current_patch => site%oldest_patch
     do while (associated(current_patch))
       !current_cohort => current_patch%shortest
@@ -5963,7 +5965,8 @@ contains
     
     ! Error checking:
     ! Only one bracket is present or they are in the wrong order:
-    if ((array_open == 0 .or. array_close == 0) .or. (array_open > array_close)) then
+    if ((array_open == 0 .and. array_close /= 0) .or. &
+        (array_open /= 0 .and. array_close == 0) .or. & (array_open > array_close)) then
       write(fates_log(),*) 'parse_array(): Malformed array notation.'
       call endrun(msg = errMsg(__FILE__, __LINE__))
     endif
