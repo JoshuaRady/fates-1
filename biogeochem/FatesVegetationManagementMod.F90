@@ -673,11 +673,11 @@ contains
         
         case (vm_event_wood_harvest)
           call wood_harvest(site = site_in, pfts = vm_mortality_event%pfts, &
-                            dbh_min = vm_mortality_event%dbh_min,
-                            dbh_max = vm_mortality_event%dbh_max,
-                            ht_min = vm_mortality_event%ht_min,
-                            ht_max = vm_mortality_event%ht_max,
-                            thin_fraction = vm_mortality_event%thin_fraction)
+                            dbh_min = vm_mortality_event%dbh_min, &
+                            dbh_max = vm_mortality_event%dbh_max, &
+                            ht_min = vm_mortality_event%ht_min, &
+                            ht_max = vm_mortality_event%ht_max, &
+                            harvest_fraction = vm_mortality_event%harvest_fraction)
         
         case (vm_event_clearcut)
           call clearcut(site = site_in, pfts = vm_mortality_event%pfts, &
@@ -4322,7 +4322,7 @@ contains
     
     current_patch => site_in%oldest_patch
     do while (associated(current_patch))
-      current_cohort => current_patch%shortest
+      !current_cohort => current_patch%shortest
 
 !       do while(associated(current_cohort))
 !           
@@ -4335,7 +4335,7 @@ contains
 !       end do ! Cohort loop.
       
     ! This may end up being a convenience wrapper of a patch level kill function.
-      kill_patch(patch = current_patch, flux_profile = bole_harvest, pfts = pfts,
+      kill_patch(patch = current_patch, flux_profile = bole_harvest, pfts = pfts, &
                  dbh_min = dbh_min, dbh_max = dbh_max, ht_min = ht_min, ht_max = ht_max, &
                  kill_fraction = harvest_fraction, area_fraction = 1.0_r8)
       
@@ -4344,7 +4344,7 @@ contains
       
       ! Estimate the woodproduct (trunk_product_site) if not done already. !!!!!
     
-  end subroutine harvest
+  end subroutine wood_harvest
 
   !=================================================================================================
 
