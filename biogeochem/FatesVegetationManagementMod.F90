@@ -6347,6 +6347,8 @@ contains
     ! The number of parameters is variable and may be zero.  Remove each one in turn:
     do while (len_trim(arguments_string) /= 0)
       
+      if (debug) write(fates_log(),*) 'arguments_string: ', trim(arguments_string) ! Temporary!!!!!
+      
       ! Get the next name value pair:
       ! The name value pairs are separated by commas but may also contain commas if the argument is
       ! an array.  Therefore we  check for arrays and then look for the argument terminating comma
@@ -6354,13 +6356,22 @@ contains
       delim_index = index(arguments_string, ',')
       array_open = index(arguments_string, '[')
       
+      if (debug) write(fates_log(),*) 'delim_index: ', delim_index ! Temporary!!!!!
+      
       ! If no arrays are present or the next array starts after the next comma then we have found
       ! the end of the argument.  Otherwise we need to look for the first comma after the array:
       ! Note: This assumes that arrays are properly formated and closed.
       if (array_open /= 0 .and. array_open < delim_index) then
         array_close = index(arguments_string, ']') ! Find the end of the array.
-        delim_index = index(arguments_string(array_close+1:), ',') ! Find the following comma.
+        !delim_index = index(arguments_string(array_close+1:), ',') ! Find the following comma.
+        delim_index = array_close + index(arguments_string(array_close+1:), ',') ! Find the following comma.
       end if
+      
+      if (debug) then ! Temporary!!!!!
+        write(fates_log(),*) 'delim_index: ', delim_index
+        write(fates_log(),*) 'array_open: ', array_open
+        write(fates_log(),*) 'array_close: ', array_close
+      endif
       
       ! If arguments remain:
       if (delim_index /= 0) then
@@ -6371,8 +6382,7 @@ contains
         arguments_string = ''
       endif
       
-      !if (debug) write(fates_log(),*) 'param_string: ', trim(param_string) ! Temporary!!!!!
-      if (debug) write(fates_log(),*) 'param_string: ', param_string
+      if (debug) write(fates_log(),*) 'param_string: ', trim(param_string) ! Temporary!!!!!
       
       ! Parse name value pair:
       ! The argument name value pairs are separated by equals signs.  A variable amount of
