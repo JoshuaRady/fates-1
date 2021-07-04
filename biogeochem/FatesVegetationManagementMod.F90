@@ -5960,8 +5960,8 @@ contains
     i = 1
     
     ! Detect the brackets:
-    array_open = index(arguments_string, '[')
-    array_close = index(arguments_string, ']')
+    array_open = index(array_str, '[')
+    array_close = index(array_str, ']')
     
     ! Error checking:
     ! Only one bracket is present or they are in the wrong order:
@@ -5970,6 +5970,12 @@ contains
       write(fates_log(),*) 'parse_array(): Malformed array notation.'
       write(fates_log(),*) 'Assay string:', array_str
       call endrun(msg = errMsg(__FILE__, __LINE__))
+    endif
+    
+    if (debug) then ! Temporary!!!!!
+      write(fates_log(),*) 'array_str: ', array_str
+      write(fates_log(),*) 'array_open: ', array_open
+      write(fates_log(),*) 'array_close: ', array_close
     endif
     
     if (array_open == 0 .and. array_close == 0) then
