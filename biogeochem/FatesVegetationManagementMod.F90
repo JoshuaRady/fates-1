@@ -5873,7 +5873,7 @@ contains
       
     else
       field_str = line_str(:delim_index - 1)
-      line_str = adjustl(line_str(delim_index:)) ! Remove the popped field from the line.
+      line_str = adjustl(line_str(delim_index + 1:)) ! Remove the popped field from the line.
     endif
     
   end function field_pop
