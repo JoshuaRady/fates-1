@@ -6372,6 +6372,7 @@ contains
       endif
       
       !if (debug) write(fates_log(),*) 'param_string: ', trim(param_string) ! Temporary!!!!!
+      if (debug) write(fates_log(),*) 'param_string: ', param_string
       
       ! Parse name value pair:
       ! The argument name value pairs are separated by equals signs.  A variable amount of
@@ -6383,14 +6384,14 @@ contains
       param_name = adjustl(param_name)
       param_name = trim(param_name)
       
-      !if (debug) write(fates_log(),*) 'param_name: ', trim(param_name) ! Temporary!!!!!
+      if (debug) write(fates_log(),*) 'param_name: ', trim(param_name) ! Temporary!!!!!
       
       param_value = param_string(delim_index+1:)
       ! The following may not be needed since Fortran interprets numeric values pretty robustly:
       param_value = adjustl(param_value)
       param_value = trim(param_value)
       
-      !if (debug) write(fates_log(),*) 'param_value: ', trim(param_value) ! Temporary!!!!!
+      if (debug) write(fates_log(),*) 'param_value: ', trim(param_value) ! Temporary!!!!!
       
       ! The meaning of argument names must be consistent (at least in terms of type) across all routines that use them.
       select case (param_name)
@@ -6430,7 +6431,7 @@ contains
         !case ('')
         !case ('where')
         case default
-          write(fates_log(),*) 'VM parameter name is not recognised.'
+          write(fates_log(),*) 'VM parameter name is not recognised: ', param_name
           call endrun(msg = errMsg(__FILE__, __LINE__))
       end select
     enddo ! (len_trim(arguments_string) /= 0)
