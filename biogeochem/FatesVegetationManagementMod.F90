@@ -4320,7 +4320,7 @@ contains
     
     ! ----------------------------------------------------------------------------------------------
     
-    current_patch => site_in%oldest_patch
+    current_patch => site%oldest_patch
     do while (associated(current_patch))
       !current_cohort => current_patch%shortest
 
