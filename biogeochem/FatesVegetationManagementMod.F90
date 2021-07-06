@@ -46,7 +46,7 @@ module FatesVegetationManagementMod
   public :: managed_fecundity
   public :: management_fluxes
   public :: spawn_anthro_disturbed_cohorts
-  ! Destructor!!!!!
+  ! Add destructor!!!!!
   
   ! Primitives:
   public :: plant
@@ -68,7 +68,7 @@ module FatesVegetationManagementMod
   private :: thin_low_perfect
   private :: thin_patch_low_probabilistic
   private :: thin_low_probabilistic
-  private :: wood_harvest
+  private :: harvest_timber
   private :: harvest_mass_min_area
   private :: plant_harvestable_biomass
   private :: cohort_harvestable_biomass
@@ -130,8 +130,14 @@ module FatesVegetationManagementMod
   
   ! Globals:
   
-  ! Debugging flag / switch for module:
+  ! Debugging flags & switches for module:
   logical, parameter, private :: debug = .true.
+  ! At this module's state of development it is frequently useful to have very explicit progress
+  ! reporting and checking that will likely be removed in the future.  The verbose flag can be
+  ! to label this temporary code and the switch can be used to turn the behavior on and off for
+  ! development branches.
+  logical, parameter, private :: verbose = .true. ! Switch, used to set.
+  logical, parameter, private :: vm_debug_verbose = debug .and. verbose ! Flag, use in conditionals.
   
   real(r8), parameter, private :: float_tolerance = rsnbl_math_prec ! Floating point math tolerance.
   
@@ -219,7 +225,7 @@ module FatesVegetationManagementMod
   integer, parameter, private :: vm_event_thin_proportional = 5
   integer, parameter, private :: vm_event_thin_low_perfect = 6
   integer, parameter, private :: vm_event_thin_low_probabilistic = 7
-  integer, parameter, private :: vm_event_wood_harvest = 8
+  integer, parameter, private :: vm_event_harvest_timber = 8
   integer, parameter, private :: vm_event_clearcut = 9
   !integer, parameter, private :: vm_event_XXXXX = X
 
@@ -230,7 +236,6 @@ module FatesVegetationManagementMod
   ! Can we safely use only vm_empty_integer?
   integer, parameter, private :: vm_empty_integer = -99 ! Formerly -1
   real, parameter, private :: vm_empty_real = -99.0_r8 ! Formerly -1.0_r8
-  !real, parameter, private :: vm_empty_array = vm_empty_integer ! Temporary until vm_event%pfts is a real array. Deprecated?
 
   !=================================================================================================
   
@@ -415,7 +420,7 @@ contains
     real(r8) :: understory_mort_d ! Accumulator: The fraction of understory canopy area affected by mortality.
     real(r8) :: patch_mort_d ! The patch-wide disturbed area fraction resulting directly from mortality.
     
-    real(r8) :: c_1st, c_2nd ! Temporary: Used for temporary harvest implementation.
+    !real(r8) :: c_1st, c_2nd ! Temporary: Used for temporary harvest implementation.
     
     ! ----------------------------------------------------------------------------------------------
     if (debug) write(fates_log(), *) 'managed_mortality() entering.'
@@ -617,13 +622,6 @@ contains
     ! The list of event type here is under development with more behaviors to be added.
     ! ----------------------------------------------------------------------------------------------
     
-    if (debug) then
-      write(fates_log(),*) 'vm_generative_event:'
-      call vm_generative_event%dump()
-      write(fates_log(),*) 'vm_mortality_event:'
-      call vm_mortality_event%dump()
-    end if
-    
     if (vm_mortality_event%code /= vm_event_null) then
       if (debug) write(fates_log(), *) 'VM mortality event initiating.'
       
@@ -671,13 +669,13 @@ contains
           call thin_low_probabilistic(site = site_in, pfts = vm_mortality_event%pfts, &
                                       thin_fraction = vm_mortality_event%thin_fraction)
         
-        case (vm_event_wood_harvest)
-          call wood_harvest(site = site_in, pfts = vm_mortality_event%pfts, &
-                            dbh_min = vm_mortality_event%dbh_min, &
-                            dbh_max = vm_mortality_event%dbh_max, &
-                            ht_min = vm_mortality_event%ht_min, &
-                            ht_max = vm_mortality_event%ht_max, &
-                            harvest_fraction = vm_mortality_event%harvest_fraction)
+        case (vm_event_harvest_timber)
+          call harvest_timber(site = site_in, pfts = vm_mortality_event%pfts, &
+                              dbh_min = vm_mortality_event%dbh_min, &
+                              dbh_max = vm_mortality_event%dbh_max, &
+                              ht_min = vm_mortality_event%ht_min, &
+                              ht_max = vm_mortality_event%ht_max, &
+                              harvest_fraction = vm_mortality_event%harvest_fraction)
         
         case (vm_event_clearcut)
           call clearcut(site = site_in, pfts = vm_mortality_event%pfts, &
@@ -979,7 +977,7 @@ contains
           current_patch%fract_ldist_not_harvested = 0.0_r8
         endif ! (current_patch%disturbance_rates(dtype_ilog) > nearzero)
         
-        if (debug) then ! Temporary reporting:
+        if (vm_debug_verbose) then ! Temporary reporting:
           write(fates_log(), *) 'managed_mortality() Disturbance Summary:----------'
           write(fates_log(), *) 'patch_disturbance: ', patch_disturbance
           write(fates_log(), *) 'cohort_disturbance:', cohort_disturbance ! Unlikely to be very informative.
@@ -2530,6 +2528,8 @@ contains
   ! abstractions of human vegetation management activities without depending as intimately on the
   ! the underlying implementation of managed mortality representation.
   !
+  ! The following notes are a work in progress!!!!!
+  !
   !   The kill() functions provided share arguments and concepts...
   !
   ! Arguments:
@@ -3004,7 +3004,7 @@ contains
                                       dbh_min, dbh_max, ht_min, ht_max)
     
     ! Temporary reporting:
-!     if (debug) then
+!     if (vm_debug_verbose) then
 !       write(fates_log(), *) 'kill_patch():'
 !       write(fates_log(), *) 'pfts:          ', pfts
 !       write(fates_log(), *) 'the_dbh_min:   ', the_dbh_min
@@ -3034,30 +3034,40 @@ contains
 
   !=================================================================================================
   ! Management Operations:
-  !   Operations are specific (atomci) real world management interventions that include activities
-  ! such as planting, fertilization, and harvest
-  !   These routines build on primitives to implement operations ...
+  !   Operations are specific (atomic) real world management interventions that include activities
+  ! such as planting, fertilization, and harvest.
+  !   These routines implement abstractions of real work management operations using primitives.
+  ! In turn these operations can be used to simulate management cycles.
   !
+  !
+  ! Classes of Operations:--------------------------------------------------------------------------
   ! Establishment:
   ! - Seeding and planting
   !
   ! Intermediate Operations:
   ! - Competition control
-  ! - Fertilization
+  ! - Fertilization (not yet implemented)
   ! - Thinning
   !
   ! Harvest
   !
-  ! Site Level Routines:
+  ! Site Level Routines:----------------------------------------------------------------------------
   !   These routines perform management activities at the level of the site / grid cell.
-  ! They may target only part of the site but they do so without any a priori knowledge of the patch
-  ! structure.
+  ! They may target only part of the site but they do so without any a priori knowledge of the
+  ! underlying patch structure.  (Some of) these routines can be executed via the VM Driver File:
   !
-  ! plant_site()
-  ! thin_proportional()
-  ! thin_low_perfect()
-  ! thin_low_probabilistic()
-  ! clearcut()
+  
+  ! This module is under ongoing development.  Here is a list of the site level routines statuses:
+  ! plant_site()              Works [As plant()]
+  ! understory_control()      Driver interface incomplete.
+  ! hardwood_control          Works in testing.
+  ! thin_row_low()            No driver interface yet.
+  ! thin_proportional()       Works in testing.
+  ! thin_low_perfect()        No driver interface yet. Being debugged.
+  ! thin_low_probabilistic()  No driver interface yet. Being debugged.
+  ! harvest_timber()          Works in testing.
+  ! harvest_mass_min_area()   No driver interface yet.
+  ! clearcut()                Works in testing.
   !=================================================================================================
 
   !=================================================================================================
@@ -3085,7 +3095,7 @@ contains
     type(ed_site_type), intent(inout), target :: site
     type(bc_in_type), intent(in) :: bc_in
     ! The PFT index number to plant.  Allows an array but only one will be used (see pft_index):
-    integer(i4), dimension(:), intent(in), target :: pfts
+    integer(i4), dimension(:), intent(in), target :: pfts ! Why target?????
     
     ! Optional parameters:
     ! If called due to a VM driver file event 'empty' values may be passed for these parameters.
@@ -4081,6 +4091,8 @@ contains
     ! Operation Type: Thinnning
     ! Operation Level: Patch
     ! Regime: Multiple
+    !
+    !     Being debugged!!!!!
     ! ----------------------------------------------------------------------------------------------
     
     ! Uses: NA
@@ -4143,7 +4155,7 @@ contains
     ! Calculate the midpoint parameter based on the fraction of trees to be thinned:
     model_midpoint = midpoint_slope * thin_fraction + midpoint_intercept
     
-    if (debug) write(fates_log(), *) 'Initial model_midpoint:', model_midpoint ! Temporary reporting.
+    if (vm_debug_verbose) write(fates_log(), *) 'Initial model_midpoint:', model_midpoint ! Temporary reporting.
     
     ! Starting with the initial midpoint value calculate thinning weights and repeat the process
     ! with adjusted values until we are within the tolerance:
@@ -4186,7 +4198,7 @@ contains
       thin_last = thin_total ! Record the trees thinned for comparison during the next cycle.
       ! cycles = cycles + 1 ! Counter for debugging purposes only.
       
-      if (debug) then ! Temporary reporting:
+      if (vm_debug_verbose) then ! Temporary reporting:
         write(fates_log(), *) 'cycles:', cycles
         write(fates_log(), *) 'model_midpoint:', model_midpoint
         write(fates_log(), *) 'midpoint_step:', midpoint_step
@@ -4195,19 +4207,19 @@ contains
       
     end do ! Thinning calculation
     
-    if (debug) write(fates_log(), *) 'Thinning calculation completed.' ! Temporary reporting.
+    if (vm_debug_verbose) write(fates_log(), *) 'Thinning calculation completed.' ! Temporary reporting.
     
     ! Once the proper thinning weights have been solved apply the thinning mortality:
     ! This is a bit repetetive but there is little avoiding that this must be done in a loop.
     current_cohort => patch%shortest
     do while(associated(current_cohort))
-      if (debug) write(fates_log(), *) 'Starting cohort.' ! Temporary reporting.
+      if (vm_debug_verbose) write(fates_log(), *) 'Starting cohort.' ! Temporary reporting.
       
       if (any(pfts == current_cohort%pft)) then
         dbh_tranformed = current_cohort%dbh - mean_dbh
         thin_prob = 1 / (1 + exp(-model_steepness * (dbh_tranformed - model_midpoint)))
         
-        if (debug) write(fates_log(), *) 'thin_prob:', thin_prob! Temporary reporting.
+        if (vm_debug_verbose) write(fates_log(), *) 'thin_prob:', thin_prob! Temporary reporting.
         
         ! Some or all trees could be left in place but we assume a commercial harvest:
         call kill(cohort = current_cohort, flux_profile = bole_harvest, kill_fraction = thin_prob)
@@ -4244,7 +4256,7 @@ contains
     ! Operation Level: Site
     ! Regime: Multiple
     !
-    ! VM Event Interface thin_low_probabilistic([pfts], thin_fraction)
+    ! VM Event Interface thin_low_probabilistic([pfts], thin_fraction)     Being debugged!!!!!
     ! ----------------------------------------------------------------------------------------------
     
     ! Uses: NA
@@ -4274,38 +4286,53 @@ contains
 
   !=================================================================================================
   ! Harvest Subroutines:
-  ! ...
+  !   ...
   !
+  ! Size Specifications:
+  !   The size of plants to harvest may in many cases be specified by either DBH or height.  If
+  ! omitted all sizes will be harvested.  Maximum and minimum values allow flexible selection and
+  ! default to sensible values if omitted.  DBH or height specifications should not be mixed.  See 
+  ! validate_size_specifications() for more information.
+  ! 
+  ! Collateral Damage:
+  !   These routines do not implement collateral or infrastructure damage like the logging module
+  ! does.  Information to parameterize these behaviors is missing for many systems.  Similar
+  ! behavior may be added in the future.
+  !
+  ! Disturbance:
+  !   Harvest is disturbing, that it to say the time since human disturbance is reset with harvest.
   ! We may want to provide non-disturbing harvest routines for continuous cover forestry and
-  ! agriculture.
+  ! agriculture?
   !
-  !=================================================================================================
-
+  !
+  ! ...
   ! Patch level: Clear-cut, non-marketable trees are cut and left on site...
   ! Site level: Preferred species, preferred land type...
-  ! What is the correct most generic harvest function?????
+  !=================================================================================================
 
-  !Make a version similar to a logging module harvest...
-  !subroutine harvest(patch, pfts, dbh_min, dbh_max, ht_min, ht_max, fraction) ! log()??????
-  ! The name may change timber_harvest()? harvest_wood()? Logging()?
-  subroutine wood_harvest(site, pfts, dbh_min, dbh_max, ht_min, ht_max, harvest_fraction)
+  subroutine harvest_timber(site, pfts, dbh_min, dbh_max, ht_min, ht_max, harvest_fraction) ! Was wood_harvest()
     ! ----------------------------------------------------------------------------------------------
-    ! A generic site level harvest routine...
+    ! A generic site level harvest routine.
+    ! Harvest the bole of trees and leave the residue on site for all patches.  By default all tree
+    ! PFTs and sizes are harvested.  Unlike some of the more specific harvest routine this one will
+    ! harvest shrubs if specified.
     !
+    ! Note: The appropriate name for this routine is tricky.  Alternatives could be harvest_bole(),
+    ! harvest_wood(), logging()?
     !-----------------------------------------------------------------------------------------------
     ! Operation Type: Harvest
     ! Operation Level: Site
-    ! Regime: Genteric
+    ! Regime: Generic
     !
     ! VM Event Interface:
-    ! wood_harvest(site_in, pfts, [dbh_min], [dbh_max], [ht_min], [ht_max], harvest_fraction)
+    ! harvest_timber([pfts], [dbh_min], [dbh_max], [ht_min], [ht_max], harvest_fraction)
     ! ----------------------------------------------------------------------------------------------
     
     ! Uses: NA
     
     ! Arguments:
     type(ed_site_type), intent(inout), target :: site
-    integer(i4), dimension(:), intent(in) :: pfts ! Make optional and default to woody!!!!!
+    integer(i4), dimension(:), intent(in), optional :: pfts ! An array of PFT IDs to harvest.
     ! Size range of to trees to harvest.  Defaults to everything, otherwise some range of sizes,
     ! e.g. > 10cm DBH, < 15 m in height, etc.
     real(r8), intent(in), optional :: dbh_min
@@ -4316,27 +4343,33 @@ contains
     
     ! Locals:
     type(ed_patch_type), pointer :: current_patch
-    !type(ed_cohort_type), pointer :: current_cohort
     
     ! ----------------------------------------------------------------------------------------------
+    if (debug) write(fates_log(), *) 'harvest_timber() entering.'
     
-    ! Need to add catching for optional VM arguments?
+    ! Validate the PFTs:
+    ! Default to trees but allow shrubs.
+    if (present(pfts) .and. all(pfts /= vm_empty_integer)) then
+      do i = 1, size(pfts)
+        if (pfts(i) == vm_empty_integer) cycle ! Ignore empty entries.
+        
+        if (.not. any(pfts(i) == woody_pfts)) then
+          write(fates_log(),*) 'harvest_timber(): Only woody PFTs are expected.'
+          write(fates_log(),*) 'Woody PFTs =    ', woody_pfts
+          write(fates_log(),*) 'Selected PFTs = ', pfts
+          call endrun(msg = errMsg(__FILE__, __LINE__)) ! We could just warn here?
+        endif
+      end do
+      
+      the_pfts => pfts
+    else
+      the_pfts => tree_pfts
+    endif ! present(pfts)...
+    
+    ! Sizes will be validated by kill_patch().
     
     current_patch => site%oldest_patch
     do while (associated(current_patch))
-      !current_cohort => current_patch%shortest
-
-!       do while(associated(current_cohort))
-!           
-!           if (current_cohort%pft == 4 .or. current_cohort%pft == 12) then
-!             call kill(cohort = current_cohort, flux_profile = bole_harvest, kill_fraction = 0.5_r8, &
-!                       area_fraction = 1.0_r8) ! Leaving out the area_fraction right now won't work.  Fix that.
-!           endif
-!           
-!         current_cohort => current_cohort%taller
-!       end do ! Cohort loop.
-      
-    ! This may end up being a convenience wrapper of a patch level kill function.
       call kill_patch(patch = current_patch, flux_profile = bole_harvest, pfts = pfts, &
                       dbh_min = dbh_min, dbh_max = dbh_max, ht_min = ht_min, ht_max = ht_max, &
                       kill_fraction = harvest_fraction, area_fraction = 1.0_r8)
@@ -4344,9 +4377,9 @@ contains
       current_patch => current_patch%younger
     end do ! Patch loop.
       
-      ! Estimate the woodproduct (trunk_product_site) if not done already. !!!!!
+    ! Estimate the woodproduct (trunk_product_site)?????
     
-  end subroutine wood_harvest
+  end subroutine harvest_timber
 
   !=================================================================================================
 
@@ -4448,7 +4481,7 @@ contains
                                       dbh_min, dbh_max, ht_min, ht_max)
     
     ! Temporary reporting:
-    if (debug) then
+    if (vm_debug_verbose) then
       write(fates_log(), *) 'harvest_mass_min_area(): the_dbh_min = ', the_dbh_min
       write(fates_log(), *) 'harvest_mass_min_area(): the_dbh_max = ', the_dbh_max
       write(fates_log(), *) 'harvest_mass_min_area(): the_ht_min = ', the_ht_min
@@ -4528,7 +4561,7 @@ contains
               if (debug) write(fates_log(), *) 'harvest_mass_min_area(): Cohort loop.' ! Temp
               
               ! Temporary reporting:
-              if (debug) then
+              if (vm_debug_verbose) then
                 write(fates_log(), *) 'harvest_mass_min_area(): cohort DBH = ', current_cohort%dbh
                 write(fates_log(), *) 'harvest_mass_min_area(): cohort height = ', current_cohort%hite
               end if
@@ -4597,7 +4630,7 @@ contains
             patch_harvest_fraction = harvest_remaining / best_patch_harvestable_biomass
             
             ! Temporary reporting:
-            if (debug) then
+            if (vm_debug_verbose) then
               write(fates_log(), *) 'harvest_mass_min_area(): harvest_remaining = ', harvest_remaining
               write(fates_log(), *) 'harvest_mass_min_area(): best_patch_harvestable_biomass = ', best_patch_harvestable_biomass
               write(fates_log(), *) 'harvest_mass_min_area(): patch_harvest_fraction = ', patch_harvest_fraction
@@ -4877,7 +4910,7 @@ contains
     endif
     
     ! Temporary reporting:
-!     if (debug) then
+!     if (vm_debug_verbose) then
 !       write(fates_log(), *) 'pfts: ', pfts
 !       write(fates_log(), *) 'the_pfts: ', the_pfts
 !       write(fates_log(), *) 'the_dbh_min: ', the_dbh_min
@@ -5324,7 +5357,7 @@ contains
           !if (debug) write(fates_log(), *) 'Cohort is out ----------, PFT = ', current_cohort%pft
         endif
         
-        !if (debug) then
+        !if (vm_debug_verbose) then
           !total_basal_area = total_basal_area + (pi_const * (current_cohort%dbh / 200.0_r8)**2.0_r8 * current_cohort%n) ! Move if kept.
           !write(fates_log(), *) 'Next cohort:'
           !write(fates_log(), *) 'current_cohort%dbh = ', current_cohort%dbh
@@ -5607,7 +5640,7 @@ contains
   !   The header may be missing (bad style) or may occur more than once (might be useful for really
   ! long files).
   !   The column names beyond 'Date' are not checked and their values will not change anything about
-  ! how the file will be read in, but it is good style to include them.
+  ! how the file will be read in, but it is good style to include them for readablity.
   !   The header line must start with 'Date".  It can be be preceded by white space and some case
   ! variants will be accepted but both are bad style and may be deprecated in the future.
   !
@@ -5640,7 +5673,7 @@ contains
   !
   ! Notes:------------------------------------------------------------------------------------------
   ! - Important: This format is a work in progress and may change further.  The file format is
-  ! denoted a draft 2 not because it is not working, but because it is prerelease and may change.
+  ! denoted as draft 2 not because it is not working, but because it is prerelease and may change.
   !
   ! - The line length should probably be kept to under 100 characters to be compatible will
   ! different Fortran implementations.  The code does not enforce that though.  In fact it uses
@@ -5744,7 +5777,7 @@ contains
               ! Ignore blank lines (whitespace only) and lines that contain only comments:
               ! Will this handle tabs?
               if (len_trim(line_str) == 0) then
-                if (debug) write(fates_log(), *) 'Skipping blank or commented line.' ! Temporary!
+                if (vm_debug_verbose) write(fates_log(), *) 'Skipping blank or commented line.' ! Temporary!
               else
                 
                 ! Extract the leading fields:
@@ -5754,7 +5787,7 @@ contains
                 
                 ! Check if this is the header line:
                 if (date_str == "Date" .or. date_str == "date" .or. date_str == "DATE") then
-                  if (debug) write(fates_log(),*) 'The VM event driver header:', trim(line_str)
+                  if (vm_debug_verbose) write(fates_log(),*) 'The VM event driver header:', trim(line_str)
                   ! Could add additional error checking here.
                 else
                   
@@ -5821,22 +5854,24 @@ contains
 
   !=================================================================================================
 
-  !function field_pop(line_str) result(field_str) ! field_pop_str()?
   function field_pop(line_str, delimiter) result(field_str) ! field_pop_str()?
     ! ----------------------------------------------------------------------------------------------
-    ! Pop the first field off the front (left) of a line of fields encoded as text.
-    ! Returns the field as the return value and removes it from the line string passed in.
+    ! Driver File Utility:
+    !   Pop the first field off the front (left) of a line of fields encoded as text. Returns the
+    ! field and removes it from the line string passed in.
     !
-    ! By default the delimiter between fields is one or more spaces.  If an alternative character
-    ! is provided the delimiter will be...
-    !          In testing -> Note: We could add an optional delimiter argument to expand the utility of this routine.
+    ! By default the delimiter between fields is one or more spaces.  An alternative delimiter
+    ! character may be provided in which case whitespace is still considered formatting, not content.
+    !
+    ! Note: Adding handling of escaped, commented, or bracketed delimiters could further extend the
+    ! Utility of this routine.
     ! ----------------------------------------------------------------------------------------------
     
     ! Uses: NA
     
     ! Arguments:
-    character(len = *), intent(inout) :: line_str
-    character(len = 1), intent(in), optional :: delimiter ! delimiter_char?
+    character(len = *), intent(inout) :: line_str ! A string containing data fields.
+    character(len = 1), intent(in), optional :: delimiter ! The delimiter character.
     
     ! Locals:
     character(len = line_strlen) :: field_str ! Return value
@@ -5856,7 +5891,7 @@ contains
     line_str = adjustl(line_str) ! This pushes whitespace to the end of the line, which we remove.
     line_str = trim(line_str)
     
-    ! Find the the following delimiting block of 1 or more spaces:
+    ! Find the the next delimiter:
     delim_index = index(line_str, the_delimiter)
     
     ! If 0 this could be the last field, make sure something is there:
@@ -5882,14 +5917,15 @@ contains
 
   function field_pop_int(line_str, delimiter) result(field_int)
     ! ----------------------------------------------------------------------------------------------
-    ! Pop the first field off the front (left) of a line and return it as an integer.
+    ! Driver File Utility:
+    !   Pop the first field off the front (left) of a line and return it as an integer.
     ! ----------------------------------------------------------------------------------------------
     
     ! Uses: NA
     
     ! Arguments:
-    character(len = *), intent(inout) :: line_str
-    character(len = 1), intent(in), optional :: delimiter ! delimiter_char?
+    character(len = *), intent(inout) :: line_str ! A string containing data fields.
+    character(len = 1), intent(in), optional :: delimiter ! The delimiter character.
     
     ! Locals:
     character(len = line_strlen) :: field_str ! Intermediate
@@ -5899,17 +5935,15 @@ contains
     
     field_str = field_pop(line_str, delimiter)
     
-    !if (debug) write(fates_log(), *) 'field_str: ', field_str
-    
     ! Remove any surrounding whitespace:
     field_str = adjustl(field_str)
     field_str = trim(field_str)
     
-    if (debug) write(fates_log(), *) 'field_str: ', field_str
+    if (vm_debug_verbose) write(fates_log(), *) 'field_str: ', field_str
     
     read(field_str, *) field_int
     
-    if (debug) write(fates_log(), *) 'field_int: ', field_int
+    if (vm_debug_verbose) write(fates_log(), *) 'field_int: ', field_int
     
   end function field_pop_int
 
@@ -5917,20 +5951,27 @@ contains
 
   function field_pop_real(line_str, delimiter) result(field_real)
     ! ----------------------------------------------------------------------------------------------
-    ! Pop the first field off the front (left) of a line and return it as a real.
+    ! Driver File Utility:
+    !   Pop the first field off the front (left) of a line and return it as a real.
+    !
+    ! Note: Currently unused.
     ! ----------------------------------------------------------------------------------------------
     
     ! Uses: NA
     
     ! Arguments:
-    character(len = *), intent(inout) :: line_str
-    character(len = 1), intent(in), optional :: delimiter ! delimiter_char?
+    character(len = *), intent(inout) :: line_str ! A string containing data fields.
+    character(len = 1), intent(in), optional :: delimiter ! The delimiter character.
     
     ! Locals:
     character(len = line_strlen) :: field_str ! Intermediate
     real(r8) :: field_real ! Return value
     
     ! ----------------------------------------------------------------------------------------------
+    
+    ! Remove any surrounding whitespace:
+    field_str = adjustl(field_str)
+    field_str = trim(field_str)
     
     field_str = field_pop(line_str, delimiter)
     read(field_str, *) field_real
@@ -5941,11 +5982,14 @@ contains
 
   subroutine parse_array(array_str, array_out) ! parse_int_array?
     ! ----------------------------------------------------------------------------------------------
-    ! Read a string representing a integer array and return an array with the values.
-    ! Format:
-    !   Arrays are modern Fortran / C style with square bounding square bracket and values separated
-    ! by commas.  White space is optional but the style suggestion is to lead with single spaces,
-    ! and avoid spaces prior to commas.
+    ! Driver File Utility:
+    !   Read a string representing a integer array and return an array with the values.
+    !
+    ! Array Format:
+    !   Arrays are Fortran 2003 / C style with square square bounding brackets and values separated
+    ! by commas.  White space is optional but the suggested style is to avoid space prior to commas:
+    ! Fine: [1, 2] or [1,2,3,4]
+    ! Not:  [ 1 , 2 , 3]
     !   For robustness and ease of use single unbracketed values are handled appropriately but
     ! missing values are an error.
     !
@@ -5960,10 +6004,9 @@ contains
     
     ! Locals:
     character(len = len(array_str)) :: arguments_string ! Intermediate
-    !integer :: delim_index
     integer :: array_open
     integer :: array_close
-    integer :: i
+    integer :: i ! Iterator
     
     ! ----------------------------------------------------------------------------------------------
     
@@ -5983,10 +6026,10 @@ contains
       call endrun(msg = errMsg(__FILE__, __LINE__))
     endif
     
-    if (debug) then ! Temporary!!!!!
-      write(fates_log(),*) 'array_str: ', trim(array_str)
-      write(fates_log(),*) 'array_open: ', array_open
-      write(fates_log(),*) 'array_close: ', array_close
+    if (vm_debug_verbose) then
+      write(fates_log(),*) 'parse_array() array_str: ', trim(array_str)
+      write(fates_log(),*) 'parse_array() array_open: ', array_open
+      write(fates_log(),*) 'parse_array() array_close: ', array_close
     endif
     
     if (array_open == 0 .and. array_close == 0) then
@@ -6008,25 +6051,25 @@ contains
       ! Remove each value in turn and record them:
       do while (len_trim(arguments_string) /= 0)
         
-        if (debug) write(fates_log(), *) 'arguments_string: ', arguments_string
+        if (vm_debug_verbose) write(fates_log(), *) 'parse_array() arguments_string: ', arguments_string
         
-        !delim_index = index(arguments_string, ',')
         array_out(i) = field_pop_int(arguments_string, delimiter = ',')
         i = i + 1
         
-        if (debug) write(fates_log(), *) 'array_out: ', array_out
+        if (vm_debug_verbose) write(fates_log(), *) 'parse_array() array_out: ', array_out
         
       enddo ! (len_trim(arguments_string) /= 0)
     end if
     
-    if (debug) write(fates_log(), *) 'parse_array() output: ', array_out
+    if (vm_debug_verbose) write(fates_log(), *) 'parse_array() output: ', array_out
   end subroutine parse_array
 
   !=================================================================================================
 
   function is_now(date_string)
     ! ----------------------------------------------------------------------------------------------
-    ! Parse the string passed in as a date and determine if it matches the current time step.
+    ! Driver File Utility:
+    !   Parse the string passed in as a date and determine if it matches the current time step.
     !
     ! The date string format is somewhat flexible. We expect that the event file may be written
     ! manually in some cases or exported from a spread sheet, etc.  We don't want execution to fail
@@ -6068,8 +6111,7 @@ contains
     work_string = date_string ! Subsequent operations modify the string in place so make a copy.
     work_string = trim(work_string)! This shouldn't be necessary currently but doesn't hurt.
     
-    ! Add error checking...
-    ! Check for length and invalid characters!!!!!
+    ! Note: We could add error checking for length and invalid characters here.
     
     ! Parse the date string:
     delim_index = scan(work_string, delim_chars)
@@ -6086,7 +6128,8 @@ contains
     day_str = work_string(delim_index+1:)
     read(day_str, *) day
     
-    if (debug) then
+    if (vm_debug_verbose) then
+      write(fates_log(), *) 'is_now():'
       write(fates_log(), *) 'Date string: ', trim(date_string)
       write(fates_log(), *) 'Year:  ', year
       write(fates_log(), *) 'Month: ', month
@@ -6105,7 +6148,8 @@ contains
 
   function is_here(lat_string, lon_string, site) ! event_is_here()?
     ! ----------------------------------------------------------------------------------------------
-    ! Determine if the current site matches the specified coordinates.
+    ! Driver File Utility:
+    !   Determine if the current site matches the specified coordinates.
     !
     ! Currently the coordinates are matched with a small tolerance.  It would be better if we knew
     ! the actual bounds of the grid cell but those are not available currently.  The tolerance is
@@ -6220,9 +6264,9 @@ contains
     
     this%code = vm_event_null
     
-    ! We need sensible defaults for these parameters or a value that indicates the parameter is
-    ! 'missing'.  These value are temporary:
-    this%pfts = vm_empty_integer ! Change to array (16 in length?)!!!!!
+    ! Provide sensible defaults for the parameters or a value that indicates the parameter is
+    ! 'missing':
+    this%pfts = vm_empty_integer
     this%density = vm_empty_real
     this%dbh = vm_empty_real
     this%height = vm_empty_real
@@ -6317,8 +6361,6 @@ contains
     event_type_str = adjustl(event_type_str)
     event_type_str = trim(event_type_str)
     
-    !if (debug) write(fates_log(),*) 'event_type_str: ', trim(event_type_str) ! Temporary!!!!!
-    
     select case (event_type_str)
       case ('plant')
         this%code = vm_event_plant
@@ -6332,11 +6374,10 @@ contains
         this%code = vm_event_thin_low_perfect
       case ('thin_low_probabilistic')
         this%code = vm_event_thin_low_probabilistic
-      case ('wood_harvest')
-        this%code = vm_event_wood_harvest
+      case ('harvest_timber')
+        this%code = vm_event_harvest_timber
       case ('clearcut')
         this%code = vm_event_clearcut
-      !case ()
       case default
         write(fates_log(),*) 'VM event name is not recognised:', event_type_str
         call endrun(msg = errMsg(__FILE__, __LINE__))
@@ -6355,8 +6396,6 @@ contains
     arguments_string = adjustl(arguments_string)
     arguments_string = trim(arguments_string)
     
-    !if (debug) write(fates_log(),*) 'arguments_string: ', trim(arguments_string) ! Temporary!!!!!
-    
     ! There should be no content after the closing parenthesis (any comments have already been removed):
     end_string = arguments_string(delim_index+1:)
     if (len_trim(end_string) > 0) then
@@ -6368,7 +6407,7 @@ contains
     ! The number of parameters is variable and may be zero.  Remove each one in turn:
     do while (len_trim(arguments_string) /= 0)
       
-      if (debug) write(fates_log(),*) 'arguments_string: ', trim(arguments_string) ! Temporary!!!!!
+      if (vm_debug_verbose) write(fates_log(),*) 'arguments_string: ', trim(arguments_string) ! Temporary!!!!!
       
       ! Get the next name value pair:
       ! The name value pairs are separated by commas but may also contain commas if the argument is
@@ -6377,18 +6416,17 @@ contains
       delim_index = index(arguments_string, ',')
       array_open = index(arguments_string, '[')
       
-      if (debug) write(fates_log(),*) 'delim_index: ', delim_index ! Temporary!!!!!
+      if (vm_debug_verbose) write(fates_log(),*) 'delim_index: ', delim_index ! Temporary!!!!!
       
       ! If no arrays are present or the next array starts after the next comma then we have found
       ! the end of the argument.  Otherwise we need to look for the first comma after the array:
       ! Note: This assumes that arrays are properly formated and closed.
       if (array_open /= 0 .and. array_open < delim_index) then
         array_close = index(arguments_string, ']') ! Find the end of the array.
-        !delim_index = index(arguments_string(array_close+1:), ',') ! Find the following comma.
         delim_index = array_close + index(arguments_string(array_close+1:), ',') ! Find the following comma.
       end if
       
-      if (debug) then ! Temporary!!!!!
+      if (vm_debug_verbose) then ! Temporary!!!!!
         write(fates_log(),*) 'delim_index: ', delim_index
         write(fates_log(),*) 'array_open: ', array_open
         write(fates_log(),*) 'array_close: ', array_close
@@ -6403,7 +6441,7 @@ contains
         arguments_string = ''
       endif
       
-      if (debug) write(fates_log(),*) 'param_string: ', trim(param_string) ! Temporary!!!!!
+      if (vm_debug_verbose) write(fates_log(),*) 'param_string: ', trim(param_string) ! Temporary!!!!!
       
       ! Parse name value pair:
       ! The argument name value pairs are separated by equals signs.  A variable amount of
@@ -6415,22 +6453,20 @@ contains
       param_name = adjustl(param_name)
       param_name = trim(param_name)
       
-      if (debug) write(fates_log(),*) 'param_name: ', trim(param_name) ! Temporary!!!!!
+      if (vm_debug_verbose) write(fates_log(),*) 'param_name: ', trim(param_name) ! Temporary!!!!!
       
       param_value = param_string(delim_index+1:)
       ! The following may not be needed since Fortran interprets numeric values pretty robustly:
       param_value = adjustl(param_value)
       param_value = trim(param_value)
       
-      if (debug) write(fates_log(),*) 'param_value: ', trim(param_value) ! Temporary!!!!!
+      if (vm_debug_verbose) write(fates_log(),*) 'param_value: ', trim(param_value) ! Temporary!!!!!
       
       ! The meaning of argument names must be consistent (at least in terms of type) across all routines that use them.
       select case (param_name)
         case ('pfts') ! Many...
-          ! This may be a single value or array but for now we assume there is only one (array of 1).
-          ! We also should allow group names.
-          !read(param_value, *) this%pfts
-          !pfts = parse_array(param_value)
+          ! This may be a single value or array of PFT ID numbers.
+          ! In the future we may allow PFT group names.
           call parse_array(param_value, this%pfts)
         
         case ('density') ! plant()
@@ -6445,15 +6481,15 @@ contains
           read(param_value, *) this%final_basal_area
         case ('thin_fraction') ! thin_proportional(), thin_patch_low_probabilistic()
           read(param_value, *) this%thin_fraction
-        case ('harvest_fraction') ! wood_harvest()
+        case ('harvest_fraction') ! harvest_timber()
           read(param_value, *) this%harvest_fraction
-        case ('dbh_min') ! wood_harvest(), clearcut()
+        case ('dbh_min') ! harvest_timber(), clearcut()
           read(param_value, *) this%dbh_min
-        case ('dbh_max') ! wood_harvest()
+        case ('dbh_max') ! harvest_timber()
           read(param_value, *) this%dbh_max
-        case ('ht_min') ! wood_harvest(), clearcut()
+        case ('ht_min') ! harvest_timber(), clearcut()
           read(param_value, *) this%ht_min
-        case ('ht_max') ! wood_harvest()
+        case ('ht_max') ! harvest_timber()
           read(param_value, *) this%ht_max
         case ('patch_fraction') ! clearcut()
           read(param_value, *) this%patch_fraction
@@ -6467,9 +6503,9 @@ contains
       end select
     enddo ! (len_trim(arguments_string) /= 0)
     
-    if (debug) then
+    if (vm_debug_verbose) then
       write(fates_log(), *) 'Loaded VM event from driver file:'
-      call this%dump()
+      !call this%dump()
     endif
     
   end subroutine load
