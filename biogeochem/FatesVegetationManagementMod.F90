@@ -222,12 +222,13 @@ module FatesVegetationManagementMod
   integer, parameter, private :: vm_event_plant = 1
   integer, parameter, private :: vm_event_understory_control = 2 ! Not yet plumbed in.
   integer, parameter, private :: vm_event_hardwood_control = 3
-  integer, parameter, private :: vm_event_thin_test1 = 4 ! In progress, currently wraps thin_row_low() to do perfect low thinning.
+!  integer, parameter, private :: vm_event_thin_test1 = 4 ! In progress, currently wraps thin_row_low() to do perfect low thinning.
   integer, parameter, private :: vm_event_thin_proportional = 5
   integer, parameter, private :: vm_event_thin_low_perfect = 6
   integer, parameter, private :: vm_event_thin_low_probabilistic = 7
-  integer, parameter, private :: vm_event_harvest_timber = 8
-  integer, parameter, private :: vm_event_clearcut = 9
+  integer, parameter, private :: vm_event_thin_row_low = 8
+  integer, parameter, private :: vm_event_harvest_timber = 9
+  integer, parameter, private :: vm_event_clearcut = 10
   !integer, parameter, private :: vm_event_XXXXX = X
 
   integer, parameter, private :: vm_event_generative_max = vm_event_plant
@@ -630,7 +631,7 @@ contains
       ! That may not work so well if multiple events are allowed in the future however.
       select case (vm_mortality_event%code)
         !case (vm_event_null)
-        case (vm_event_thin_test1)
+!        case (vm_event_thin_test1)
           ! For testing purposes replicate the manually triggered thinning (all patches) from above.
           
           ! Explanation: thin_row_low() takes a number of parameters, some optional.  We will limit
@@ -639,21 +640,21 @@ contains
           ! Virtual call:
           !thin_event(pfts, row_fraction, [patch_fraction], final_basal_area, [final_stem_density])?
           
-          current_patch => site_in%oldest_patch
-          do while (associated(current_patch))
-            if (thinnable_patch(patch = current_patch, &
-                pfts = vm_mortality_event%pfts, &
-                goal_basal_area = vm_mortality_event%final_basal_area)) then
-              
-              call thin_row_low(patch = current_patch, &
-                                pfts = vm_mortality_event%pfts, &
-                                row_fraction = vm_mortality_event%row_fraction, &
-                                final_basal_area = vm_mortality_event%final_basal_area)
-            
-              ! Add accumulation of harvest here????
-            endif
-            current_patch => current_patch%younger
-          end do
+!           current_patch => site_in%oldest_patch
+!           do while (associated(current_patch))
+!             if (thinnable_patch(patch = current_patch, &
+!                 pfts = vm_mortality_event%pfts, &
+!                 goal_basal_area = vm_mortality_event%final_basal_area)) then
+!               
+!               call thin_row_low(patch = current_patch, &
+!                                 pfts = vm_mortality_event%pfts, &
+!                                 row_fraction = vm_mortality_event%row_fraction, &
+!                                 final_basal_area = vm_mortality_event%final_basal_area)
+!             
+!               ! Add accumulation of harvest here????
+!             endif
+!             current_patch => current_patch%younger
+!           end do
         
         case (vm_event_hardwood_control)
           call hardwood_control(site = site_in, efficiency = vm_mortality_event%efficiency)
@@ -669,6 +670,12 @@ contains
         case (vm_event_thin_low_probabilistic)
           call thin_low_probabilistic(site = site_in, pfts = vm_mortality_event%pfts, &
                                       thin_fraction = vm_mortality_event%thin_fraction)
+        
+        case (vm_event_thin_row_low)
+          call thin_row_low(site = site_in, pfts = vm_mortality_event%pfts, &
+                            row_fraction = vm_mortality_event%row_fraction, &
+                            final_basal_area = vm_mortality_event%final_basal_area)
+
         
         case (vm_event_harvest_timber)
           call harvest_timber(site = site_in, pfts = vm_mortality_event%pfts, &
@@ -3967,7 +3974,7 @@ contains
   !=================================================================================================
 
   subroutine thin_patch_row_low(patch, pfts, row_fraction, patch_fraction, &
-                          final_basal_area, final_stem_density, harvest_estimate) ! Return the harvest amount!
+                                final_basal_area, final_stem_density, harvest_estimate) ! Return the harvest amount!
     ! ----------------------------------------------------------------------------------------------
     ! Perform a row thinning followed by a low thinning to achieve a desired final basal area or
     ! stem density.
@@ -3982,7 +3989,7 @@ contains
     ! management practice and is parameterized to be compatible with an operation perscription.  The
     ! two phase thinning process yields a more complex demography and the final result will be
     ! somewhat variable, not always hitting the goal value perfectly, which is also realistic.  It
-    ! alos requires an iterative algorithm, which was useful to help develop a robust set of low
+    ! also requires an iterative algorithm, which was useful to help develop a robust set of low
     ! level utilities that will allow other practices to be developed.
     !
     ! Note: In general a low thinning can not be performed perfectly from the "bottom up" due to
@@ -4019,7 +4026,7 @@ contains
                                                          ! Defaults to 1.0 / whole patch.
                                                          ! Values > 1 result in the patch being 
                                                          ! split into thinned and unthinned patches.
-    real(r8), intent(in), optional :: final_basal_area   ! Goal final basal area index (m^2 / ha ?????)
+    real(r8), intent(in), optional :: final_basal_area   ! Goal final basal area index (m^2 / ha)
     real(r8), intent(in), optional :: final_stem_density ! Goal final stem density (trees / ha)
     real(r8), intent(out), optional :: harvest_estimate  ! The wood harvested by this operation.
     
@@ -4250,22 +4257,64 @@ contains
 
   !=================================================================================================
 
-!   subroutine thin_row_low()
-!     ! ----------------------------------------------------------------------------------------------
-!     ! 
-!     ! ----------------------------------------------------------------------------------------------
-!     
-!     ! Uses:
-!     
-!     ! Arguments:
-!     
-!     ! Locals:
-!     
-!     ! ----------------------------------------------------------------------------------------------
-!     
-!   end subroutine thin_row_low
-!
-!   !=================================================================================================
+  subroutine thin_row_low(site, pfts, row_fraction, final_basal_area, harvest_estimate)
+    ! ----------------------------------------------------------------------------------------------
+    ! Perform a row thinning followed by a low thinning across all patches of a site.
+    !
+    ! Note: Need to finalize parameters!!!!!
+    !
+    !-----------------------------------------------------------------------------------------------
+    ! Operation Type: Thinning
+    ! Operation Level: Site
+    ! Regime: ...
+    !
+    ! VM Event Interface:
+    ! thin_row_low([pfts], [row_fraction], final_basal_area) final_basal_area must be supplied until SD is enabled!!!!!
+    ! ----------------------------------------------------------------------------------------------
+    
+    ! Uses:
+    
+    ! Arguments:
+    type(ed_site_type), intent(in), target :: site          ! The current site object.
+    integer(i4), dimension(:), intent(in), optional :: pfts ! An array of PFT IDs to thin.
+    real(r8), intent(in), optional :: row_fraction          ! The fraction of rows to initially thin,
+                                                            ! e.g. every 5th row = 0.2.
+                                                            ! Should this be mandatory.  With a default of 0 it turns into a low thinning?
+    real(r8), intent(in), optional :: final_basal_area      ! Goal final basal area index (m^2 / ha).
+    !real(r8), intent(in), optional :: final_stem_density    ! Goal final stem density (trees / ha).
+    real(r8), intent(out), optional :: harvest_estimate     ! The wood harvested by this operation.
+    
+    ! Locals:
+    type(ed_patch_type), pointer :: current_patch
+    real(r8) :: total_harvest ! Accumulator
+    real(r8) :: patch_harvest
+    
+    ! ----------------------------------------------------------------------------------------------
+    if (debug) write(fates_log(), *) 'thin_row_low() entering.'
+    
+    total_harvest = 0.0_r8
+    
+    current_patch => site%oldest_patch
+    do while (associated(current_patch))
+      
+      if (thinnable_patch(patch = current_patch, pfts = pfts, goal_basal_area = final_basal_area)) then
+        patch_harvest = 0.0_r8 ! Unnecessary?
+        
+        call thin_row_low(patch = current_patch, pfts = pfts, row_fraction = row_fraction, &
+                          final_basal_area = final_basal_area, harvest_estimate = patch_harvest)
+            
+        total_harvest = total_harvest + patch_harvest ! Accumulate the total harvest.
+      endif
+      current_patch => current_patch%younger
+    end do
+    
+    if (present(harvest_estimate)) then
+      harvest_estimate = harvest
+    endif
+    
+  end subroutine thin_row_low
+
+  !=================================================================================================
 
   function thinnable_patch(patch, pfts, goal_basal_area) ! result(thinnable_patch) ! REVIEW!
     ! ----------------------------------------------------------------------------------------------
@@ -6388,14 +6437,16 @@ contains
         this%code = vm_event_plant
       case ('hardwood_control')
         this%code = vm_event_hardwood_control
-      case ('thin_row_low') ! Name will probably change!!!!!
-        this%code = vm_event_thin_test1
+!       case ('!!!!!') ! Name will probably change!!!!!
+!         this%code = vm_event_thin_test1
       case ('thin_proportional')
         this%code = vm_event_thin_proportional
       case ('thin_low_perfect')
         this%code = vm_event_thin_low_perfect
       case ('thin_low_probabilistic')
         this%code = vm_event_thin_low_probabilistic
+      case ('thin_row_low')
+        this%code = vm_event_thin_row_low
       case ('harvest_timber')
         this%code = vm_event_harvest_timber
       case ('clearcut')
