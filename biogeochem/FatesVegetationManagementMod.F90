@@ -4333,7 +4333,7 @@ contains
     
     ! Arguments:
     type(ed_site_type), intent(inout), target :: site
-    integer(i4), dimension(:), intent(in), optional :: pfts ! An array of PFT IDs to harvest.
+    integer(i4), dimension(:), intent(in), optional, target :: pfts ! An array of PFT IDs to harvest.
     ! Size range of to trees to harvest.  Defaults to everything, otherwise some range of sizes,
     ! e.g. > 10cm DBH, < 15 m in height, etc.
     real(r8), intent(in), optional :: dbh_min
