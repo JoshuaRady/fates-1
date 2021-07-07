@@ -66,6 +66,7 @@ module FatesVegetationManagementMod
   private :: thin_low_perfect
   private :: thin_patch_low_probabilistic
   private :: thin_low_probabilistic
+  private :: thin_patch_row_low
   private :: thin_row_low
   private :: thinnable_patch
   private :: harvest_timber
@@ -3388,8 +3389,9 @@ contains
     ! the stems with little discernable effect.  A size or canopy postion cutoff in the thinning
     ! calculations could remedy this but requires some thought.
     !
-    ! This routine duplicates and expands much of the code from thin_row_low(), except the row
-    ! thinning.  thin_row_low() should probably be rewritten to use this routine.
+    ! This routine duplicates and expands much of the code from thin_patch_row_low() (which was
+    ! written first), except the row thinning.  thin_patch_row_low() should probably be rewritten to
+    ! use this routine.
     !
     ! patch_fraction is currently ignored!!!!!
     !
@@ -3964,7 +3966,7 @@ contains
 
   !=================================================================================================
 
-  subroutine thin_row_low(patch, pfts, row_fraction, patch_fraction, &
+  subroutine thin_patch_row_low(patch, pfts, row_fraction, patch_fraction, &
                           final_basal_area, final_stem_density, harvest_estimate) ! Return the harvest amount!
     ! ----------------------------------------------------------------------------------------------
     ! Perform a row thinning followed by a low thinning to achieve a desired final basal area or
@@ -4041,7 +4043,7 @@ contains
     integer :: i ! Iterator
     
     ! ----------------------------------------------------------------------------------------------
-    if (debug) write(fates_log(), *) 'thin_row_low() entering.'
+    if (debug) write(fates_log(), *) 'thin_patch_row_low() entering.'
     
     ! Initialize variables:
     harvest = 0.0_r8
@@ -4056,7 +4058,7 @@ contains
         if (pfts(i) == vm_empty_integer) cycle ! Ignore empty entries.
         
         if (.not. any(pfts(i) == tree_pfts)) then
-          write(fates_log(),*) 'thin_row_low(): Cannot thin non-tree PFTs.'
+          write(fates_log(),*) 'thin_patch_row_low(): Cannot thin non-tree PFTs.'
           write(fates_log(),*) 'Tree PFTs =    ', tree_pfts
           write(fates_log(),*) 'Selected PFTs =', pfts
           call endrun(msg = errMsg(__FILE__, __LINE__))
@@ -4071,7 +4073,7 @@ contains
     ! Determine the thinning amount:
     if (present(row_fraction)) then
       if (row_fraction > 1.0_r8 .or. row_fraction <= 0.0_r8) then ! Better high and low values?
-        write(fates_log(),*) 'thin_row_low(): Invalid row fraction provided.'
+        write(fates_log(),*) 'thin_patch_row_low(): Invalid row fraction provided.'
         call endrun(msg = errMsg(__FILE__, __LINE__))
       end if
     
@@ -4084,7 +4086,7 @@ contains
     ! It is only passed on to kill().
     if (present(patch_fraction)) then
       if (patch_fraction > 1.0_r8 .or. patch_fraction <= 0.0_r8) then
-        write(fates_log(),*) 'thin_row_low(): Invalid patch fraction provided.'
+        write(fates_log(),*) 'thin_patch_row_low(): Invalid patch fraction provided.'
         call endrun(msg = errMsg(__FILE__, __LINE__))
       end if
     
@@ -4095,14 +4097,14 @@ contains
     
     ! Need only BAI or stem density:
     if (present(final_basal_area) .and. present(final_stem_density)) then
-      write(fates_log(),*) 'thin_row_low(): Provide basal area index or stem density, not both.'
+      write(fates_log(),*) 'thin_patch_row_low(): Provide basal area index or stem density, not both.'
       call endrun(msg = errMsg(__FILE__, __LINE__))
     else if (present(final_basal_area)) then
       use_bai = .true.
     else if (present(final_stem_density)) then
       use_bai = .false.
     else
-      write(fates_log(),*) 'thin_row_low(): Must provide basal area index or stem density.'
+      write(fates_log(),*) 'thin_patch_row_low(): Must provide basal area index or stem density.'
       call endrun(msg = errMsg(__FILE__, __LINE__))
     endif
     
@@ -4117,7 +4119,7 @@ contains
         ((.not. use_bai) .and. (patch_sd > final_stem_density))) then
       
       ! Thin every X rows = remove 1/X of each cohort:----------------------------------------------
-      if (debug) write(fates_log(), *) 'thin_row_low() starting row thinning.'
+      if (debug) write(fates_log(), *) 'thin_patch_row_low() starting row thinning.'
       
       current_cohort => patch%shortest
       do while(associated(current_cohort))
@@ -4145,7 +4147,7 @@ contains
       ! until the goal has been reached:
       
       if (use_bai) then ! Thin to a goal basal area:
-        if (debug) write(fates_log(), *) 'thin_row_low() starting low thinning by BAI.'
+        if (debug) write(fates_log(), *) 'thin_patch_row_low() starting low thinning by BAI.'
         
         ! Given the fixed allometry this will also give us cohorts from the lowest DBH:
         current_cohort => patch%shortest
@@ -4161,13 +4163,13 @@ contains
             
             ! If the cohort basal area is less that what still needs to be removed kill all of it:
             if (cohort_ba <= thin_ba_remaining) then
-              if (debug) write(fates_log(), *) 'thin_row_low() cut whole cohort.'
+              if (debug) write(fates_log(), *) 'thin_patch_row_low() cut whole cohort.'
               
               call kill_disturbed(cohort = current_cohort, flux_profile = bole_harvest, &
                                   kill_fraction = 1.0_r8)
               
             else ! Otherwise only take part of the cohort:
-              if (debug) write(fates_log(), *) 'thin_row_low() cut part of cohort.'
+              if (debug) write(fates_log(), *) 'thin_patch_row_low() cut part of cohort.'
               
               cohort_fraction = thin_ba_remaining / cohort_ba
               
@@ -4192,7 +4194,7 @@ contains
         end do ! Cohort loop.
         
       else ! Thin to a goal stem density:
-        if (debug) write(fates_log(), *) 'thin_row_low() starting row by stem density.'
+        if (debug) write(fates_log(), *) 'thin_patch_row_low() starting row by stem density.'
         
         ! This loop is identically structured to the above so the two could be combined by
         ! generalizing the comparator variables.
@@ -4212,13 +4214,13 @@ contains
             
             ! If the cohort stem count is less that what still needs to be removed kill all of it:
             if (cohort_stems <= thin_sd_remaining) then
-              if (debug) write(fates_log(), *) 'thin_row_low() cut whole cohort.'
+              if (debug) write(fates_log(), *) 'thin_patch_row_low() cut whole cohort.'
               
               call kill_disturbed(cohort = current_cohort, flux_profile = bole_harvest, &
                                 kill_fraction = 1.0_r8)
               
             else ! Otherwise only take part of the cohort:
-              if (debug) write(fates_log(), *) 'thin_row_low() cut part of cohort.'
+              if (debug) write(fates_log(), *) 'thin_patch_row_low() cut part of cohort.'
               
               cohort_fraction = thin_sd_remaining / cohort_stems
               call kill_disturbed(cohort = current_cohort, flux_profile = bole_harvest, &
@@ -4243,10 +4245,27 @@ contains
     endif
     ! Should anything be done or reported if no thinning was needed?
     
-    if (debug) write(fates_log(), *) 'thin_row_low() exiting.'
-  end subroutine thin_row_low
+    if (debug) write(fates_log(), *) 'thin_patch_row_low() exiting.'
+  end subroutine thin_patch_row_low
 
   !=================================================================================================
+
+!   subroutine thin_row_low()
+!     ! ----------------------------------------------------------------------------------------------
+!     ! 
+!     ! ----------------------------------------------------------------------------------------------
+!     
+!     ! Uses:
+!     
+!     ! Arguments:
+!     
+!     ! Locals:
+!     
+!     ! ----------------------------------------------------------------------------------------------
+!     
+!   end subroutine thin_row_low
+!
+!   !=================================================================================================
 
   function thinnable_patch(patch, pfts, goal_basal_area) ! result(thinnable_patch) ! REVIEW!
     ! ----------------------------------------------------------------------------------------------
