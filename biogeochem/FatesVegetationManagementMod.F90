@@ -3063,7 +3063,7 @@ contains
   ! hardwood_control          Works in testing.
   ! thin_row_low()            No driver interface yet.
   ! thin_proportional()       Works in testing.
-  ! thin_low_perfect()        No driver interface yet. Being debugged.
+  ! thin_low_perfect()        Driver interface incomplete. Being debugged.
   ! thin_low_probabilistic()  No driver interface yet. Being debugged.
   ! harvest_timber()          Works in testing.
   ! harvest_mass_min_area()   No driver interface yet.
@@ -3702,8 +3702,9 @@ contains
     ! Thin a patch harvesting the trees from smallest to largest until the thinning goal is met.
     ! For maximum flexibility the amount to thin may be specified as a fraction of stems (relative)
     ! or a goal (stem density or basal area).
-    ! The low thinning is 'perfect' because only exact number of the smallest trees are removed,
-    ! which is not terrible realistic in most cases.
+    !
+    ! The low thinning is 'perfect' because only the exact number of the smallest trees are removed
+    ! to meet the goal, which is not terrible realistic in most cases.
     ! 
     ! Calling this routine with the thin_fraction argument may not produce the expected results when
     ! the stand is multi-age.  If there a lot of small recruits a thinning can a large fraction of
