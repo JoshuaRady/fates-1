@@ -4343,7 +4343,9 @@ contains
     real(r8), intent(in) :: harvest_fraction ! The fraction of 'trees' to harvest.
     
     ! Locals:
+    integer(i4), pointer, dimension(:) :: the_pfts ! Holds the PFTs to harvest, computed from arguments.
     type(ed_patch_type), pointer :: current_patch
+    integer :: i ! Iterator
     
     ! ----------------------------------------------------------------------------------------------
     if (debug) write(fates_log(), *) 'harvest_timber() entering.'
@@ -4371,7 +4373,7 @@ contains
     
     current_patch => site%oldest_patch
     do while (associated(current_patch))
-      call kill_patch(patch = current_patch, flux_profile = bole_harvest, pfts = pfts, &
+      call kill_patch(patch = current_patch, flux_profile = bole_harvest, pfts = the_pfts, &
                       dbh_min = dbh_min, dbh_max = dbh_max, ht_min = ht_min, ht_max = ht_max, &
                       kill_fraction = harvest_fraction, area_fraction = 1.0_r8)
       
