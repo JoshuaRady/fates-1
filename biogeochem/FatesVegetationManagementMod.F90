@@ -195,9 +195,10 @@ module FatesVegetationManagementMod
       real(r8) :: density ! planting_density?
       real(r8) :: dbh
       real(r8) :: height
-      real(r8) :: row_fraction
-      real(r8) :: final_basal_area
       real(r8) :: thin_fraction
+      real(r8) :: final_basal_area
+      real(r8) :: final_stem_density
+      real(r8) :: row_fraction
       real(r8) :: harvest_fraction ! Combine with thin_fraction as just fraction?
       real(r8) :: dbh_min
       real(r8) :: dbh_max
@@ -665,7 +666,9 @@ contains
         
         case (vm_event_thin_low_perfect)
           call thin_low_perfect(site = site_in, pfts = vm_mortality_event%pfts, &
-                                thin_fraction = vm_mortality_event%thin_fraction)
+                                thin_fraction = vm_mortality_event%thin_fraction,
+                                final_basal_area = final_basal_area, &
+                                final_stem_density = final_stem_density)
         
         case (vm_event_thin_low_probabilistic)
           call thin_low_probabilistic(site = site_in, pfts = vm_mortality_event%pfts, &
@@ -674,8 +677,7 @@ contains
         case (vm_event_thin_row_low)
           call thin_row_low(site = site_in, pfts = vm_mortality_event%pfts, &
                             row_fraction = vm_mortality_event%row_fraction, &
-                            final_basal_area = vm_mortality_event%final_basal_area)
-
+                            final_basal_area = vm_mortality_event%final_basal_area) ! harvest_estimate
         
         case (vm_event_harvest_timber)
           call harvest_timber(site = site_in, pfts = vm_mortality_event%pfts, &
@@ -3070,9 +3072,9 @@ contains
   ! understory_control()      Driver interface incomplete.
   ! hardwood_control          Works in testing.
   ! thin_proportional()       Works in testing.
-  ! thin_low_perfect()        Driver interface incomplete. Being debugged.
-  ! thin_low_probabilistic()  No driver interface yet. Being debugged.
-  ! thin_row_low()            No driver interface yet.
+  ! thin_low_perfect()        Being debugged.
+  ! thin_low_probabilistic()  Driver interface incomplete. Being debugged.
+  ! thin_row_low()            Driver interface incomplete. Being debugged.
   ! harvest_timber()          Works in testing.
   ! harvest_mass_min_area()   No driver interface yet.
   ! clearcut()                Works in testing.
@@ -3424,7 +3426,7 @@ contains
                                                          ! split into thinned and unthinned patches.
     ! Three ways to specify how much to thin:
     real(r8), intent(in), optional :: thin_fraction      ! Fraction of trees (in pfts) to thin.
-    real(r8), intent(in), optional :: final_basal_area   ! Goal final basal area index (m^2 / ha ?????)
+    real(r8), intent(in), optional :: final_basal_area   ! Goal final basal area index (m^2 / ha)
     real(r8), intent(in), optional :: final_stem_density ! Goal final stem density (trees / ha)
     
     real(r8), intent(out), optional :: harvest_estimate  ! The wood harvested by this operation.
@@ -3658,12 +3660,12 @@ contains
 
   !=================================================================================================
 
-  subroutine thin_low_perfect(site, pfts, thin_fraction) ! where = everywhere
+  subroutine thin_low_perfect(site, pfts, thin_fraction, final_basal_area, final_stem_density) ! where = everywhere
     ! ----------------------------------------------------------------------------------------------
     ! Perform a 'perfect' low thinning for a site.
     !
-    ! This routine applies thin_patch_low_perfect() to all the patches in the site using a limited
-    ! set of its options.
+    ! This routine applies thin_patch_low_perfect() to 100% of the area of all the patches in the
+    ! site.
     ! In the future we will (may) allow targeting of thinning behavior to specific patches via the
     ! 'where' parameter.
     !
@@ -3674,15 +3676,22 @@ contains
     ! Operation Level: Site
     ! Regime: Multiple
     !
-    ! VM Event Interface thin_low_perfect([pfts], thin_fraction)
+    ! VM Event Interface:
+    ! thin_low_perfect([pfts], thin_fraction OR final_basal_area OR final_stem_density)
     ! ----------------------------------------------------------------------------------------------
     
     ! Uses: NA
     
     ! Arguments:
     type(ed_site_type), intent(in), target :: site ! The current site object.
-    integer(i4), dimension(:), intent(in) :: pfts ! An array of PFT IDs to thin.
-    real(r8), intent(in) :: thin_fraction ! Fraction of trees to thin.
+    !integer(i4), dimension(:), intent(in) :: pfts ! An array of PFT IDs to thin.
+    integer(i4), dimension(:), intent(in), optional :: pfts ! An array of PFT IDs to thin.
+    !real(r8), intent(in) :: thin_fraction ! Fraction of trees to thin.
+    
+    ! Three ways to specify how much to thin:
+    real(r8), intent(in), optional :: thin_fraction      ! Fraction of trees (in pfts) to thin.
+    real(r8), intent(in), optional :: final_basal_area   ! Goal final basal area index (m^2 / ha)
+    real(r8), intent(in), optional :: final_stem_density ! Goal final stem density (trees / ha)
     
     ! Locals:
     type(ed_patch_type), pointer :: current_patch
@@ -3690,13 +3699,14 @@ contains
     ! ----------------------------------------------------------------------------------------------
     if (debug) write(fates_log(), *) 'thin_low_perfect() beginning.'
     
-    ! Add handling for 'empty' pfts value.
-    
     current_patch => site%oldest_patch
     do while (associated(current_patch))
       
       ! Thinning is applied to all of each patch by omitting the patch_fraction argument:
-      call thin_patch_low_perfect(patch = current_patch, pfts = pfts, thin_fraction = thin_fraction)
+      call thin_patch_low_perfect(patch = current_patch, pfts = pfts, &
+                                  thin_fraction = thin_fraction, &
+                                  final_basal_area = final_basal_area &,
+                                  final_stem_density = final_stem_density)
       
       current_patch => current_patch%younger
     end do ! Patch loop.
@@ -3786,7 +3796,8 @@ contains
     
     ! Arguments:
     type(ed_patch_type), intent(in), target :: patch
-    integer(i4), dimension(:), intent(in) :: pfts ! An array of PFT IDs to thin.
+    !integer(i4), dimension(:), intent(in) :: pfts ! An array of PFT IDs to thin.            Make optional
+    integer(i4), intent(in), dimension(:), optional, target :: pfts ! An array of PFT IDs to thin.
     real(r8), intent(in) :: thin_fraction ! Could compute from a number of tree to thin?
     
     ! Locals:
@@ -3821,6 +3832,25 @@ contains
     !midpoint_step = 0.05_r8 ! The initial step size is arbitrary. We assume we are pretty close when we start.
     midpoint_step = 0.5_r8 ! Start by adjusting the midpoint by 0.5 cm if we are not within the tolerance.
     cycles = 0
+    
+    ! Validity checking: [This block is repeated several times elsewhere.]
+    if (present(pfts) .and. all(pfts /= vm_empty_integer)) then
+      ! Check if PFTs to thin are valid:
+      do i = 1, size(pfts)
+        if (pfts(i) == vm_empty_integer) cycle ! Ignore empty entries.
+        
+        if (.not. any(pfts(i) == tree_pfts)) then
+          write(fates_log(),*) 'thin_patch_low_probabilistic(): Cannot thin non-tree PFTs.'
+          write(fates_log(),*) 'Tree PFTs =    ', tree_pfts
+          write(fates_log(),*) 'Selected PFTs =', pfts
+          call endrun(msg = errMsg(__FILE__, __LINE__)) ! We could just warn here?
+        endif
+      end do
+      
+      thin_pfts => pfts
+    else ! Otherwise thin all tree PFTs:
+      thin_pfts => tree_pfts
+    endif
     
     ! Validity checking for thin_fraction!!!!!
     
@@ -3943,14 +3973,16 @@ contains
     ! Operation Level: Site
     ! Regime: Multiple
     !
-    ! VM Event Interface thin_low_probabilistic([pfts], thin_fraction)     Being debugged!!!!!
+    ! VM Event Interface:
+    ! thin_low_probabilistic([pfts], thin_fraction)     Being debugged!!!!!
     ! ----------------------------------------------------------------------------------------------
     
     ! Uses: NA
     
     ! Arguments:
     type(ed_site_type), intent(in), target :: site ! The current site object.
-    integer(i4), dimension(:), intent(in) :: pfts ! An array of PFT IDs to thin.
+    !integer(i4), dimension(:), intent(in) :: pfts ! An array of PFT IDs to thin.
+    integer(i4), dimension(:), intent(in), optional :: pfts ! An array of PFT IDs to thin.
     real(r8), intent(in) :: thin_fraction ! Fraction of trees to thin.
     
     ! Locals:
@@ -4320,6 +4352,7 @@ contains
     ! ----------------------------------------------------------------------------------------------
     ! Rough Draft!!!!!
     ! Determine if a patch is is ready to be thinned based on some set of criteria.
+    ! This is a utility used only by thin_row_low() currently.
     !
     ! ----------------------------------------------------------------------------------------------
     
@@ -4816,9 +4849,9 @@ contains
        ! SF_val_CWD_frac = Talk to Jakie about this spitfire parameter!
        harvest = (cohort%prt%GetState(sapw_organ, all_carbon_elements) + &
                   cohort%prt%GetState(struct_organ, all_carbon_elements)) * &
-                 prt_params%allom_agb_frac(cohort%pft) * &
-                 SF_val_CWD_frac(ncwd) * &
-                 logging_export_frac
+                  prt_params%allom_agb_frac(cohort%pft) * &
+                  SF_val_CWD_frac(ncwd) * &
+                  logging_export_frac
       
       ! Add other options here:
     endif
@@ -6341,9 +6374,10 @@ contains
     this%density = vm_empty_real
     this%dbh = vm_empty_real
     this%height = vm_empty_real
-    this%row_fraction = vm_empty_real
-    this%final_basal_area = vm_empty_real
     this%thin_fraction = vm_empty_real
+    this%final_basal_area = vm_empty_real
+    this%final_stem_density = vm_empty_real
+    this%row_fraction = vm_empty_real
     this%harvest_fraction = vm_empty_real
     this%dbh_min = vm_empty_real
     this%dbh_max = vm_empty_real
@@ -6351,6 +6385,10 @@ contains
     this%ht_max = vm_empty_real
     this%patch_fraction = vm_empty_real
     this%efficiency = vm_empty_real
+    
+    ! This should work and would be more extensible:
+    ! this = vm_empty_integer
+    ! this%code = vm_event_null
     
   end subroutine zero
 
@@ -6548,12 +6586,14 @@ contains
           read(param_value, *) this%dbh
         case ('height') ! plant()
           read(param_value, *) this%height
-        case ('row_fraction') ! thin_row_low()
-          read(param_value, *) this%row_fraction
-        case ('final_basal_area') ! thin_row_low()
-          read(param_value, *) this%final_basal_area
         case ('thin_fraction') ! thin_proportional(), thin_patch_low_probabilistic()
           read(param_value, *) this%thin_fraction
+        case ('final_basal_area') ! thin_row_low()
+          read(param_value, *) this%final_basal_area
+        case ('final_stem_density') ! thin_row_low()
+          read(param_value, *) this%final_stem_density
+        case ('row_fraction') ! thin_row_low()
+          read(param_value, *) this%row_fraction
         case ('harvest_fraction') ! harvest_timber()
           read(param_value, *) this%harvest_fraction
         case ('dbh_min') ! harvest_timber(), clearcut()
@@ -6635,20 +6675,21 @@ contains
     write(fates_log(), *) 'Event code:       ', this%code
     
     write(fates_log(), *) 'Parameters:'
-    write(fates_log(), *) 'pfts:             ', this%pfts
-    write(fates_log(), *) 'density:          ', this%density
-    write(fates_log(), *) 'dbh:              ', this%dbh
-    write(fates_log(), *) 'height:           ', this%height
-    write(fates_log(), *) 'row_fraction:     ', this%row_fraction
-    write(fates_log(), *) 'final_basal_area: ', this%final_basal_area
-    write(fates_log(), *) 'thin_fraction:    ', this%thin_fraction
-    write(fates_log(), *) 'harvest_fraction: ', this%harvest_fraction
-    write(fates_log(), *) 'dbh_min:          ', this%dbh_min
-    write(fates_log(), *) 'dbh_max:          ', this%dbh_max
-    write(fates_log(), *) 'ht_min:           ', this%ht_min
-    write(fates_log(), *) 'ht_max:           ', this%ht_max
-    write(fates_log(), *) 'patch_fraction:   ', this%patch_fraction
-    write(fates_log(), *) 'efficiency:       ', this%efficiency
+    write(fates_log(), *) 'pfts:               ', this%pfts
+    write(fates_log(), *) 'density:            ', this%density
+    write(fates_log(), *) 'dbh:                ', this%dbh
+    write(fates_log(), *) 'height:             ', this%height
+    write(fates_log(), *) 'thin_fraction:      ', this%thin_fraction
+    write(fates_log(), *) 'final_basal_area:   ', this%final_basal_area
+    write(fates_log(), *) 'final_stem_density: ', this%final_stem_density
+    write(fates_log(), *) 'row_fraction:       ', this%row_fraction
+    write(fates_log(), *) 'harvest_fraction:   ', this%harvest_fraction
+    write(fates_log(), *) 'dbh_min:            ', this%dbh_min
+    write(fates_log(), *) 'dbh_max:            ', this%dbh_max
+    write(fates_log(), *) 'ht_min:             ', this%ht_min
+    write(fates_log(), *) 'ht_max:             ', this%ht_max
+    write(fates_log(), *) 'patch_fraction:     ', this%patch_fraction
+    write(fates_log(), *) 'efficiency:         ', this%efficiency
     
   end subroutine dump
 
