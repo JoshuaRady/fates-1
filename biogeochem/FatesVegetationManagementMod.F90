@@ -196,7 +196,7 @@ module FatesVegetationManagementMod
       real(r8) :: dbh
       real(r8) :: height
       real(r8) :: thin_fraction
-      real(r8) :: final_basal_area
+      real(r8) :: final_basal_area ! goal_basal_area?
       real(r8) :: final_stem_density
       real(r8) :: row_fraction
       real(r8) :: harvest_fraction ! Combine with thin_fraction as just fraction?
@@ -666,9 +666,9 @@ contains
         
         case (vm_event_thin_low_perfect)
           call thin_low_perfect(site = site_in, pfts = vm_mortality_event%pfts, &
-                                thin_fraction = vm_mortality_event%thin_fraction,
-                                final_basal_area = final_basal_area, &
-                                final_stem_density = final_stem_density)
+                                thin_fraction = vm_mortality_event%thin_fraction, &
+                                final_basal_area =  vm_mortality_event%final_basal_area, &
+                                final_stem_density =  vm_mortality_event%final_stem_density)
         
         case (vm_event_thin_low_probabilistic)
           call thin_low_probabilistic(site = site_in, pfts = vm_mortality_event%pfts, &
@@ -3705,7 +3705,7 @@ contains
       ! Thinning is applied to all of each patch by omitting the patch_fraction argument:
       call thin_patch_low_perfect(patch = current_patch, pfts = pfts, &
                                   thin_fraction = thin_fraction, &
-                                  final_basal_area = final_basal_area &,
+                                  final_basal_area = final_basal_area, &
                                   final_stem_density = final_stem_density)
       
       current_patch => current_patch%younger
@@ -3820,6 +3820,9 @@ contains
     
     integer :: cycles ! Loop counter for debugging purposes.
     
+    integer(i4), pointer, dimension(:) :: thin_pfts ! Holds the PFTs to thin, computed from arguments.
+    integer :: i ! PFT iterator.
+    
     type(ed_cohort_type), pointer :: current_cohort
     
     ! ----------------------------------------------------------------------------------------------
@@ -3857,7 +3860,7 @@ contains
     ! Calculate the mean DBH of the trees (cohort DBH weighted by number) to be thinned (exclude some?)
     current_cohort => patch%shortest
     do while(associated(current_cohort))
-      if (any(pfts == current_cohort%pft)) then
+      if (any(thin_pfts == current_cohort%pft)) then
         ! Should use patch_effective_n() here!!!!!
         sum_dbh = sum_dbh + (current_cohort%dbh * current_cohort%n)
         num_trees = num_trees + current_cohort%n
@@ -3884,7 +3887,7 @@ contains
       current_cohort => patch%shortest
       do while(associated(current_cohort))
         
-        if (any(pfts == current_cohort%pft)) then
+        if (any(thin_pfts == current_cohort%pft)) then
           dbh_tranformed = current_cohort%dbh - mean_dbh
           !thin_prob = 1 / (1 + exp(-1.0r8 * model_steepness * (dbh_tranformed - model_midpoint))) ! -model_steepness?
           thin_prob = 1 / (1 + exp(-model_steepness * (dbh_tranformed - model_midpoint)))
@@ -3932,7 +3935,7 @@ contains
     do while(associated(current_cohort))
       if (vm_debug_verbose) write(fates_log(), *) 'Starting cohort.' ! Temporary reporting.
       
-      if (any(pfts == current_cohort%pft)) then
+      if (any(thin_pfts == current_cohort%pft)) then
         dbh_tranformed = current_cohort%dbh - mean_dbh
         thin_prob = 1 / (1 + exp(-model_steepness * (dbh_tranformed - model_midpoint)))
         
@@ -4318,8 +4321,8 @@ contains
     
     ! Locals:
     type(ed_patch_type), pointer :: current_patch
-    real(r8) :: total_harvest ! Accumulator
     real(r8) :: patch_harvest
+    real(r8) :: total_harvest ! Accumulator
     
     ! ----------------------------------------------------------------------------------------------
     if (debug) write(fates_log(), *) 'thin_row_low() entering.'
@@ -4332,8 +4335,9 @@ contains
       if (thinnable_patch(patch = current_patch, pfts = pfts, goal_basal_area = final_basal_area)) then
         patch_harvest = 0.0_r8 ! Unnecessary?
         
-        call thin_row_low(patch = current_patch, pfts = pfts, row_fraction = row_fraction, &
-                          final_basal_area = final_basal_area, harvest_estimate = patch_harvest)
+        call thin_patch_row_low(patch = current_patch, pfts = pfts, row_fraction = row_fraction, &
+                                final_basal_area = final_basal_area, &
+                                harvest_estimate = patch_harvest)
             
         total_harvest = total_harvest + patch_harvest ! Accumulate the total harvest.
       endif
@@ -4341,7 +4345,7 @@ contains
     end do
     
     if (present(harvest_estimate)) then
-      harvest_estimate = harvest
+      harvest_estimate = total_harvest
     endif
     
   end subroutine thin_row_low
