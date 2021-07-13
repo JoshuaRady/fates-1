@@ -2515,6 +2515,14 @@ contains
     ! Generate a litany of area weighted averages
 
     inv_sum_area = 1.0_r8/(dp%area + rp%area)
+    ! JMR_NOTE: The above calculation will generate NaNs if both patches have area = 0.
+    ! Test to confirm this is happening and fix it if it does:
+    if (dp%area == 0.0_r8 .or. rp%area == 0.0_r8) then ! <= 0?
+      write(fates_log(),*) 'fuse_2_patches(): Both patches have 0 area.' ! Temporary reporting.
+      
+      inv_sum_area = 0.0_r8
+    !else
+    endif
     
     rp%age = (dp%age * dp%area + rp%age * rp%area) * inv_sum_area
     rp%age_since_anthro_disturbance = (dp%age_since_anthro_disturbance * dp%area &
