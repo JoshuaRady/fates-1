@@ -2528,7 +2528,7 @@ contains
     if (dp%area == 0.0_r8 .and. rp%area == 0.0_r8) then ! <= 0?
       write(fates_log(),*) 'fuse_2_patches(): Both patches have 0 area.' ! Temporary reporting.
       
-      !inv_sum_area = 0.0_r8
+      inv_sum_area = 0.0_r8
     !else
     endif
     ! JMR_MOD_END.
