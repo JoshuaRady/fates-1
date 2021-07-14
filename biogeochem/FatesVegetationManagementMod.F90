@@ -129,20 +129,20 @@ module FatesVegetationManagementMod
     module procedure patch_disturbed_basal_area
   end interface
   
-  ! Globals:
+  ! Globals:----------------------------------------------------------------------------------------
   
-  ! Debugging flags & switches for module:
+  ! Debugging flags & switches for this module:
   logical, parameter, private :: debug = .true.
   ! At this module's state of development it is frequently useful to have very explicit progress
   ! reporting and checking that will likely be removed in the future.  The verbose flag can be
-  ! to label this temporary code and the switch can be used to turn the behavior on and off for
+  ! used to label this temporary code and the switch can be used to turn the behavior on and off for
   ! development branches.
   logical, parameter, private :: verbose = .true. ! Switch, used to set.
   logical, parameter, private :: vm_debug_verbose = debug .and. verbose ! Flag, use in conditionals.
   
   real(r8), parameter, private :: float_tolerance = rsnbl_math_prec ! Floating point math tolerance.
   
-  ! PFTs:-------------------------------------------------------------------------------------------
+  ! PFTs:
   ! These class definitions should be determined dynamically. The following definitions assume the
   ! default 12 pft parameter set.  We need a better way to get the classes of PFTs. The woody flag
   ! (EDPftvarcon_inst%woody) includes shrubs.
@@ -3341,9 +3341,9 @@ contains
     ! ----------------------------------------------------------------------------------------------
     if (debug) write(fates_log(), *) 'thin_proportional() beginning.'
     
-    ! Validity checking:
-    if (present(pfts) .and. all(pfts /= vm_empty_integer)) then
-      ! Check if PFTs to thin are valid:
+    ! Validate the PFTs:
+    ! Only allow trees and default to all trees.
+    if (present(pfts) .and. any(pfts /= vm_empty_integer)) then
       do i = 1, size(pfts)
         if (pfts(i) == vm_empty_integer) cycle ! Ignore empty entries.
         
@@ -3358,7 +3358,7 @@ contains
       thin_pfts => pfts
     else ! Otherwise thin all tree PFTs:
       thin_pfts => tree_pfts
-    endif
+    endif ! present(pfts)...
     
     current_patch => site%oldest_patch
     do while (associated(current_patch))
@@ -3461,10 +3461,9 @@ contains
     
     ! Determine which arguments were passed in, validity check them, and supply default values:
     
-    ! If present check that the PFTs are valid:
-    !if (present(pfts)) then
-    if (present(pfts) .and. all(pfts /= vm_empty_integer)) then
-      ! Check if PFTs to thin are valid:
+    ! Validate the PFTs:
+    ! Only allow trees and default to all trees.
+    if (present(pfts) .and. any(pfts /= vm_empty_integer)) then
       do i = 1, size(pfts)
         if (pfts(i) == vm_empty_integer) cycle ! Ignore empty entries.
         
@@ -3479,7 +3478,7 @@ contains
       thin_pfts => pfts
     else ! Otherwise thin all tree PFTs:
       thin_pfts => tree_pfts
-    endif
+    endif ! present(pfts)...
     
     ! Note: Since all the calculations below are per area the patch fraction does not effect them.
     ! It is only passed on to kill().
@@ -3836,9 +3835,9 @@ contains
     midpoint_step = 0.5_r8 ! Start by adjusting the midpoint by 0.5 cm if we are not within the tolerance.
     cycles = 0
     
-    ! Validity checking: [This block is repeated several times elsewhere.]
-    if (present(pfts) .and. all(pfts /= vm_empty_integer)) then
-      ! Check if PFTs to thin are valid:
+    ! Validate the PFTs: [This block is repeated several times elsewhere.]
+    ! Only allow trees and default to all trees.
+    if (present(pfts) .and. any(pfts /= vm_empty_integer)) then
       do i = 1, size(pfts)
         if (pfts(i) == vm_empty_integer) cycle ! Ignore empty entries.
         
@@ -3853,7 +3852,7 @@ contains
       thin_pfts => pfts
     else ! Otherwise thin all tree PFTs:
       thin_pfts => tree_pfts
-    endif
+    endif ! present(pfts)...
     
     ! Validity checking for thin_fraction!!!!!
     
@@ -4093,9 +4092,9 @@ contains
     
     ! Determine which arguments were passed in, validity check them, and supply default values:
     
-    ! If present check that the PFTs are valid:
-    if (present(pfts)) then
-      ! Check if PFTs to thin are valid:
+    ! Validate the PFTs:
+    ! Only allow trees and default to all trees.
+    if (present(pfts) .and. any(pfts /= vm_empty_integer)) then
       do i = 1, size(pfts)
         if (pfts(i) == vm_empty_integer) cycle ! Ignore empty entries.
         
@@ -4110,7 +4109,7 @@ contains
       thin_pfts => pfts
     else ! Otherwise thin all tree PFTs:
       thin_pfts => tree_pfts
-    endif
+    endif ! present(pfts)...
     
     ! Determine the thinning amount:
     if (present(row_fraction)) then
@@ -4457,7 +4456,7 @@ contains
     
     ! Validate the PFTs:
     ! Default to trees but allow shrubs.
-    if (present(pfts) .and. all(pfts /= vm_empty_integer)) then
+    if (present(pfts) .and. any(pfts /= vm_empty_integer)) then
       do i = 1, size(pfts)
         if (pfts(i) == vm_empty_integer) cycle ! Ignore empty entries.
         
@@ -4982,8 +4981,8 @@ contains
     if (debug) write(fates_log(), *) 'clearcut_patch() entering.'
     
     ! Validate the PFTs:
-    if (present(pfts) .and. all(pfts /= vm_empty_integer)) then
-      ! Confirm PFTs to harvest are all trees:
+    ! Only allow trees and default to all trees.
+    if (present(pfts) .and. any(pfts /= vm_empty_integer)) then
       do i = 1, size(pfts)
         if (pfts(i) == vm_empty_integer) cycle ! Ignore empty entries.
         
