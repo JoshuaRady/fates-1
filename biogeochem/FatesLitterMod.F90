@@ -156,14 +156,12 @@ contains
     nlevsoil = size(this%bg_cwd,dim=2)
     npft     = size(this%seed,dim=1)
 
-    !self_weight  = self_area /(donor_area+self_area)
-    !donor_weight = 1._r8 - self_weight
-    ! VM_MOD_Start: (JMR_MOD)
+    ! VM_MOD_Start:
     if (donor_area == 0.0_r8 .and. self_area == 0.0_r8) then
-      ! If both patches have zero areas normalization will result in division by zero.
+      ! If both litter patches have areas of zero normalization will result in division by zero.
       ! There are two solutions.  We can either say that at zero area the pools are also logically
       ! zero and set both weights to zero.  Alternatively, we can still calculate a per area average
-      ! based on the fact the patch areas are equal and set the weights to 0.5.  The choice is
+      ! based on the fact the patch areas are equal by settting the weights to 0.5.  The choice is
       ! likely moot since the resulting parent patch will almost certainly be pruned.  We will use
       ! the later for now since it doesn't assume as much about the fate of the parent patch.
       self_weight  = 0.5_r8 ! Or 0.0_r8

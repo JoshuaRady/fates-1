@@ -2514,24 +2514,36 @@ contains
 
     ! Generate a litany of area weighted averages
 
-    ! JMR_MOD_Start:
-    write(fates_log(),*) 'fuse_2_patches(): Starting----------'
-    write(fates_log(),*) 'fuse_2_patches(): Donor Patch:'
-    call dump_patch(dp)
-    write(fates_log(),*) 'fuse_2_patches(): Recipient Patch:'
-    call dump_patch(rp)
+    ! VM_MOD_Start:
+    !write(fates_log(),*) 'fuse_2_patches(): Starting----------'
+    !write(fates_log(),*) 'fuse_2_patches(): Donor Patch:'
+    !call dump_patch(dp)
+    !write(fates_log(),*) 'fuse_2_patches(): Recipient Patch:'
+    !call dump_patch(rp)
     
-    inv_sum_area = 1.0_r8/(dp%area + rp%area)
-    ! JMR_NOTE: The above calculation will generate NaNs if both patches have area = 0.
-    ! Test to confirm this is happening and fix it if it does:
-    !if (dp%area == 0.0_r8 .or. rp%area == 0.0_r8) then ! <= 0?
-    if (dp%area == 0.0_r8 .and. rp%area == 0.0_r8) then ! <= 0?
-      write(fates_log(),*) 'fuse_2_patches(): Both patches have 0 area.' ! Temporary reporting.
-      
+!    inv_sum_area = 1.0_r8/(dp%area + rp%area)
+!     if (dp%area == 0.0_r8 .and. rp%area == 0.0_r8) then ! <= 0?
+!       write(fates_log(),*) 'fuse_2_patches(): Both patches have 0 area.' ! Temporary reporting.
+!       
+!       inv_sum_area = 0.0_r8
+!     !else
+!     endif
+    
+    ! Revised:
+    if (dp%area /= 0.0_r8 .or. rp%area /= 0.0_r8) then
+      inv_sum_area = 1.0_r8 / (dp%area + rp%area)
+    else
+      ! If both patches have areas of zero the above inverse area will result in division by zero.
+      ! For absolute stocks it makes sense that when the area is 0 the stocks should be 0, so we set
+      ! inv_sum_area to 0.  Also, under the conditions that produce a patch of area 0 the stocks are
+      ! likely 0 already.  Some of the quantities below are non-stock states, where values may not
+      ! logically descend to 0.  However, since the fused patch will have 0 area it is almost
+      ! certainly bound for elimination and the values don't really matter anymore.  We are mainly
+      ! concerned with not breaking the math to produce NaNs.
+      !write(fates_log(),*) 'fuse_2_patches(): Both patches have 0 area.' ! Temporary reporting.
       inv_sum_area = 0.0_r8
-    !else
     endif
-    ! JMR_MOD_END.
+    ! VM_MOD_END.
     
     rp%age = (dp%age * dp%area + rp%age * rp%area) * inv_sum_area
     rp%age_since_anthro_disturbance = (dp%age_since_anthro_disturbance * dp%area &
@@ -2661,10 +2673,10 @@ contains
        youngerp%older     => null()
     end if
     
-    ! JMR_MOD_Start:
-    write(fates_log(),*) 'fuse_2_patches(): Recipient patch out:'
-    call dump_patch(rp)
-    ! JMR_MOD_END.
+    ! VM_MOD_Start: Temporary reporting:
+    !write(fates_log(),*) 'fuse_2_patches(): Recipient patch out:'
+    !call dump_patch(rp)
+    ! VM_MOD_END.
 
 
   end subroutine fuse_2_patches
