@@ -2521,16 +2521,8 @@ contains
     !write(fates_log(),*) 'fuse_2_patches(): Recipient Patch:'
     !call dump_patch(rp)
     
-!    inv_sum_area = 1.0_r8/(dp%area + rp%area)
-!     if (dp%area == 0.0_r8 .and. rp%area == 0.0_r8) then ! <= 0?
-!       write(fates_log(),*) 'fuse_2_patches(): Both patches have 0 area.' ! Temporary reporting.
-!       
-!       inv_sum_area = 0.0_r8
-!     !else
-!     endif
-    
-    ! Revised:
     if (dp%area /= 0.0_r8 .or. rp%area /= 0.0_r8) then
+      ! When at least one patch has a non-zero area the original math works fine:
       inv_sum_area = 1.0_r8 / (dp%area + rp%area)
     else
       ! If both patches have areas of zero the above inverse area will result in division by zero.
