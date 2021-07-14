@@ -11,6 +11,9 @@
 ! The coding style is a bit vague with a mix of 2 and 3 space identing.  I will use 2 since they
 ! indent starting at the module scope.
 !
+! Code outside this module that has been modified or moved into this module to is labeled with tags
+! starting with JMR_MOD (older) or VM_MOD (newer).
+!
 !===================================================================================================
 
 module FatesVegetationManagementMod
