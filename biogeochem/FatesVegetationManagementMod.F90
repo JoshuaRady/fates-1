@@ -3502,17 +3502,21 @@ contains
     pfts_sd = patch_disturbed_n(patch, thin_pfts) !disturbed_stem_density(patch, thin_pfts)
     
     ! Only thin_fraction, final_basal_area, or final_stem_density should be provided:
-    if ((present(thin_fraction) .and. present(final_basal_area)) .or. &
-        (present(thin_fraction) .and. present(final_stem_density)) .or. &
-        (present(final_basal_area) .and. present(final_stem_density))) then
+!     if ((present(thin_fraction) .and. present(final_basal_area)) .or. &
+!         (present(thin_fraction) .and. present(final_stem_density)) .or. &
+!         (present(final_basal_area) .and. present(final_stem_density))) then
+    ! Revised logic to account for empty values:
+    if (count([(present(final_basal_area) .and. final_basal_area /= vm_empty_real), &
+               (present(final_stem_density) .and. final_stem_density /= vm_empty_real), &
+               (present(thin_fraction) .and. thin_fraction /= vm_empty_real)]) > 1) then
       write(fates_log(),*) 'thin_patch_low_perfect(): Provide thinning fraction, basal area index, or stem density, not more than one.'
       call endrun(msg = errMsg(__FILE__, __LINE__))
-    else if (present(final_basal_area)) then
+    else if (present(final_basal_area) .and. final_basal_area /= vm_empty_real) then
       use_bai = .true.
-    else if (present(final_stem_density)) then
+    else if (present(final_stem_density) .and. final_stem_density /= vm_empty_real) then
       use_bai = .false.
       the_final_stem_density = final_stem_density
-    else if (present(thin_fraction)) then
+    else if (present(thin_fraction) .and. thin_fraction /= vm_empty_real) then
       ! Validity checking:
       if (thin_fraction <= 0.0_r8 .or. thin_fraction > 1.0_r8) then
         write(fates_log(),*) 'Invalid value for thin_fraction argument.'
